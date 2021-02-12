@@ -107,14 +107,14 @@ namespace merkle
     {
       if (bytes.size() < SIZE)
         throw std::runtime_error("not enough bytes");
-      apply(bytes);
+      deserialise(bytes);
     }
 
     HashT<SIZE>(const std::vector<uint8_t>& bytes, size_t& position)
     {
       if (bytes.size() - position < SIZE)
         throw std::runtime_error("not enough bytes");
-      apply(bytes, position);
+      deserialse(bytes, position);
     }
 
     HashT<SIZE>(const std::array<uint8_t, SIZE>& bytes)
@@ -164,7 +164,7 @@ namespace merkle
         buffer.push_back(b);
     }
 
-    void apply(const std::vector<uint8_t>& buffer, size_t& position)
+    void deserialse(const std::vector<uint8_t>& buffer, size_t& position)
     {
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> HashT::deserialise " << std::endl);
       if (buffer.size() - position < SIZE)
@@ -173,10 +173,10 @@ namespace merkle
         bytes[i] = buffer[position++];
     }
 
-    void apply(const std::vector<uint8_t>& buffer)
+    void deserialise(const std::vector<uint8_t>& buffer)
     {
       size_t position = 0;
-      apply(buffer, position);
+      deserialse(buffer, position);
     }
 
     operator std::vector<uint8_t>() const
@@ -233,12 +233,12 @@ namespace merkle
 
     PathT(const std::vector<uint8_t>& bytes)
     {
-      apply(bytes);
+      deserialse(bytes);
     }
 
     PathT(const std::vector<uint8_t>& bytes, size_t& position)
     {
-      apply(bytes, position);
+      deserialse(bytes, position);
     }
 
     std::shared_ptr<HashT<HASH_SIZE>> root() const
@@ -292,11 +292,11 @@ namespace merkle
       }
     }
 
-    void apply(const std::vector<uint8_t>& bytes, size_t& position)
+    void deserialse(const std::vector<uint8_t>& bytes, size_t& position)
     {
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> PathT::deserialise " << std::endl);
       elements.clear();
-      _leaf.apply(bytes, position);
+      _leaf.deserialse(bytes, position);
       _leaf_index = deserialise_size_t(bytes, position);
       _max_index = deserialise_size_t(bytes, position);
       size_t num_elements = deserialise_size_t(bytes, position);
@@ -312,10 +312,10 @@ namespace merkle
       }
     }
 
-    void apply(const std::vector<uint8_t>& bytes)
+    void deserialse(const std::vector<uint8_t>& bytes)
     {
       size_t position = 0;
-      apply(bytes, position);
+      deserialse(bytes, position);
     }
 
     operator std::vector<uint8_t>() const
@@ -552,7 +552,7 @@ namespace merkle
     /// @param bytes Bytes containing a serialised tree
     TreeT(const std::vector<uint8_t>& bytes)
     {
-      apply(bytes);
+      deserialse(bytes);
     }
 
     /// @brief Deserialises a tree
@@ -560,7 +560,7 @@ namespace merkle
     /// @param position Position of the first byte within `bytes`
     TreeT(const std::vector<uint8_t>& bytes, size_t& position)
     {
-      apply(bytes, position);
+      deserialse(bytes, position);
     }
 
     /// @brief Constructs a tree containing one root hash
@@ -1125,13 +1125,13 @@ namespace merkle
       }
     }
 
-    void apply(const std::vector<uint8_t>& bytes)
+    void deserialse(const std::vector<uint8_t>& bytes)
     {
       size_t position = 0;
-      apply(bytes, position);
+      deserialse(bytes, position);
     }
 
-    void apply(const std::vector<uint8_t>& bytes, size_t& position)
+    void deserialse(const std::vector<uint8_t>& bytes, size_t& position)
     {
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> deserialise " << std::endl;);
 
