@@ -1125,12 +1125,17 @@ namespace merkle
       }
     }
 
+    /// @brief Deserialises a tree
+    /// @param bytes The vector of bytes to deserialise from
     void deserialse(const std::vector<uint8_t>& bytes)
     {
       size_t position = 0;
       deserialse(bytes, position);
     }
 
+    /// @brief Deserialises a tree
+    /// @param bytes The vector of bytes to deserialise from
+    /// @param position Position of the first byte in `bytes`
     void deserialse(const std::vector<uint8_t>& bytes, size_t& position)
     {
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> deserialise " << std::endl;);
@@ -1580,6 +1585,13 @@ namespace merkle
   };
 
   // clang-format off
+  /// @brief SHA256 compression function for tree node hashes
+  /// @param l Left node hash
+  /// @param r Right node hash
+  /// @param out Output node hash
+  /// @details This function is the compression function of SHA256, which, for
+  /// the special case of hashing two hashes, is more efficient than a full
+  /// SHA256 while providing similar guarantees.
   void sha256_compress(const HashT<32> &l, const HashT<32> &r, HashT<32> &out) {
     static const uint32_t constants[] = {
       0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -1639,7 +1651,11 @@ namespace merkle
   // clang-format on
 
 #ifdef HAVE_OPENSSL
-  // Note: Some versions of OpenSSL don't provide SHA256_Transform.
+  /// @brief OpenSSL's SHA256 compression function
+  /// @param l Left node hash
+  /// @param r Right node hash
+  /// @param out Output node hash
+  /// @note Some versions of OpenSSL may not provide SHA256_Transform.
   inline void sha256_compress_openssl(
     const HashT<32>& l, const HashT<32>& r, HashT<32>& out)
   {
@@ -1656,6 +1672,11 @@ namespace merkle
       ((uint32_t*)out.bytes)[i] = htobe32(((uint32_t*)ctx.h)[i]);
   }
 
+  /// @brief OpenSSL SHA256
+  /// @param l Left node hash
+  /// @param r Right node hash
+  /// @param out Output node hash
+  /// @note Some versions of OpenSSL may not provide SHA256_Transform.
   inline void sha256_openssl(
     const merkle::HashT<32>& l,
     const merkle::HashT<32>& r,
@@ -1669,8 +1690,12 @@ namespace merkle
 #endif
 
 #ifdef HAVE_MBEDTLS
-  // Note: Technically, mbedtls_internal_sha256_process is for internal use
-  // only.
+  /// @brief mbedTLS SHA256 compression function
+  /// @param l Left node hash
+  /// @param r Right node hash
+  /// @param out Output node hash
+  /// @note Technically, mbedtls_internal_sha256_process is marked for internal
+  /// use only.
   inline void sha256_compress_mbedtls(
     const HashT<32>& l, const HashT<32>& r, HashT<32>& out)
   {
@@ -1687,6 +1712,10 @@ namespace merkle
       ((uint32_t*)out.bytes)[i] = htobe32(ctx.state[i]);
   }
 
+  /// @brief mbedTLS SHA256
+  /// @param l Left node hash
+  /// @param r Right node hash
+  /// @param out Output node hash
   inline void sha256_mbedtls(
     const merkle::HashT<32>& l,
     const merkle::HashT<32>& r,
