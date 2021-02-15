@@ -2,17 +2,20 @@ name: CMake
 
 on: [push]
 
-env:  
+env:
   BUILD_TYPE: Debug
 
 jobs:
-  build:    
+  build:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Install xmllint
+      run: apt install libmbedtls-dev
+
     - uses: actions/checkout@v2
 
-    - name: Create Build Environment      
+    - name: Create Build Environment
       run: cmake -E make_directory ${{github.workspace}}/build
 
     - name: Configure CMake
@@ -20,17 +23,17 @@ jobs:
       # access regardless of the host operating system
       shell: bash
       working-directory: ${{github.workspace}}/build
-      # Note the current convention is to use the -S and -B options here to specify source 
-      # and build directories, but this is only available with CMake 3.13 and higher.  
+      # Note the current convention is to use the -S and -B options here to specify source
+      # and build directories, but this is only available with CMake 3.13 and higher.
       # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
       run: cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DTESTS=ON -DOPENSSL=ON -DMBEDTLS=ON
 
     - name: Build
       working-directory: ${{github.workspace}}/build
-      shell: bash      
+      shell: bash
       run: cmake --build . --config $BUILD_TYPE
 
     - name: Test
       working-directory: ${{github.workspace}}/build
-      shell: bash      
+      shell: bash
       run: ctest -C $BUILD_TYPE
