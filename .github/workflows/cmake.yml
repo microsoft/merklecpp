@@ -11,7 +11,7 @@ jobs:
 
     steps:
     - name: Install xmllint
-      run: apt install libmbedtls-dev
+      run: sudo apt install libmbedtls-dev
 
     - uses: actions/checkout@v2
 
