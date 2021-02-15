@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Install xmllint
-      run: sudo apt install libmbedtls-dev
+    - name: Install packages
+      run: sudo apt install libmbedtls-dev doctest-dev
 
     - uses: actions/checkout@v2
 
