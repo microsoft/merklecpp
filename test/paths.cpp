@@ -20,8 +20,8 @@ int main()
   try
   {
 #ifndef NDEBUG
-    const size_t num_trees = 128;
-    const size_t max_num_paths = 64;
+    const size_t num_trees = 64;
+    const size_t max_num_paths = 32;
     const size_t max_num_leaves = 64 * 1024;
 #else
     const size_t num_trees = 256;
