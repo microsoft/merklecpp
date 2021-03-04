@@ -1,4 +1,4 @@
-name: CMake
+name: Continuous Integration
 
 on: [push]
 
@@ -8,13 +8,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-18.04]
         build_type: [Debug, Release]
+        compiler: [g++, clang++, clang++-8]
+        include:
+          - os: windows-latest
+            build_type: Debug
+            compiler: msvc
+          - os: windows-latest
+            build_type: Release
+            compiler: msvc
 
     steps:
     - name: Install packages
       run: sudo apt install libmbedtls-dev doctest-dev
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-18.04'
 
     - uses: actions/checkout@v2
 
@@ -31,7 +39,7 @@ jobs:
       # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
-          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON -DMBEDTLS=ON
+          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON -DMBEDTLS=ON
         else
           cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON
         fi
