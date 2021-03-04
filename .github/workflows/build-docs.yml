@@ -1,0 +1,50 @@
+name: Build documentation
+
+on:
+  push:
+    branches:
+      - main
+      - 'releases/**'
+    tags:
+      - 'merklecpp-*'
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Sphinx Build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out sources
+      uses: actions/checkout@v1
+    - name: Install dependencies
+      run: |
+        sudo apt-get install doxygen python3 graphviz
+        cd doc
+        python3 -m pip install pip -U
+        python3 -m pip install setuptools -U
+        python3 -m pip install -r requirements.txt
+    - name: Sphinx build
+      run: python3 -m sphinx -b html doc doc/build --keep-going
+    - name: Commit documentation changes
+      run: |
+        git clone https://wintersteiger:${{ secrets.GITHUB_TOKEN }}@github.com/microsoft/merklecpp.git --branch gh-pages --single-branch gh-pages
+        mkdir -p gh-pages/${GITHUB_REF#refs/heads/}
+        cp -r doc/build/${BRANCH_NAME}/* gh-pages/${GITHUB_REF#refs/heads/}
+        cd gh-pages
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        touch .nojekyll
+        git add .
+        git commit -m "Update documentation" -a || true
+        # The above command will fail if no changes were present, so we ignore
+        # the return code.
+    - name: Push changes
+      uses: ad-m/github-push-action@master
+      with:
+        branch: gh-pages
+        directory: gh-pages
+        github_token: ${{ secrets.GITHUB_TOKEN }}
