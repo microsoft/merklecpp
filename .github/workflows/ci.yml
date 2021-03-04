@@ -9,8 +9,6 @@ on:
       - 'merklecpp-*'
       - 'v*'
   pull_request:
-    branches:
-      - '**'
 
 jobs:
   build-test:
