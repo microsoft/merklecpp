@@ -30,6 +30,7 @@ jobs:
     - name: Sphinx build
       run: python3 -m sphinx -b html doc doc/build --keep-going
     - name: Commit documentation changes
+      if: ! github.base_ref
       run: |
         git clone https://wintersteiger:${{ secrets.GITHUB_TOKEN }}@github.com/microsoft/merklecpp.git --branch gh-pages --single-branch gh-pages
         mkdir -p gh-pages/${GITHUB_REF#refs/heads/}
@@ -44,6 +45,7 @@ jobs:
         # the return code.
     - name: Push changes
       uses: ad-m/github-push-action@master
+      if: ! github.base_ref
       with:
         branch: gh-pages
         directory: gh-pages
