@@ -33,7 +33,7 @@ jobs:
       run: |
         git clone https://wintersteiger:${{ secrets.GITHUB_TOKEN }}@github.com/microsoft/merklecpp.git --branch gh-pages --single-branch gh-pages
         mkdir -p gh-pages/${GITHUB_REF#refs/heads/}
-        cp -r doc/build/${BRANCH_NAME}/* gh-pages/${GITHUB_REF#refs/heads/}
+        cp -r doc/build/* gh-pages/${GITHUB_REF#refs/heads/}
         cd gh-pages
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
