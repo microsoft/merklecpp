@@ -1,6 +1,16 @@
 name: Continuous Integration
 
-on: [push]
+on:
+  push:
+    branches:
+      - main
+      - 'releases/**'
+    tags:
+      - 'merklecpp-*'
+      - 'v*'
+  pull_request:
+    branches:
+      - **
 
 jobs:
   build-test:
