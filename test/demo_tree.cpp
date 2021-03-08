@@ -52,6 +52,34 @@ int main()
 
       std::cout << std::endl;
     }
+
+#ifdef HAVE_OPENSSL
+    {
+      auto hashes = make_hashes(num_leaves);
+      /// SNIPPET_START: OpenSSL-SHA256
+      merkle::TreeT<32, merkle::sha256_openssl> tree;
+      for (auto h : hashes)
+        tree.insert(h);
+      auto root = tree.root();
+      auto path = tree.path(hashes.size() - 1);
+      assert(path->verify(root));
+      /// SNIPPET_END: OpenSSL-SHA256
+    }
+#endif
+
+#ifdef HAVE_MBEDTLS
+    {
+      auto hashes = make_hashes(num_leaves);
+      /// SNIPPET_START: mbedTLS-SHA256
+      merkle::TreeT<32, merkle::sha256_openssl> tree;
+      for (auto h : hashes)
+        tree.insert(h);
+      auto root = tree.root();
+      auto path = tree.path(hashes.size() - 1);
+      assert(path->verify(root));
+      /// SNIPPET_END: mbedTLS-SHA256
+    }
+#endif
   }
   catch (std::exception& ex)
   {
