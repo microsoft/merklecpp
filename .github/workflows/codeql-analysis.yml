@@ -32,12 +32,14 @@ jobs:
         # Prefix the list here with "+" to use these queries and those in the config file.
         # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
-    - run: |
+    - name: Configure merklecpp
+      run: |
         mkdir build
         cd build
         cmake -DCMAKE_BUILD_TYPE=Debug -DTESTS=ON $GITHUB_WORKSPACE
 
-    - run: |
+    - name: Build merklecpp
+      run: |
         cd build
         make
 
