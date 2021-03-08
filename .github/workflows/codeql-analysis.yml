@@ -35,7 +35,7 @@ jobs:
     - run: |
         mkdir build
         cd build
-        cmake -DCMAKE_BUILD_TYPE=Debug $GITHUB_WORKSPACE $GITHUB_WORKSPACE
+        cmake -DCMAKE_BUILD_TYPE=Debug -DTESTS=ON $GITHUB_WORKSPACE
 
     - run: |
         cd build
