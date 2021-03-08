@@ -33,15 +33,12 @@ jobs:
         # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
     - name: Configure merklecpp
-      run: |
-        mkdir build
-        cd build
-        cmake -DCMAKE_BUILD_TYPE=Debug -DTESTS=ON $GITHUB_WORKSPACE
+      working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
+      run: cmake -DCMAKE_BUILD_TYPE=Debug -DTESTS=ON $GITHUB_WORKSPACE
 
     - name: Build merklecpp
-      run: |
-        cd build
-        make
+      working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
+      run: cmake --build build --config Debug
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v1
