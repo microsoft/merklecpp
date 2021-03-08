@@ -75,11 +75,8 @@ int main()
 
       if ((k && k % 1000 == 999) || k == num_trees - 1)
       {
-        static char time_str[256] = "";
-        std::time_t t = std::time(nullptr);
-        std::strftime(time_str, sizeof(time_str), "%R", std::localtime(&t));
-        std::cout << time_str << ": " << k + 1 << " trees, " << total_leaves
-                  << " leaves, " << total_roots << " roots"
+        std::cout << k + 1 << " trees, " << total_leaves << " leaves, "
+                  << total_roots << " roots"
                   << ": OK." << std::endl;
       }
     }

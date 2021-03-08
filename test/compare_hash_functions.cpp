@@ -164,12 +164,9 @@ void compare_compression_hashes()
 #endif
   }
 
-  static char time_str[256] = "";
-  std::time_t t = std::time(nullptr);
-  std::strftime(time_str, sizeof(time_str), "%R", std::localtime(&t));
-  std::cout << time_str << ": " << num_trees << " trees, " << total_inserts
-            << " inserts, " << total_roots
-            << " roots with SHA256 compression function: OK" << std::endl;
+  std::cout << num_trees << " trees, " << total_inserts << " inserts, "
+            << total_roots << " roots with SHA256 compression function: OK"
+            << std::endl;
 }
 
 #if defined(HAVE_OPENSSL) && (defined(HAVE_EVERCRYPT) || defined(HAVE_MBEDTLS))
@@ -238,12 +235,8 @@ void compare_full_hashes()
 #  endif
   }
 
-  static char time_str[256] = "";
-  std::time_t t = std::time(nullptr);
-  std::strftime(time_str, sizeof(time_str), "%R", std::localtime(&t));
-  std::cout << time_str << ": " << num_trees << " trees, " << total_inserts
-            << " inserts, " << total_roots << " roots with full SHA256: OK"
-            << std::endl;
+  std::cout << num_trees << " trees, " << total_inserts << " inserts, "
+            << total_roots << " roots with full SHA256: OK" << std::endl;
 }
 #endif
 
