@@ -32,6 +32,9 @@ jobs:
         # Prefix the list here with "+" to use these queries and those in the config file.
         # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
+    - name: Create Build Environment
+      run: cmake -E make_directory ${{github.workspace}}/build/${{ matrix.build_type }}
+
     - name: Configure merklecpp
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       run: cmake -DCMAKE_BUILD_TYPE=Debug -DTESTS=ON $GITHUB_WORKSPACE
