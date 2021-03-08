@@ -144,10 +144,23 @@
   <div class="section" id="merklecpp-documentation">
 <h1>merklecpp Documentation<a class="headerlink" href="#merklecpp-documentation" title="Permalink to this headline">¶</a></h1>
 <p>merklecpp is a header-only C++ library for creation and manipulation of Merkle
-trees. The main entry-point is the <a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT"><code class="xref cpp cpp-class docutils literal notranslate"><span class="pre">merkle::TreeT</span></code></a> template, which allows us to
-create a Merkle tree with a compile-time configurable hash size and function.
-<a class="reference internal" href="#_CPPv4N6merkle4TreeE" title="merkle::Tree"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">merkle::Tree</span></code></a> provides a default implementation using the SHA256 compression
-function (<a class="reference internal" href="#_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE" title="merkle::sha256_compress"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">merkle::sha256_compress()</span></code></a>).</p>
+trees. The main entry-point is the <a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT"><code class="xref cpp cpp-class docutils literal notranslate"><span class="pre">merkle::TreeT</span></code></a> template, which
+allows us to create a Merkle tree with a compile-time configurable hash size
+and function.</p>
+<p>A default implementation without further depdencies is provided as
+<a class="reference internal" href="#_CPPv4N6merkle4TreeE" title="merkle::Tree"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">merkle::Tree</span></code></a>, which uses the SHA256 compression function
+(<a class="reference internal" href="#_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE" title="merkle::sha256_compress"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">merkle::sha256_compress()</span></code></a>). merklecpp also provides bindings
+for the respective OpenSSL and mbedTLS functions (see <a class="reference internal" href="#hash-functions">Hash functions</a>),
+which can be specified as a template parameter as illustrated by the following
+example:</p>
+<div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span>    <span class="n">merkle</span><span class="o">::</span><span class="n">TreeT</span><span class="o">&lt;</span><span class="mi">32</span><span class="p">,</span> <span class="n">merkle</span><span class="o">::</span><span class="n">sha256_openssl</span><span class="o">&gt;</span> <span class="n">tree</span><span class="p">;</span>
+    <span class="k">for</span> <span class="p">(</span><span class="k">auto</span> <span class="nl">h</span> <span class="p">:</span> <span class="n">hashes</span><span class="p">)</span>
+      <span class="n">tree</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">h</span><span class="p">);</span>
+    <span class="k">auto</span> <span class="n">root</span> <span class="o">=</span> <span class="n">tree</span><span class="p">.</span><span class="n">root</span><span class="p">();</span>
+    <span class="k">auto</span> <span class="n">path</span> <span class="o">=</span> <span class="n">tree</span><span class="p">.</span><span class="n">path</span><span class="p">(</span><span class="n">hashes</span><span class="p">.</span><span class="n">size</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">path</span><span class="o">-&gt;</span><span class="n">verify</span><span class="p">(</span><span class="n">root</span><span class="p">));</span>
+</pre></div>
+</div>
 <div class="section" id="trees">
 <h2>Trees<a class="headerlink" href="#trees" title="Permalink to this headline">¶</a></h2>
 <dl class="cpp class">
@@ -1204,7 +1217,9 @@ function (<a class="reference internal" href="#_CPPv4N6merkle15sha256_compressER
 <h2>Hash functions<a class="headerlink" href="#hash-functions" title="Permalink to this headline">¶</a></h2>
 <p>By default, merklecpp uses the SHA256 compression function
 (<a class="reference internal" href="#_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE" title="merkle::sha256_compress"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">merkle::sha256_compress()</span></code></a>) for node hashes. For convenience,
-it also provides bindings to the SHA256 implementations in OpenSSL and mbedTLS.</p>
+it also provides bindings to the SHA256 implementations in OpenSSL and mbedTLS.
+To enable these bindings, merklecpp requires the compiler macros
+<code class="code docutils literal notranslate"><span class="pre">HAVE_OPENSSL</span></code> and <code class="code docutils literal notranslate"><span class="pre">HAVE_MBEDTLS</span></code> to be defined.</p>
 <dl class="cpp function">
 <dt id="_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE">
 <span id="_CPPv3N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE"></span><span id="_CPPv2N6merkle15sha256_compressERK5HashTIX32EERK5HashTIX32EER5HashTIX32EE"></span><span id="merkle::sha256_compress__HashT:32:CR.HashT:32:CR.HashT:32:R"></span><span class="target" id="merklecpp_8h_1abbb4871ee621c6450873355236d34293"></span><em class="property"><span class="pre">static</span></em> <em class="property"><span class="pre">inline</span></em> <span class="pre">void</span> <code class="sig-prename descclassname"><span class="pre">merkle</span><code class="sig-prename descclassname"><span class="pre">::</span></code></code><code class="sig-name descname"><span class="pre">sha256_compress</span></code><span class="sig-paren">(</span><em class="property"><span class="pre">const</span></em> <a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="pre">HashT</span></a><span class="pre">&lt;</span><span class="pre">32</span><span class="pre">&gt;</span> <span class="pre">&amp;</span><em><span class="pre">l</span></em>, <em class="property"><span class="pre">const</span></em> <a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="pre">HashT</span></a><span class="pre">&lt;</span><span class="pre">32</span><span class="pre">&gt;</span> <span class="pre">&amp;</span><em><span class="pre">r</span></em>, <a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="pre">HashT</span></a><span class="pre">&lt;</span><span class="pre">32</span><span class="pre">&gt;</span> <span class="pre">&amp;</span><em><span class="pre">out</span></em><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE" title="Permalink to this definition">¶</a><br /></dt>
