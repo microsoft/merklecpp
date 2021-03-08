@@ -111,13 +111,9 @@ int main()
           (total_subtrees % 2500 == 0) ||
           (k == num_trees - 1 && l == num_subtrees - 1))
         {
-          static char time_str[256] = "";
-          std::time_t t = std::time(nullptr);
-          std::strftime(time_str, sizeof(time_str), "%R", std::localtime(&t));
-          std::cout << time_str << ": " << k + 1 << " trees, " << total_leaves
-                    << " leaves, " << total_flushes << " flushes, "
-                    << total_retractions << " retractions, " << total_subtrees
-                    << " subtrees"
+          std::cout << k + 1 << " trees, " << total_leaves << " leaves, "
+                    << total_flushes << " flushes, " << total_retractions
+                    << " retractions, " << total_subtrees << " subtrees"
                     << ": OK." << std::endl;
         }
       }

@@ -123,12 +123,9 @@ int main()
           (total_inserts % 1000000 == 0) ||
           (k == num_trees - 1 && h == hashes.back()))
         {
-          static char time_str[256] = "";
-          std::time_t t = std::time(nullptr);
-          std::strftime(time_str, sizeof(time_str), "%R", std::localtime(&t));
-          std::cout << time_str << ": " << k << " trees, " << total_inserts
-                    << " inserts, " << total_flushes << " flushes, "
-                    << total_retractions << " retractions: OK" << std::endl;
+          std::cout << k << " trees, " << total_inserts << " inserts, "
+                    << total_flushes << " flushes, " << total_retractions
+                    << " retractions: OK" << std::endl;
         }
       }
 
