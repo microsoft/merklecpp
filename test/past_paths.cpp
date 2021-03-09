@@ -28,8 +28,6 @@ std::shared_ptr<merkle::Path> past_root_spec(
   return result;
 }
 
-extern char** environ;
-
 int main(int argc, char** argv)
 {
   auto test_start_time = std::chrono::high_resolution_clock::now();

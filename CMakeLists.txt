@@ -76,9 +76,9 @@ if(TESTS)
 
     if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
       target_compile_options(
-        ${NAME} PRIVATE -fsanitize=address -fno-omit-frame-pointer
+        ${NAME} PRIVATE -fsanitize=undefined,address -fno-omit-frame-pointer
       )
-      target_link_options(${NAME} PRIVATE -fsanitize=address)
+      target_link_options(${NAME} PRIVATE -fsanitize=undefined,address)
     endif()
 
     add_test(${NAME} ${NAME})
