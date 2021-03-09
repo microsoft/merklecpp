@@ -16,22 +16,6 @@
 #include <stack>
 #include <vector>
 
-#ifdef WIN32
-#  include <stdlib.h>
-#  if BYTE_ORDER == LITTLE_ENDIAN
-#    define htobe32(X) _byteswap_ulong(X)
-#    define be32toh(X) _byteswap_ulong(X)
-#    define htobe64(X) _byteswap_uint64(X)
-#    define be64toh(X) _byteswap_uint64(X)
-#  else
-#    define htobe32(X) (X)
-#    define be32toh(X) (X)
-#    define htobe64(X) (X)
-#    define be64toh(X) (X)
-#  endif
-#  undef max
-#endif
-
 #ifdef HAVE_OPENSSL
 #  include <openssl/sha.h>
 #endif
@@ -63,22 +47,23 @@
 
 namespace merkle
 {
-  inline void serialise_size_t(size_t size, std::vector<uint8_t>& bytes)
+  inline void serialise_uint64_t(uint64_t n, std::vector<uint8_t>& bytes)
   {
-    size_t size_be = htobe64(size);
-    uint8_t* size_bytes = (uint8_t*)&size_be;
-    for (size_t i = 0; i < sizeof(size_t); i++)
-      bytes.push_back(size_bytes[i]);
+    for (uint64_t i = 0; i < sizeof(uint64_t); i++)
+    {
+      bytes.push_back(n & 0xFF);
+      n >>= 8;
+    }
   }
 
-  inline size_t deserialise_size_t(
-    const std::vector<uint8_t>& bytes, size_t& index)
+  inline uint64_t deserialise_uint64_t(
+    const std::vector<uint8_t>& bytes, uint64_t& index)
   {
-    size_t result = 0;
-    uint8_t* result_bytes = (uint8_t*)&result;
-    for (size_t i = 0; i < sizeof(size_t); i++)
-      result_bytes[i] = bytes[index++];
-    return be64toh(result);
+    uint64_t r = 0;
+    uint64_t sz = sizeof(uint64_t);
+    for (uint64_t i = 0; i < sz; i++)
+      r |= bytes[index++] << (i * 8);
+    return r;
   }
 
   /// @brief Template for fixed-size hashes
@@ -354,9 +339,9 @@ namespace merkle
     {
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> PathT::serialise " << std::endl);
       _leaf.serialise(bytes);
-      serialise_size_t(_leaf_index, bytes);
-      serialise_size_t(_max_index, bytes);
-      serialise_size_t(elements.size(), bytes);
+      serialise_uint64_t(_leaf_index, bytes);
+      serialise_uint64_t(_max_index, bytes);
+      serialise_uint64_t(elements.size(), bytes);
       for (auto& e : elements)
       {
         e.hash.serialise(bytes);
@@ -372,9 +357,9 @@ namespace merkle
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> PathT::deserialise " << std::endl);
       elements.clear();
       _leaf.deserialise(bytes, position);
-      _leaf_index = deserialise_size_t(bytes, position);
-      _max_index = deserialise_size_t(bytes, position);
-      size_t num_elements = deserialise_size_t(bytes, position);
+      _leaf_index = deserialise_uint64_t(bytes, position);
+      _max_index = deserialise_uint64_t(bytes, position);
+      size_t num_elements = deserialise_uint64_t(bytes, position);
       for (size_t i = 0; i < num_elements; i++)
       {
         HashT<HASH_SIZE> hash(bytes, position);
@@ -1201,8 +1186,9 @@ namespace merkle
     {
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> serialise " << std::endl;);
 
-      serialise_size_t(leaf_nodes.size() + uninserted_leaf_nodes.size(), bytes);
-      serialise_size_t(num_flushed, bytes);
+      serialise_uint64_t(
+        leaf_nodes.size() + uninserted_leaf_nodes.size(), bytes);
+      serialise_uint64_t(num_flushed, bytes);
       for (auto& n : leaf_nodes)
         n->hash.serialise(bytes);
       for (auto& n : uninserted_leaf_nodes)
@@ -1243,8 +1229,8 @@ namespace merkle
         (to < min_index() || max_index() < to) || from > to)
         throw std::runtime_error("invalid leaf indices");
 
-      serialise_size_t(to - from + 1, bytes);
-      serialise_size_t(from, bytes);
+      serialise_uint64_t(to - from + 1, bytes);
+      serialise_uint64_t(from, bytes);
       for (size_t i = from; i <= to; i++)
         leaf(i).serialise(bytes);
 
@@ -1294,8 +1280,8 @@ namespace merkle
       walk_stack.clear();
       _root = nullptr;
 
-      size_t num_leaf_nodes = deserialise_size_t(bytes, position);
-      num_flushed = deserialise_size_t(bytes, position);
+      size_t num_leaf_nodes = deserialise_uint64_t(bytes, position);
+      num_flushed = deserialise_uint64_t(bytes, position);
 
       leaf_nodes.reserve(num_leaf_nodes);
       for (size_t i = 0; i < num_leaf_nodes; i++)
