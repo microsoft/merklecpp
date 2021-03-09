@@ -47,22 +47,42 @@
 
 namespace merkle
 {
-  inline void serialise_uint64_t(uint64_t n, std::vector<uint8_t>& bytes)
+  static inline uint32_t convert_endianness(uint32_t n)
   {
-    for (uint64_t i = 0; i < sizeof(uint64_t); i++)
-    {
-      bytes.push_back(n & 0xFF);
-      n >>= 8;
-    }
+    const uint32_t sz = sizeof(uint32_t);
+#if defined(htobe32)
+    // If htobe32 happens to be a macro, use it.
+    return htobe32(n);
+#elif defined(__LITTLE_ENDIAN__) || defined(__LITTLE_ENDIAN)
+    // Just as fast.
+    uint32_t r = 0;
+    for (size_t i = 0; i < sz; i++)
+      r |= ((n >> (8 * ((sz - 1) - i))) & 0xFF) << (8 * i);
+    return *reinterpret_cast<uint32_t*>(&r);
+#else
+    // A little slower, but works for both endiannesses.
+    uint8_t r[8];
+    for (size_t i = 0; i < sz; i++)
+      r[i] = (n >> (8 * ((sz - 1) - i))) & 0xFF;
+    return *reinterpret_cast<uint32_t*>(&r);
+#endif
   }
 
-  inline uint64_t deserialise_uint64_t(
-    const std::vector<uint8_t>& bytes, uint64_t& index)
+  static inline void serialise_uint64_t(uint64_t n, std::vector<uint8_t>& bytes)
+  {
+    size_t sz = sizeof(uint64_t);
+    bytes.reserve(bytes.size() + sz);
+    for (uint64_t i = 0; i < sz; i++)
+      bytes.push_back((n >> (8 * (sz - i - 1))) & 0xFF);
+  }
+
+  static inline uint64_t deserialise_uint64_t(
+    const std::vector<uint8_t>& bytes, size_t& index)
   {
     uint64_t r = 0;
     uint64_t sz = sizeof(uint64_t);
     for (uint64_t i = 0; i < sz; i++)
-      r |= bytes[index++] << (i * 8);
+      r |= static_cast<uint64_t>(bytes[index++]) << (8 * (sz - i - 1));
     return r;
   }
 
@@ -148,7 +168,7 @@ namespace merkle
       std::string r(num_chars, '_');
       for (size_t i = 0; i < num_bytes; i++)
         snprintf(
-          r.data() + 2 * i,
+          const_cast<char*>(r.data() + 2 * i),
           num_chars + 1 - 2 * i,
           lower_case ? "%02x" : "%02X",
           bytes[i]);
@@ -437,7 +457,8 @@ namespace merkle
     /// @brief Convert a path to a string
     /// @param num_bytes The maximum number of bytes to convert
     /// @param lower_case Enables lower-case hex characters
-    std::string to_string(size_t num_bytes = HASH_SIZE, bool lower_case = true) const
+    std::string to_string(
+      size_t num_bytes = HASH_SIZE, bool lower_case = true) const
     {
       std::stringstream stream;
       stream << _leaf.to_string(num_bytes);
@@ -1818,7 +1839,7 @@ namespace merkle
     uint32_t cws[64] = {0};
 
     for (int i=0; i < 16; i++)
-      cws[i] = be32toh(((int32_t *)block)[i]);
+      cws[i] = convert_endianness(((int32_t *)block)[i]);
 
     for (int i = 16; i < 64; i++) {
       uint32_t t16 = cws[i - 16];
@@ -1850,7 +1871,7 @@ namespace merkle
     }
 
     for (int i=0; i < 8; i++)
-      ((uint32_t*)out.bytes)[i] = htobe32(s[i] + h[i]);
+      ((uint32_t*)out.bytes)[i] = convert_endianness(s[i] + h[i]);
   }
   // clang-format on
 
@@ -1873,7 +1894,7 @@ namespace merkle
     SHA256_Transform(&ctx, &block[0]);
 
     for (int i = 0; i < 8; i++)
-      ((uint32_t*)out.bytes)[i] = htobe32(((uint32_t*)ctx.h)[i]);
+      ((uint32_t*)out.bytes)[i] = convert_endianness(((uint32_t*)ctx.h)[i]);
   }
 
   /// @brief OpenSSL SHA256

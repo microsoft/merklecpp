@@ -27,6 +27,7 @@ add_merklecpp_test(past_root past_root.cpp)
 add_merklecpp_test(past_paths past_paths.cpp)
 add_merklecpp_test(serialisation serialisation.cpp)
 add_merklecpp_test(partial_serialisation partial_serialisation.cpp)
+add_merklecpp_test(serialise_to_file serialise_to_file.cpp)
 
 if(TARGET evercrypt.host)
   add_merklecpp_test(compare_evercrypt compare_evercrypt.cpp)
