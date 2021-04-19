@@ -1293,6 +1293,7 @@ namespace merkle
 
       delete (_root);
       leaf_nodes.clear();
+      this->statistics = Statistics{};
       for (auto n : uninserted_leaf_nodes)
         delete (n);
       uninserted_leaf_nodes.clear();
@@ -1310,6 +1311,7 @@ namespace merkle
         Node* n = Node::make(bytes.data() + position);
         position += HASH_SIZE;
         leaf_nodes.push_back(n);
+        this->statistics.num_insert++;
       }
 
       std::vector<Node*> level = leaf_nodes, next_level;
