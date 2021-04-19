@@ -1293,6 +1293,7 @@ namespace merkle
 
       delete (_root);
       leaf_nodes.clear();
+      this->statistics = Statistics{};
       for (auto n : uninserted_leaf_nodes)
         delete (n);
       uninserted_leaf_nodes.clear();
