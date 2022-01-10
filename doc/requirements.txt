@@ -7,6 +7,5 @@ sphinx-copybutton
 sphinxcontrib.openapi
 sphinx-panels
 breathe
-pygments-style-solarized
 bottle
 pydata-sphinx-theme
