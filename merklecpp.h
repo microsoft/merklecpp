@@ -153,6 +153,12 @@ namespace merkle
       return SIZE;
     }
 
+    /// @brief zeros out all bytes in the hash
+    void zero()
+    {
+      std::fill(bytes, bytes + SIZE, 0);
+    }
+
     /// @brief The size of the serialisation of the hash (in number of bytes)
     size_t serialised_size() const
     {
