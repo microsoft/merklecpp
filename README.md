@@ -11,14 +11,14 @@ unusual features like flushing, retracting, and tree segment serialisation.
 
     #include <merklecpp.h>
 
-    merkle::Tree::Hash hash("message");
+    merkle::Tree::Hash hash("fa8f44eabb728d4020e7f33d1aa973faaef19de6c06679bccdc5100a3c01f54a");
 
     merkle::Tree tree;
     tree.insert(hash);
     ...
     auto root = tree.root();
     auto path = tree.path(0);
-    assert(path.verify(root));
+    assert(path->verify(root));
 
 
 ## Contributing
