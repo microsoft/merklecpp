@@ -60,4 +60,4 @@ jobs:
     - name: Test
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       shell: bash
-      run: ctest -C ${{ matrix.build_type }}
+      run: ctest -VV -C ${{ matrix.build_type }}
