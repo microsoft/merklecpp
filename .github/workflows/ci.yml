@@ -37,7 +37,7 @@ jobs:
 
     - name: Install clang++-15
       run: sudo apt install clang-15
-      if: matrix.os == 'clang++-15'
+      if: matrix.os == 'ubuntu-latest'
 
     - uses: actions/checkout@v2
 
