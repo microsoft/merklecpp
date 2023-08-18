@@ -1390,7 +1390,8 @@ namespace merkle
       if (index >= num_leaves())
         throw std::runtime_error("leaf index out of bounds");
       if (index - num_flushed >= leaf_nodes.size())
-        return uninserted_leaf_nodes.at(index - num_flushed - leaf_nodes.size())
+        return uninserted_leaf_nodes
+          .at(index - num_flushed - leaf_nodes.size())
           ->hash;
       else
         return leaf_nodes.at(index - num_flushed)->hash;
@@ -1622,7 +1623,8 @@ namespace merkle
       if (index >= num_leaves())
         throw std::runtime_error("leaf index out of bounds");
       if (index - num_flushed >= leaf_nodes.size())
-        return uninserted_leaf_nodes.at(index - num_flushed - leaf_nodes.size());
+        return uninserted_leaf_nodes.at(
+          index - num_flushed - leaf_nodes.size());
       else
         return leaf_nodes.at(index - num_flushed);
     }
@@ -1734,7 +1736,8 @@ namespace merkle
       MERKLECPP_TRACE({
         std::string nodes;
         for (size_t i = 0; i < insertion_stack.size(); i++)
-          nodes += " " + insertion_stack.at(i).n->hash.to_string(TRACE_HASH_SIZE);
+          nodes +=
+            " " + insertion_stack.at(i).n->hash.to_string(TRACE_HASH_SIZE);
         MERKLECPP_TOUT << "  X " << (complete ? "complete" : "continue") << ":"
                        << nodes << std::endl;
       });
@@ -1894,10 +1897,17 @@ namespace merkle
     memcpy(&block[0], l.bytes, 32);
     memcpy(&block[32], r.bytes, 32);
 
-    SHA256_CTX ctx;
-    if (SHA256_Init(&ctx) != 1)
-      printf("SHA256_Init error");
-    SHA256_Transform(&ctx, &block[0]);
+    const EVP_MD* md = EVP_sha256();
+    int rc = EVP_Digest(&block[0], 32 * 2, h, nullptr, md, nullptr);
+    if (rc != 1)
+    {
+      throw std::logic_error(fmt::format("EVP_Digest failed: {}", rc));
+    }
+
+    // SHA256_CTX ctx;
+    // if (SHA256_Init(&ctx) != 1)
+    //   printf("SHA256_Init error");
+    // SHA256_Transform(&ctx, &block[0]);
 
     for (int i = 0; i < 8; i++)
       ((uint32_t*)out.bytes)[i] = convert_endianness(((uint32_t*)ctx.h)[i]);
@@ -1916,7 +1926,15 @@ namespace merkle
     uint8_t block[32 * 2];
     memcpy(&block[0], l.bytes, 32);
     memcpy(&block[32], r.bytes, 32);
-    SHA256(block, sizeof(block), out.bytes);
+
+    const EVP_MD* md = EVP_sha256();
+    int rc = EVP_Digest(&block[0], sizeof(block), h, nullptr, md, nullptr);
+    if (rc != 1)
+    {
+      throw std::logic_error(fmt::format("EVP_Digest failed: {}", rc));
+    }
+
+    // SHA256(block, sizeof(block), out.bytes);
   }
 #endif
 
