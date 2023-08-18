@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-18.04]
+        os: [ubuntu-latest, ubuntu-20.04]
         build_type: [Debug, Release]
         compiler: [g++, clang++, clang++-11]
         include:
@@ -30,7 +30,7 @@ jobs:
     steps:
     - name: Install packages
       run: sudo apt install libmbedtls-dev doctest-dev clang-11
-      if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-18.04'
+      if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-20.04'
 
     - uses: actions/checkout@v2
 
