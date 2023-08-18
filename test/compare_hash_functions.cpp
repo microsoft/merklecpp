@@ -47,7 +47,6 @@ typedef merkle::TreeT<32, sha256_evercrypt> EverCryptFullTree;
 #endif
 
 #ifdef HAVE_OPENSSL
-typedef merkle::TreeT<32, merkle::sha256_compress_openssl> OpenSSLTree;
 typedef merkle::TreeT<32, merkle::sha256_openssl> OpenSSLFullTree;
 #endif
 
@@ -103,10 +102,6 @@ void compare_compression_hashes()
     EverCryptTree mte;
 #endif
 
-#ifdef HAVE_OPENSSL
-    OpenSSLTree mto;
-#endif
-
 #ifdef HAVE_MBEDTLS
     MbedTLSTree mtm;
 #endif
@@ -123,10 +118,6 @@ void compare_compression_hashes()
       mte.insert(h);
 #endif
 
-#ifdef HAVE_OPENSSL
-      mto.insert(h);
-#endif
-
 #ifdef HAVE_MBEDTLS
       mtm.insert(h);
 #endif
@@ -139,10 +130,6 @@ void compare_compression_hashes()
         compare_roots(mt, mte, "EverCrypt");
 #endif
 
-#ifdef HAVE_OPENSSL
-        compare_roots(mt, mto, "OpenSSL");
-#endif
-
 #ifdef HAVE_MBEDTLS
         compare_roots(mt, mtm, "mbedTLS");
 #endif
@@ -153,10 +140,6 @@ void compare_compression_hashes()
 
 #ifdef HAVE_EVERCRYPT
     compare_roots(mt, mte, "EverCrypt");
-#endif
-
-#ifdef HAVE_OPENSSL
-    compare_roots(mt, mto, "OpenSSL");
 #endif
 
 #ifdef HAVE_MBEDTLS
@@ -328,10 +311,6 @@ int main()
               << std::endl;
 
     bench<merkle::Tree>(hashes, "merklecpp", root_interval);
-
-#ifdef HAVE_OPENSSL
-    bench<OpenSSLTree>(hashes, "OpenSSL", root_interval);
-#endif
 
 #ifdef HAVE_MBEDTLS
     bench<MbedTLSTree>(hashes, "mbedTLS", root_interval);

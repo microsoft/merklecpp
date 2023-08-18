@@ -55,9 +55,6 @@ To enable these bindings, merklecpp requires the compiler macros
 .. doxygenfunction:: merkle::sha256_compress
    :project: merklecpp
 
-.. doxygenfunction:: merkle::sha256_compress_openssl
-   :project: merklecpp
-
 .. doxygenfunction:: merkle::sha256_openssl
    :project: merklecpp
 
