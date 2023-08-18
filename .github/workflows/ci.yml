@@ -29,7 +29,7 @@ jobs:
 
     steps:
     - name: Install packages
-      run: sudo apt install libmbedtls-dev doctest-dev clang-11 clang++-15
+      run: sudo apt install libmbedtls-dev doctest-dev clang-11 clang-15
       if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-20.04'
 
     - uses: actions/checkout@v2
