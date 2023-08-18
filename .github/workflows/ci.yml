@@ -16,9 +16,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-18.04]
+        os: [ubuntu-latest, ubuntu-20.04]
         build_type: [Debug, Release]
-        compiler: [g++, clang++, clang++-8]
+        compiler: [g++, clang++, clang++-11, clang++-15]
         include:
           - os: windows-latest
             build_type: Debug
@@ -26,11 +26,18 @@ jobs:
           - os: windows-latest
             build_type: Release
             compiler: msvc
+        exclude:
+          - os: ubuntu-20.04
+            compiler: clang++-15
 
     steps:
     - name: Install packages
-      run: sudo apt install libmbedtls-dev doctest-dev clang-8
-      if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-18.04'
+      run: sudo apt install libmbedtls-dev doctest-dev clang-11
+      if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-20.04'
+
+    - name: Install clang++-15
+      run: sudo apt install clang-15
+      if: matrix.os == 'ubuntu-latest'
 
     - uses: actions/checkout@v2
 
@@ -60,4 +67,6 @@ jobs:
     - name: Test
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       shell: bash
-      run: ctest -C ${{ matrix.build_type }}
+      run: ctest -VV -C ${{ matrix.build_type }}
+      env: 
+        ASAN_OPTIONS: use_sigaltstack=false # To avoid SetAlternateSignalStack with clang-11 
