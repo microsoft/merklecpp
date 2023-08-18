@@ -61,3 +61,5 @@ jobs:
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       shell: bash
       run: ctest -VV -C ${{ matrix.build_type }}
+      env: 
+        ASAN_OPTIONS: use_sigaltstack=false # To avoid SetAlternateSignalStack with clang-11 
