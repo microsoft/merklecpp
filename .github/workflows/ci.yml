@@ -18,7 +18,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, ubuntu-20.04]
         build_type: [Debug, Release]
-        compiler: [g++, clang++, clang++-11]
+        compiler: [g++, clang++, clang++-11, clang++-15]
         include:
           - os: windows-latest
             build_type: Debug
@@ -29,7 +29,7 @@ jobs:
 
     steps:
     - name: Install packages
-      run: sudo apt install libmbedtls-dev doctest-dev clang-11
+      run: sudo apt install libmbedtls-dev doctest-dev clang-11 clang++-15
       if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-20.04'
 
     - uses: actions/checkout@v2
