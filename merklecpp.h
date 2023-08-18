@@ -17,6 +17,7 @@
 #include <vector>
 
 #ifdef HAVE_OPENSSL
+#  include <openssl/evp.h>
 #  include <openssl/sha.h>
 #endif
 
@@ -1885,34 +1886,6 @@ namespace merkle
   // clang-format on
 
 #ifdef HAVE_OPENSSL
-  /// @brief OpenSSL's SHA256 compression function
-  /// @param l Left node hash
-  /// @param r Right node hash
-  /// @param out Output node hash
-  /// @note Some versions of OpenSSL may not provide SHA256_Transform.
-  static inline void sha256_compress_openssl(
-    const HashT<32>& l, const HashT<32>& r, HashT<32>& out)
-  {
-    unsigned char block[32 * 2];
-    memcpy(&block[0], l.bytes, 32);
-    memcpy(&block[32], r.bytes, 32);
-
-    const EVP_MD* md = EVP_sha256();
-    int rc = EVP_Digest(&block[0], 32 * 2, h, nullptr, md, nullptr);
-    if (rc != 1)
-    {
-      throw std::logic_error(fmt::format("EVP_Digest failed: {}", rc));
-    }
-
-    // SHA256_CTX ctx;
-    // if (SHA256_Init(&ctx) != 1)
-    //   printf("SHA256_Init error");
-    // SHA256_Transform(&ctx, &block[0]);
-
-    for (int i = 0; i < 8; i++)
-      ((uint32_t*)out.bytes)[i] = convert_endianness(((uint32_t*)ctx.h)[i]);
-  }
-
   /// @brief OpenSSL SHA256
   /// @param l Left node hash
   /// @param r Right node hash
@@ -1928,13 +1901,12 @@ namespace merkle
     memcpy(&block[32], r.bytes, 32);
 
     const EVP_MD* md = EVP_sha256();
-    int rc = EVP_Digest(&block[0], sizeof(block), h, nullptr, md, nullptr);
+    int rc =
+      EVP_Digest(&block[0], sizeof(block), out.bytes, nullptr, md, nullptr);
     if (rc != 1)
     {
-      throw std::logic_error(fmt::format("EVP_Digest failed: {}", rc));
+      throw std::runtime_error("EVP_Digest failed: " + std::to_string(rc));
     }
-
-    // SHA256(block, sizeof(block), out.bytes);
   }
 #endif
 
