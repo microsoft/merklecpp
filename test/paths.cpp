@@ -56,6 +56,10 @@ int main()
         auto path = mt.path(i);
         if (!path->verify(root))
           throw std::runtime_error("path verification failed");
+        std::vector<uint8_t> serialised_path;
+        path->serialise(serialised_path);
+        if (path->serialised_size() != serialised_path.size())
+          throw std::runtime_error("serialised_size() != serialised_path.size()");
       }
     }
 
