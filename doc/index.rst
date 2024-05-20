@@ -6,7 +6,7 @@ trees. The main entry-point is the :cpp:class:`merkle::TreeT` template, which
 allows us to create a Merkle tree with a compile-time configurable hash size
 and function.
 
-A default implementation without further depdencies is provided as
+A default implementation without further dependencies is provided as
 :cpp:type:`merkle::Tree`, which uses the SHA256 compression function
 (:cpp:func:`merkle::sha256_compress`). merklecpp also provides bindings
 for the respective OpenSSL and mbedTLS functions (see `Hash functions`_),
