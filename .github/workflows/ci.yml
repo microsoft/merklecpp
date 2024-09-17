@@ -39,7 +39,7 @@ jobs:
       run: sudo apt install clang-15
       if: matrix.os == 'ubuntu-latest'
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Create Build Environment
       run: cmake -E make_directory ${{github.workspace}}/build/${{ matrix.build_type }}
