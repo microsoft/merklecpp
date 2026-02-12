@@ -21,10 +21,6 @@
 #  include <openssl/sha.h>
 #endif
 
-#ifdef HAVE_MBEDTLS
-#  include <mbedtls/sha256.h>
-#endif
-
 #ifdef MERKLECPP_TRACE_ENABLED
 // Hashes in the trace output are truncated to TRACE_HASH_SIZE bytes.
 #  define TRACE_HASH_SIZE 3
@@ -1914,45 +1910,6 @@ namespace merkle
     {
       throw std::runtime_error("EVP_Digest failed: " + std::to_string(rc));
     }
-  }
-#endif
-
-#ifdef HAVE_MBEDTLS
-  /// @brief mbedTLS SHA256 compression function
-  /// @param l Left node hash
-  /// @param r Right node hash
-  /// @param out Output node hash
-  /// @note Technically, mbedtls_internal_sha256_process is marked for internal
-  /// use only.
-  static inline void sha256_compress_mbedtls(
-    const HashT<32>& l, const HashT<32>& r, HashT<32>& out)
-  {
-    unsigned char block[32 * 2];
-    memcpy(&block[0], l.bytes, 32);
-    memcpy(&block[32], r.bytes, 32);
-
-    mbedtls_sha256_context ctx;
-    mbedtls_sha256_init(&ctx);
-    mbedtls_sha256_starts_ret(&ctx, false);
-    mbedtls_internal_sha256_process(&ctx, &block[0]);
-
-    for (int i = 0; i < 8; i++)
-      ((uint32_t*)out.bytes)[i] = htobe32(ctx.state[i]);
-  }
-
-  /// @brief mbedTLS SHA256
-  /// @param l Left node hash
-  /// @param r Right node hash
-  /// @param out Output node hash
-  static inline void sha256_mbedtls(
-    const merkle::HashT<32>& l,
-    const merkle::HashT<32>& r,
-    merkle::HashT<32>& out)
-  {
-    uint8_t block[32 * 2];
-    memcpy(&block[0], l.bytes, 32);
-    memcpy(&block[32], r.bytes, 32);
-    mbedtls_sha256_ret(block, sizeof(block), out.bytes, false);
   }
 #endif
 
