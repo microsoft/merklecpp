@@ -21,6 +21,21 @@ inline std::vector<merkle::Hash> make_hashes(size_t n, size_t print_size = 3)
   return hashes;
 }
 
+template <size_t SIZE>
+inline std::vector<merkle::HashT<SIZE>> make_hashesT(
+  size_t n, size_t print_size = 3)
+{
+  std::vector<merkle::HashT<SIZE>> hashes;
+  merkle::HashT<SIZE> h;
+  for (size_t i = 0; i < n; i++)
+  {
+    hashes.push_back(h);
+    for (size_t j = print_size - 1; ++h.bytes[j] == 0 && j != (size_t)-1; j--)
+      ;
+  }
+  return hashes;
+}
+
 inline size_t random_index(merkle::Tree& mt)
 {
   return (size_t)(
