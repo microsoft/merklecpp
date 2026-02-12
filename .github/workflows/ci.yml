@@ -16,9 +16,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-20.04]
+        os: [ubuntu-latest]
         build_type: [Debug, Release]
-        compiler: [g++, clang++, clang++-11, clang++-15]
+        compiler: [g++, clang++]
         include:
           - os: windows-latest
             build_type: Debug
@@ -26,17 +26,10 @@ jobs:
           - os: windows-latest
             build_type: Release
             compiler: msvc
-        exclude:
-          - os: ubuntu-20.04
-            compiler: clang++-15
 
     steps:
     - name: Install packages
-      run: sudo apt install libmbedtls-dev doctest-dev clang-11
-      if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-20.04'
-
-    - name: Install clang++-15
-      run: sudo apt install clang-15
+      run: sudo apt install libmbedtls-dev doctest-dev clang
       if: matrix.os == 'ubuntu-latest'
 
     - uses: actions/checkout@v4
@@ -49,9 +42,6 @@ jobs:
       # access regardless of the host operating system
       shell: bash
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
-      # Note the current convention is to use the -S and -B options here to specify source
-      # and build directories, but this is only available with CMake 3.13 and higher.
-      # The CMake binaries on the Github Actions machines are (as of this writing) 3.12
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
           cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON -DMBEDTLS=ON
