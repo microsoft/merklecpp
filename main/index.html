@@ -14,35 +14,39 @@
   
   <script data-cfasync="false">
     document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
-    document.documentElement.dataset.theme = localStorage.getItem("theme") || "light";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
   </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="_static/styles/theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
-<link href="_static/styles/bootstrap.css?digest=5b4479735964841361fd" rel="stylesheet" />
-<link href="_static/styles/pydata-sphinx-theme.css?digest=5b4479735964841361fd" rel="stylesheet" />
-
-  
-  <link href="_static/vendor/fontawesome/6.1.2/css/all.min.css?digest=5b4479735964841361fd" rel="stylesheet" />
-  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-solid-900.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-brands-400.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.1.2/webfonts/fa-regular-400.woff2" />
+  <link href="_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=a746c00c" />
   
+  <!-- So that users can add custom icons -->
+  <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=5b4479735964841361fd" />
-<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd" />
-  <script src="_static/vendor/fontawesome/6.1.2/js/all.min.js?digest=5b4479735964841361fd"></script>
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
 
     <script src="_static/documentation_options.js?v=8d563738"></script>
-    <script src="_static/doctools.js?v=888ff710"></script>
-    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'index';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
   </head>
   
   
@@ -50,32 +54,16 @@
 
   
   
-  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
   
   <div id="pst-scroll-pixel-helper"></div>
-
   
   <button type="button" class="btn rounded-pill" id="pst-back-to-top">
-    <i class="fa-solid fa-arrow-up"></i>
-    Back to top
-  </button>
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
 
   
-  <input type="checkbox"
-          class="sidebar-toggle"
-          name="__primary"
-          id="__primary"/>
-  <label class="overlay overlay-primary" for="__primary"></label>
-  
-  <input type="checkbox"
-          class="sidebar-toggle"
-          name="__secondary"
-          id="__secondary"/>
-  <label class="overlay overlay-secondary" for="__secondary"></label>
-  
-  <div class="search-button__wrapper">
-    <div class="search-button__overlay"></div>
-    <div class="search-button__search-container">
+  <dialog id="pst-search-dialog">
+    
 <form class="bd-search d-flex align-items-center"
       action="search.html"
       method="get">
@@ -83,7 +71,6 @@
   <input type="search"
          class="form-control"
          name="q"
-         id="search-input"
          placeholder="Search the docs ..."
          aria-label="Search the docs ..."
          autocomplete="off"
@@ -91,20 +78,27 @@
          autocapitalize="off"
          spellcheck="false"/>
   <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
-</form></div>
-  </div>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
   
-    <nav class="bd-header navbar navbar-expand-lg bd-navbar">
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
 <div class="bd-header__inner bd-page-width">
-  <label class="sidebar-toggle primary-toggle" for="__primary">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
     <span class="fa-solid fa-bars"></span>
-  </label>
+  </button>
   
   
   <div class="col-lg-3 navbar-header-items__start">
     
       <div class="navbar-item">
 
+  
+    
   
 
 <a class="navbar-brand logo" href="#">
@@ -125,13 +119,7 @@
     <div class="me-auto navbar-header-items__center">
       
         <div class="navbar-item">
-<nav class="navbar-nav">
-  <p class="sidebar-header-items__title"
-     role="heading"
-     aria-level="1"
-     aria-label="Site Navigation">
-    Site Navigation
-  </p>
+<nav>
   <ul class="bd-navbar-elements navbar-nav">
     
   </ul>
@@ -145,29 +133,21 @@
         <div class="navbar-item navbar-persistent--container">
           
 
- <script>
- document.write(`
-   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="fa-solid fa-magnifying-glass"></i>
-    <span class="search-button__default-text">Search</span>
-    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-   </button>
- `);
- </script>
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
         </div>
       
       
         <div class="navbar-item">
 
-<script>
-document.write(`
-  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
-    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
-    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
-  </button>
-`);
-</script></div>
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
       
     </div>
     
@@ -176,31 +156,33 @@ document.write(`
   
     <div class="navbar-persistent--mobile">
 
- <script>
- document.write(`
-   <button class="btn navbar-btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="fa-solid fa-magnifying-glass"></i>
-    <span class="search-button__default-text">Search</span>
-    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-   </button>
- `);
- </script>
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
     </div>
   
 
   
-    <label class="sidebar-toggle secondary-toggle" for="__secondary" tabindex="0">
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
       <span class="fa-solid fa-outdent"></span>
-    </label>
+    </button>
   
 </div>
 
-    </nav>
+    </header>
   
+
   <div class="bd-container">
     <div class="bd-container__inner bd-page-width">
       
-      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
         
 
   
@@ -209,18 +191,15 @@ document.write(`
     
       <div class="sidebar-header-items__center">
         
-          <div class="navbar-item">
-<nav class="navbar-nav">
-  <p class="sidebar-header-items__title"
-     role="heading"
-     aria-level="1"
-     aria-label="Site Navigation">
-    Site Navigation
-  </p>
+          
+          
+            <div class="navbar-item">
+<nav>
   <ul class="bd-navbar-elements navbar-nav">
     
   </ul>
 </nav></div>
+          
         
       </div>
     
@@ -230,15 +209,11 @@ document.write(`
         
           <div class="navbar-item">
 
-<script>
-document.write(`
-  <button class="btn btn-sm navbar-btn theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <span class="theme-switch nav-link" data-mode="light"><i class="fa-solid fa-sun fa-lg"></i></span>
-    <span class="theme-switch nav-link" data-mode="dark"><i class="fa-solid fa-moon fa-lg"></i></span>
-    <span class="theme-switch nav-link" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg"></i></span>
-  </button>
-`);
-</script></div>
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
         
       </div>
     
@@ -246,26 +221,31 @@ document.write(`
   
   
   <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
   </div>
-  
-  <div id="rtd-footer-container"></div>
 
 
       </div>
       
-      <main id="main-content" class="bd-main">
+      <main id="main-content" class="bd-main" role="main">
         
         
           <div class="bd-content">
             <div class="bd-article-container">
               
-              <div class="bd-header-article"></div>
+              <div class="bd-header-article d-print-none"></div>
               
               
               
                 
 <div id="searchbox"></div>
-                <article class="bd-article" role="main">
+                <article class="bd-article">
                   
   <section id="merklecpp-documentation">
 <h1>merklecpp Documentation<a class="headerlink" href="#merklecpp-documentation" title="Link to this heading">#</a></h1>
@@ -273,7 +253,7 @@ document.write(`
 trees. The main entry-point is the <a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT"><code class="xref cpp cpp-class docutils literal notranslate"><span class="pre">merkle::TreeT</span></code></a> template, which
 allows us to create a Merkle tree with a compile-time configurable hash size
 and function.</p>
-<p>A default implementation without further depdencies is provided as
+<p>A default implementation without further dependencies is provided as
 <a class="reference internal" href="#_CPPv4N6merkle4TreeE" title="merkle::Tree"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">merkle::Tree</span></code></a>, which uses the SHA256 compression function
 (<a class="reference internal" href="#_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE" title="merkle::sha256_compress"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">merkle::sha256_compress()</span></code></a>). merklecpp also provides bindings
 for the respective OpenSSL and mbedTLS functions (see <a class="reference internal" href="#hash-functions">Hash functions</a>),
@@ -471,7 +451,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeTaSERK4Tree">
-<span id="_CPPv3N6merkle5TreeTaSERK4Tree"></span><span id="_CPPv2N6merkle5TreeTaSERK4Tree"></span><span id="merkle::TreeT::assign-operator__TreeCR"></span><span class="target" id="classmerkle_1_1TreeT_1a501425ec6f2fff70cb6f3abe2df483c0"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4TreeE" title="merkle::TreeT::Tree"><span class="n"><span class="pre">Tree</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="k"><span class="pre">operator</span></span><span class="o"><span class="pre">=</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4TreeE" title="merkle::TreeT::Tree"><span class="n"><span class="pre">Tree</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">other</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeTaSERK4Tree" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5TreeTaSERK4Tree"></span><span id="_CPPv2N6merkle5TreeTaSERK4Tree"></span><span id="merkle::TreeT::assign-operator__TreeCR"></span><span class="target" id="classmerkle_1_1TreeT_1ab90f1a240cf19d51c5e59d371fff526f"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4TreeE" title="merkle::TreeT::Tree"><span class="n"><span class="pre">Tree</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="k"><span class="pre">operator</span></span><span class="o"><span class="pre">=</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4TreeE" title="merkle::TreeT::Tree"><span class="n"><span class="pre">Tree</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">other</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeTaSERK4Tree" title="Link to this definition">#</a><br /></dt>
 <dd><p>Assigns a tree. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -485,7 +465,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT4rootEv">
-<span id="_CPPv3N6merkle5TreeT4rootEv"></span><span id="_CPPv2N6merkle5TreeT4rootEv"></span><span id="merkle::TreeT::root"></span><span class="target" id="classmerkle_1_1TreeT_1afa27a8546cd218842c354e616c5a4aeb"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4HashE" title="merkle::TreeT::Hash"><span class="n"><span class="pre">Hash</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">root</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT4rootEv" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5TreeT4rootEv"></span><span id="_CPPv2N6merkle5TreeT4rootEv"></span><span id="merkle::TreeT::root"></span><span class="target" id="classmerkle_1_1TreeT_1a1d6e992060e28ccde02164ec05a3280c"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4HashE" title="merkle::TreeT::Hash"><span class="n"><span class="pre">Hash</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">root</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT4rootEv" title="Link to this definition">#</a><br /></dt>
 <dd><p>Extracts the root hash of the tree. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -496,7 +476,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT9past_rootE6size_t">
-<span id="_CPPv3N6merkle5TreeT9past_rootE6size_t"></span><span id="_CPPv2N6merkle5TreeT9past_rootE6size_t"></span><span id="merkle::TreeT::past_root__s"></span><span class="target" id="classmerkle_1_1TreeT_1ae791f197eebe26aa98cff1a9b5c9e041"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4HashE" title="merkle::TreeT::Hash"><span class="n"><span class="pre">Hash</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">past_root</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT9past_rootE6size_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5TreeT9past_rootE6size_t"></span><span id="_CPPv2N6merkle5TreeT9past_rootE6size_t"></span><span id="merkle::TreeT::past_root__s"></span><span class="target" id="classmerkle_1_1TreeT_1a369afa8ae57f475d006320cf214d3b03"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4HashE" title="merkle::TreeT::Hash"><span class="n"><span class="pre">Hash</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">past_root</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT9past_rootE6size_t" title="Link to this definition">#</a><br /></dt>
 <dd><p>Extracts a past root hash. </p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -514,7 +494,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT7walk_toE6size_tbRRKNSt8functionIFbRP4NodebEEE">
-<span id="_CPPv3N6merkle5TreeT7walk_toE6size_tbRRKNSt8functionIFbRP4NodebEEE"></span><span id="_CPPv2N6merkle5TreeT7walk_toE6size_tbRRKNSt8functionIFbRP4NodebEEE"></span><span class="target" id="classmerkle_1_1TreeT_1ad8acbd8e5b93f0375a53079f6b229899"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">Node</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">walk_to</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span>, <span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">update</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">function</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">bool</span></span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">Node</span></span><span class="p"><span class="pre">*</span></span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">f</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT7walk_toE6size_tbRRKNSt8functionIFbRP4NodebEEE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5TreeT7walk_toE6size_tbRRKNSt8functionIFbRP4NodebEEE"></span><span id="_CPPv2N6merkle5TreeT7walk_toE6size_tbRRKNSt8functionIFbRP4NodebEEE"></span><span class="target" id="classmerkle_1_1TreeT_1a46f749bb0ff9c6f70f67c465928a3a78"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">Node</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">walk_to</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span>, <span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">update</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">function</span></span><span class="p"><span class="pre">&lt;</span></span><span class="kt"><span class="pre">bool</span></span><span class="p"><span class="pre">(</span></span><span class="n"><span class="pre">Node</span></span><span class="p"><span class="pre">*</span></span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="kt"><span class="pre">bool</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">f</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT7walk_toE6size_tbRRKNSt8functionIFbRP4NodebEEE" title="Link to this definition">#</a><br /></dt>
 <dd><p>Walks along the path from the root of a tree to a leaf. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -532,7 +512,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT4pathE6size_t">
-<span id="_CPPv3N6merkle5TreeT4pathE6size_t"></span><span id="_CPPv2N6merkle5TreeT4pathE6size_t"></span><span id="merkle::TreeT::path__s"></span><span class="target" id="classmerkle_1_1TreeT_1a7f43cce3a8a2539d643a9cb55b520750"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4PathE" title="merkle::TreeT::Path"><span class="n"><span class="pre">Path</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">path</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT4pathE6size_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5TreeT4pathE6size_t"></span><span id="_CPPv2N6merkle5TreeT4pathE6size_t"></span><span id="merkle::TreeT::path__s"></span><span class="target" id="classmerkle_1_1TreeT_1a4417cb3db89528d20052aaa1744f73c2"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4PathE" title="merkle::TreeT::Path"><span class="n"><span class="pre">Path</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">path</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT4pathE6size_t" title="Link to this definition">#</a><br /></dt>
 <dd><p>Extracts the path from a leaf index to the root of the tree. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -546,7 +526,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT9past_pathE6size_t6size_t">
-<span id="_CPPv3N6merkle5TreeT9past_pathE6size_t6size_t"></span><span id="_CPPv2N6merkle5TreeT9past_pathE6size_t6size_t"></span><span id="merkle::TreeT::past_path__s.s"></span><span class="target" id="classmerkle_1_1TreeT_1ad787af5bd6772abd1a0b3ffbcc717b93"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4PathE" title="merkle::TreeT::Path"><span class="n"><span class="pre">Path</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">past_path</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">as_of</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT9past_pathE6size_t6size_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5TreeT9past_pathE6size_t6size_t"></span><span id="_CPPv2N6merkle5TreeT9past_pathE6size_t6size_t"></span><span id="merkle::TreeT::past_path__s.s"></span><span class="target" id="classmerkle_1_1TreeT_1aaafb3b62b7c62abd2e24ee48d4f49499"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4PathE" title="merkle::TreeT::Path"><span class="n"><span class="pre">Path</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">past_path</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">as_of</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT9past_pathE6size_t6size_t" title="Link to this definition">#</a><br /></dt>
 <dd><p>Extracts a past path from a leaf index to the root of the tree. </p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -624,7 +604,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4NK6merkle5TreeTixE6size_t">
-<span id="_CPPv3NK6merkle5TreeTixE6size_t"></span><span id="_CPPv2NK6merkle5TreeTixE6size_t"></span><span id="merkle::TreeT::subscript-operator__sC"></span><span class="target" id="classmerkle_1_1TreeT_1ab5561d1ad86150a7e2c6fcb4d3f3bd84"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4HashE" title="merkle::TreeT::Hash"><span class="n"><span class="pre">Hash</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="k"><span class="pre">operator</span></span><span class="o"><span class="pre">[]</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6merkle5TreeTixE6size_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3NK6merkle5TreeTixE6size_t"></span><span id="_CPPv2NK6merkle5TreeTixE6size_t"></span><span id="merkle::TreeT::subscript-operator__sC"></span><span class="target" id="classmerkle_1_1TreeT_1a54ada035b48637c71e1a06f75f301a0d"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4HashE" title="merkle::TreeT::Hash"><span class="n"><span class="pre">Hash</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="k"><span class="pre">operator</span></span><span class="o"><span class="pre">[]</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6merkle5TreeTixE6size_t" title="Link to this definition">#</a><br /></dt>
 <dd><p>Operator to extract a leaf hash from the tree. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -638,7 +618,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4NK6merkle5TreeT4leafE6size_t">
-<span id="_CPPv3NK6merkle5TreeT4leafE6size_t"></span><span id="_CPPv2NK6merkle5TreeT4leafE6size_t"></span><span id="merkle::TreeT::leaf__sC"></span><span class="target" id="classmerkle_1_1TreeT_1a0d8d7f19468d9bad47341eac1b9c0526"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4HashE" title="merkle::TreeT::Hash"><span class="n"><span class="pre">Hash</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">leaf</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6merkle5TreeT4leafE6size_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3NK6merkle5TreeT4leafE6size_t"></span><span id="_CPPv2NK6merkle5TreeT4leafE6size_t"></span><span id="merkle::TreeT::leaf__sC"></span><span class="target" id="classmerkle_1_1TreeT_1aeceb03d4eb88a82cecf50af7d93d6cbc"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5TreeT4HashE" title="merkle::TreeT::Hash"><span class="n"><span class="pre">Hash</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">leaf</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">index</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6merkle5TreeT4leafE6size_t" title="Link to this definition">#</a><br /></dt>
 <dd><p>Extract a leaf hash from the tree. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -803,13 +783,13 @@ example:</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT10Statistics8num_rootE">
 <span id="_CPPv3N6merkle5TreeT10Statistics8num_rootE"></span><span id="_CPPv2N6merkle5TreeT10Statistics8num_rootE"></span><span id="merkle::TreeT::Statistics::num_root__s"></span><span class="target" id="structmerkle_1_1TreeT_1_1Statistics_1a3947810d4ab838e56ec29fde93f16678"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">num_root</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">0</span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT10Statistics8num_rootE" title="Link to this definition">#</a><br /></dt>
-<dd><p>The number of <a class="reference internal" href="#classmerkle_1_1TreeT_1afa27a8546cd218842c354e616c5a4aeb"><span class="std std-ref">root()</span></a> opertations performed on the tree. </p>
+<dd><p>The number of <a class="reference internal" href="#classmerkle_1_1TreeT_1a1d6e992060e28ccde02164ec05a3280c"><span class="std std-ref">root()</span></a> opertations performed on the tree. </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT10Statistics13num_past_rootE">
 <span id="_CPPv3N6merkle5TreeT10Statistics13num_past_rootE"></span><span id="_CPPv2N6merkle5TreeT10Statistics13num_past_rootE"></span><span id="merkle::TreeT::Statistics::num_past_root__s"></span><span class="target" id="structmerkle_1_1TreeT_1_1Statistics_1ab772a630ba5d6bf77a0c18b4247a15a2"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">num_past_root</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">0</span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT10Statistics13num_past_rootE" title="Link to this definition">#</a><br /></dt>
-<dd><p>The number of <a class="reference internal" href="#classmerkle_1_1TreeT_1ae791f197eebe26aa98cff1a9b5c9e041"><span class="std std-ref">past_root()</span></a> opertations performed on the tree. </p>
+<dd><p>The number of <a class="reference internal" href="#classmerkle_1_1TreeT_1a369afa8ae57f475d006320cf214d3b03"><span class="std std-ref">past_root()</span></a> opertations performed on the tree. </p>
 </dd></dl>
 
 <dl class="cpp var">
@@ -827,13 +807,13 @@ example:</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT10Statistics9num_pathsE">
 <span id="_CPPv3N6merkle5TreeT10Statistics9num_pathsE"></span><span id="_CPPv2N6merkle5TreeT10Statistics9num_pathsE"></span><span id="merkle::TreeT::Statistics::num_paths__s"></span><span class="target" id="structmerkle_1_1TreeT_1_1Statistics_1a2bb3a1f52d0dc4b3e375ba483f589ee6"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">num_paths</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">0</span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT10Statistics9num_pathsE" title="Link to this definition">#</a><br /></dt>
-<dd><p>The number of paths extracted from the tree via <a class="reference internal" href="#classmerkle_1_1TreeT_1a7f43cce3a8a2539d643a9cb55b520750"><span class="std std-ref">path()</span></a></p>
+<dd><p>The number of paths extracted from the tree via <a class="reference internal" href="#classmerkle_1_1TreeT_1a4417cb3db89528d20052aaa1744f73c2"><span class="std std-ref">path()</span></a></p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT10Statistics14num_past_pathsE">
 <span id="_CPPv3N6merkle5TreeT10Statistics14num_past_pathsE"></span><span id="_CPPv2N6merkle5TreeT10Statistics14num_past_pathsE"></span><span id="merkle::TreeT::Statistics::num_past_paths__s"></span><span class="target" id="structmerkle_1_1TreeT_1_1Statistics_1a6abb0bb0946c72320640eb20a790326f"></span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">num_past_paths</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="m"><span class="pre">0</span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT10Statistics14num_past_pathsE" title="Link to this definition">#</a><br /></dt>
-<dd><p>The number of past paths extracted from the tree via <a class="reference internal" href="#classmerkle_1_1TreeT_1ad787af5bd6772abd1a0b3ffbcc717b93"><span class="std std-ref">past_path()</span></a></p>
+<dd><p>The number of past paths extracted from the tree via <a class="reference internal" href="#classmerkle_1_1TreeT_1aaafb3b62b7c62abd2e24ee48d4f49499"><span class="std std-ref">past_path()</span></a></p>
 </dd></dl>
 
 </div>
@@ -959,7 +939,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5HashTaSERK5HashTI4SIZEE">
-<span id="_CPPv3N6merkle5HashTaSERK5HashTI4SIZEE"></span><span id="_CPPv2N6merkle5HashTaSERK5HashTI4SIZEE"></span><span id="merkle::HashT::assign-operator__HashT:SIZE:CR"></span><span class="target" id="structmerkle_1_1HashT_1a03b24160792408736ee6cbbe786adec8"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT::SIZE"><span class="n"><span class="pre">SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="k"><span class="pre">operator</span></span><span class="o"><span class="pre">=</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT::SIZE"><span class="n"><span class="pre">SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">other</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5HashTaSERK5HashTI4SIZEE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5HashTaSERK5HashTI4SIZEE"></span><span id="_CPPv2N6merkle5HashTaSERK5HashTI4SIZEE"></span><span id="merkle::HashT::assign-operator__HashT:SIZE:CR"></span><span class="target" id="structmerkle_1_1HashT_1a653ac357450db84ca420e2ab6b5417cc"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT::SIZE"><span class="n"><span class="pre">SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="k"><span class="pre">operator</span></span><span class="o"><span class="pre">=</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT::SIZE"><span class="n"><span class="pre">SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">other</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5HashTaSERK5HashTI4SIZEE" title="Link to this definition">#</a><br /></dt>
 <dd><p>Hash assignment operator. </p>
 </dd></dl>
 
@@ -1137,7 +1117,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4NK6merkle5PathT4rootEv">
-<span id="_CPPv3NK6merkle5PathT4rootEv"></span><span id="_CPPv2NK6merkle5PathT4rootEv"></span><span id="merkle::PathT::rootC"></span><span class="target" id="classmerkle_1_1PathT_1a255fab3a2749ebd6bf50fbe4d238e774"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5PathTE" title="merkle::PathT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">root</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6merkle5PathT4rootEv" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3NK6merkle5PathT4rootEv"></span><span id="_CPPv2NK6merkle5PathT4rootEv"></span><span id="merkle::PathT::rootC"></span><span class="target" id="classmerkle_1_1PathT_1aaf5ed21cde7e95bd2c066996941f455f"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">shared_ptr</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5PathTE" title="merkle::PathT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">root</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6merkle5PathT4rootEv" title="Link to this definition">#</a><br /></dt>
 <dd><p>Computes the root at the end of the path. </p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -1224,7 +1204,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4NK6merkle5PathTixE6size_t">
-<span id="_CPPv3NK6merkle5PathTixE6size_t"></span><span id="_CPPv2NK6merkle5PathTixE6size_t"></span><span id="merkle::PathT::subscript-operator__sC"></span><span class="target" id="classmerkle_1_1PathT_1a603b0ed2ac8215a8fad2bcea5a94a12d"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5PathTE" title="merkle::PathT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="k"><span class="pre">operator</span></span><span class="o"><span class="pre">[]</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">i</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6merkle5PathTixE6size_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3NK6merkle5PathTixE6size_t"></span><span id="_CPPv2NK6merkle5PathTixE6size_t"></span><span id="merkle::PathT::subscript-operator__sC"></span><span class="target" id="classmerkle_1_1PathT_1aecdb57d8dbc5c45e6055760bc51349c9"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5PathTE" title="merkle::PathT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="k"><span class="pre">operator</span></span><span class="o"><span class="pre">[]</span></span></span><span class="sig-paren">(</span><span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">i</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6merkle5PathTixE6size_t" title="Link to this definition">#</a><br /></dt>
 <dd><p>Operator to extract the hash of a given path element. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1261,7 +1241,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4NK6merkle5PathT4leafEv">
-<span id="_CPPv3NK6merkle5PathT4leafEv"></span><span id="_CPPv2NK6merkle5PathT4leafEv"></span><span id="merkle::PathT::leafC"></span><span class="target" id="classmerkle_1_1PathT_1a5d6daabc43dd62201bcf044bb7019962"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5PathTE" title="merkle::PathT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">leaf</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6merkle5PathT4leafEv" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3NK6merkle5PathT4leafEv"></span><span id="_CPPv2NK6merkle5PathT4leafEv"></span><span id="merkle::PathT::leafC"></span><span class="target" id="classmerkle_1_1PathT_1a32ac378aa2d6f2155a52f1ed97059f84"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5PathTE" title="merkle::PathT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="sig-name descname"><span class="n"><span class="pre">leaf</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">const</span></span><a class="headerlink" href="#_CPPv4NK6merkle5PathT4leafEv" title="Link to this definition">#</a><br /></dt>
 <dd><p>The leaf hash of the path. </p>
 </dd></dl>
 
@@ -1402,7 +1382,7 @@ This function is the compression function of SHA256, which, for the special case
               
               
               
-                <footer class="prev-next-footer">
+                <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
 </div>
@@ -1412,67 +1392,70 @@ This function is the compression function of SHA256, which, for the special case
             
             
               
-                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
 
   <div class="sidebar-secondary-item">
-
-  <div class="page-toc tocsection onthispage">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
     <i class="fa-solid fa-list"></i> On this page
   </div>
-  <nav class="bd-toc-nav page-toc">
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">merklecpp Documentation</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trees">Trees</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE"><code class="docutils literal notranslate"><span class="pre">TreeT</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4HashE"><code class="docutils literal notranslate"><span class="pre">TreeT::Hash</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4PathE"><code class="docutils literal notranslate"><span class="pre">TreeT::Path</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4TreeE"><code class="docutils literal notranslate"><span class="pre">TreeT::Tree</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTEv"><code class="docutils literal notranslate"><span class="pre">TreeT::TreeT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTERK5TreeT"><code class="docutils literal notranslate"><span class="pre">TreeT::TreeT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTERR5TreeT"><code class="docutils literal notranslate"><span class="pre">TreeT::TreeT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">TreeT::TreeT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT::TreeT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTERK4Hash"><code class="docutils literal notranslate"><span class="pre">TreeT::TreeT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeTD0Ev"><code class="docutils literal notranslate"><span class="pre">TreeT::~TreeT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT9invariantEv"><code class="docutils literal notranslate"><span class="pre">TreeT::invariant()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT6insertEPK7uint8_t"><code class="docutils literal notranslate"><span class="pre">TreeT::insert()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT6insertERK4Hash"><code class="docutils literal notranslate"><span class="pre">TreeT::insert()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT6insertERKNSt6vectorI4HashEE"><code class="docutils literal notranslate"><span class="pre">TreeT::insert()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT6insertERKNSt4listI4HashEE"><code class="docutils literal notranslate"><span class="pre">TreeT::insert()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT8flush_toE6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT::flush_to()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10retract_toE6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT::retract_to()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeTaSERK4Tree"><code class="docutils literal notranslate"><span class="pre">TreeT::operator=()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4rootEv"><code class="docutils literal notranslate"><span class="pre">TreeT::root()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT9past_rootE6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT::past_root()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT7walk_toE6size_tbRRKNSt8functionIFbRP4NodebEEE"><code class="docutils literal notranslate"><span class="pre">TreeT::walk_to()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4pathE6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT::path()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT9past_pathE6size_t6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT::past_path()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT9serialiseERNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">TreeT::serialise()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT9serialiseE6size_t6size_tRNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">TreeT::serialise()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT11deserialiseERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">TreeT::deserialise()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT11deserialiseERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT::deserialise()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeTcvNSt6vectorI7uint8_tEEEv"><code class="docutils literal notranslate"><span class="pre">TreeT::operator</span> <span class="pre">std::vector&lt;uint8_t&gt;()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeTixE6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT::operator[]()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT4leafE6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT::leaf()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT10num_leavesEv"><code class="docutils literal notranslate"><span class="pre">TreeT::num_leaves()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT9min_indexEv"><code class="docutils literal notranslate"><span class="pre">TreeT::min_index()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT9max_indexEv"><code class="docutils literal notranslate"><span class="pre">TreeT::max_index()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT5emptyEv"><code class="docutils literal notranslate"><span class="pre">TreeT::empty()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4sizeEv"><code class="docutils literal notranslate"><span class="pre">TreeT::size()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT15serialised_sizeEv"><code class="docutils literal notranslate"><span class="pre">TreeT::serialised_size()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT15serialised_sizeE6size_t6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT::serialised_size()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT9to_stringE6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT::to_string()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10statisticsE"><code class="docutils literal notranslate"><span class="pre">TreeT::statistics</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10StatisticsE"><code class="docutils literal notranslate"><span class="pre">TreeT::Statistics</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT10Statistics9to_stringEv"><code class="docutils literal notranslate"><span class="pre">TreeT::Statistics::to_string()</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics8num_hashE"><code class="docutils literal notranslate"><span class="pre">TreeT::Statistics::num_hash</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics10num_insertE"><code class="docutils literal notranslate"><span class="pre">TreeT::Statistics::num_insert</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics8num_rootE"><code class="docutils literal notranslate"><span class="pre">TreeT::Statistics::num_root</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics13num_past_rootE"><code class="docutils literal notranslate"><span class="pre">TreeT::Statistics::num_past_root</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics9num_flushE"><code class="docutils literal notranslate"><span class="pre">TreeT::Statistics::num_flush</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics11num_retractE"><code class="docutils literal notranslate"><span class="pre">TreeT::Statistics::num_retract</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics9num_pathsE"><code class="docutils literal notranslate"><span class="pre">TreeT::Statistics::num_paths</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics14num_past_pathsE"><code class="docutils literal notranslate"><span class="pre">TreeT::Statistics::num_past_paths</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE"><code class="docutils literal notranslate"><span class="pre">merkle::TreeT</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4HashE"><code class="docutils literal notranslate"><span class="pre">Hash</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4PathE"><code class="docutils literal notranslate"><span class="pre">Path</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4TreeE"><code class="docutils literal notranslate"><span class="pre">Tree</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTEv"><code class="docutils literal notranslate"><span class="pre">TreeT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTERK5TreeT"><code class="docutils literal notranslate"><span class="pre">TreeT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTERR5TreeT"><code class="docutils literal notranslate"><span class="pre">TreeT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">TreeT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">TreeT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT5TreeTERK4Hash"><code class="docutils literal notranslate"><span class="pre">TreeT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeTD0Ev"><code class="docutils literal notranslate"><span class="pre">~TreeT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT9invariantEv"><code class="docutils literal notranslate"><span class="pre">invariant()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT6insertEPK7uint8_t"><code class="docutils literal notranslate"><span class="pre">insert()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT6insertERK4Hash"><code class="docutils literal notranslate"><span class="pre">insert()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT6insertERKNSt6vectorI4HashEE"><code class="docutils literal notranslate"><span class="pre">insert()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT6insertERKNSt4listI4HashEE"><code class="docutils literal notranslate"><span class="pre">insert()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT8flush_toE6size_t"><code class="docutils literal notranslate"><span class="pre">flush_to()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10retract_toE6size_t"><code class="docutils literal notranslate"><span class="pre">retract_to()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeTaSERK4Tree"><code class="docutils literal notranslate"><span class="pre">operator=()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4rootEv"><code class="docutils literal notranslate"><span class="pre">root()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT9past_rootE6size_t"><code class="docutils literal notranslate"><span class="pre">past_root()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT7walk_toE6size_tbRRKNSt8functionIFbRP4NodebEEE"><code class="docutils literal notranslate"><span class="pre">walk_to()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4pathE6size_t"><code class="docutils literal notranslate"><span class="pre">path()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT9past_pathE6size_t6size_t"><code class="docutils literal notranslate"><span class="pre">past_path()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT9serialiseERNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">serialise()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT9serialiseE6size_t6size_tRNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">serialise()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT11deserialiseERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">deserialise()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT11deserialiseERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">deserialise()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeTcvNSt6vectorI7uint8_tEEEv"><code class="docutils literal notranslate"><span class="pre">operator</span> <span class="pre">std::vector&lt;</span> <span class="pre">uint8_t</span> <span class="pre">&gt;()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeTixE6size_t"><code class="docutils literal notranslate"><span class="pre">operator[]()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT4leafE6size_t"><code class="docutils literal notranslate"><span class="pre">leaf()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT10num_leavesEv"><code class="docutils literal notranslate"><span class="pre">num_leaves()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT9min_indexEv"><code class="docutils literal notranslate"><span class="pre">min_index()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT9max_indexEv"><code class="docutils literal notranslate"><span class="pre">max_index()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT5emptyEv"><code class="docutils literal notranslate"><span class="pre">empty()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4sizeEv"><code class="docutils literal notranslate"><span class="pre">size()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT15serialised_sizeEv"><code class="docutils literal notranslate"><span class="pre">serialised_size()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT15serialised_sizeE6size_t6size_t"><code class="docutils literal notranslate"><span class="pre">serialised_size()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT9to_stringE6size_t"><code class="docutils literal notranslate"><span class="pre">to_string()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10statisticsE"><code class="docutils literal notranslate"><span class="pre">statistics</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10StatisticsE"><code class="docutils literal notranslate"><span class="pre">merkle::TreeT::Statistics</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5TreeT10Statistics9to_stringEv"><code class="docutils literal notranslate"><span class="pre">to_string()</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics8num_hashE"><code class="docutils literal notranslate"><span class="pre">num_hash</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics10num_insertE"><code class="docutils literal notranslate"><span class="pre">num_insert</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics8num_rootE"><code class="docutils literal notranslate"><span class="pre">num_root</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics13num_past_rootE"><code class="docutils literal notranslate"><span class="pre">num_past_root</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics9num_flushE"><code class="docutils literal notranslate"><span class="pre">num_flush</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics11num_retractE"><code class="docutils literal notranslate"><span class="pre">num_retract</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics9num_pathsE"><code class="docutils literal notranslate"><span class="pre">num_paths</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT10Statistics14num_past_pathsE"><code class="docutils literal notranslate"><span class="pre">num_past_paths</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -1481,62 +1464,62 @@ This function is the compression function of SHA256, which, for the special case
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hashes">Hashes</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I_6size_tEN6merkle5HashTE"><code class="docutils literal notranslate"><span class="pre">HashT</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTEv"><code class="docutils literal notranslate"><span class="pre">HashT::HashT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTEPK7uint8_t"><code class="docutils literal notranslate"><span class="pre">HashT::HashT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTERKNSt6stringE"><code class="docutils literal notranslate"><span class="pre">HashT::HashT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">HashT::HashT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">HashT::HashT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTERKNSt5arrayI7uint8_t4SIZEEE"><code class="docutils literal notranslate"><span class="pre">HashT::HashT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashT4sizeEv"><code class="docutils literal notranslate"><span class="pre">HashT::size()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT4zeroEv"><code class="docutils literal notranslate"><span class="pre">HashT::zero()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashT15serialised_sizeEv"><code class="docutils literal notranslate"><span class="pre">HashT::serialised_size()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashT9to_stringE6size_tb"><code class="docutils literal notranslate"><span class="pre">HashT::to_string()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashTaSERK5HashTI4SIZEE"><code class="docutils literal notranslate"><span class="pre">HashT::operator=()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashTeqERK5HashTI4SIZEE"><code class="docutils literal notranslate"><span class="pre">HashT::operator==()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashTneERK5HashTI4SIZEE"><code class="docutils literal notranslate"><span class="pre">HashT::operator!=()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashT9serialiseERNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">HashT::serialise()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT11deserialiseERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">HashT::deserialise()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT11deserialiseERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">HashT::deserialise()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashTcvNSt6vectorI7uint8_tEEEv"><code class="docutils literal notranslate"><span class="pre">HashT::operator</span> <span class="pre">std::vector&lt;uint8_t&gt;()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5bytesE"><code class="docutils literal notranslate"><span class="pre">HashT::bytes</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I_6size_tEN6merkle5HashTE"><code class="docutils literal notranslate"><span class="pre">merkle::HashT</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTEv"><code class="docutils literal notranslate"><span class="pre">HashT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTEPK7uint8_t"><code class="docutils literal notranslate"><span class="pre">HashT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTERKNSt6stringE"><code class="docutils literal notranslate"><span class="pre">HashT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">HashT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">HashT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5HashTERKNSt5arrayI7uint8_t4SIZEEE"><code class="docutils literal notranslate"><span class="pre">HashT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashT4sizeEv"><code class="docutils literal notranslate"><span class="pre">size()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT4zeroEv"><code class="docutils literal notranslate"><span class="pre">zero()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashT15serialised_sizeEv"><code class="docutils literal notranslate"><span class="pre">serialised_size()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashT9to_stringE6size_tb"><code class="docutils literal notranslate"><span class="pre">to_string()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashTaSERK5HashTI4SIZEE"><code class="docutils literal notranslate"><span class="pre">operator=()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashTeqERK5HashTI4SIZEE"><code class="docutils literal notranslate"><span class="pre">operator==()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashTneERK5HashTI4SIZEE"><code class="docutils literal notranslate"><span class="pre">operator!=()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashT9serialiseERNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">serialise()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT11deserialiseERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">deserialise()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT11deserialiseERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">deserialise()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5HashTcvNSt6vectorI7uint8_tEEEv"><code class="docutils literal notranslate"><span class="pre">operator</span> <span class="pre">std::vector&lt;</span> <span class="pre">uint8_t</span> <span class="pre">&gt;()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5HashT5bytesE"><code class="docutils literal notranslate"><span class="pre">bytes</span></code></a></li>
 </ul>
 </li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#paths">Paths</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I_6size_t_vEN6merkle5PathTE"><code class="docutils literal notranslate"><span class="pre">PathT</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT9DirectionE"><code class="docutils literal notranslate"><span class="pre">PathT::Direction</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT9Direction9PATH_LEFTE"><code class="docutils literal notranslate"><span class="pre">PathT::Direction::PATH_LEFT</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT9Direction10PATH_RIGHTE"><code class="docutils literal notranslate"><span class="pre">PathT::Direction::PATH_RIGHT</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I_6size_t_vEN6merkle5PathTE"><code class="docutils literal notranslate"><span class="pre">merkle::PathT</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT9DirectionE"><code class="docutils literal notranslate"><span class="pre">Direction</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT9Direction9PATH_LEFTE"><code class="docutils literal notranslate"><span class="pre">PATH_LEFT</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT9Direction10PATH_RIGHTE"><code class="docutils literal notranslate"><span class="pre">PATH_RIGHT</span></code></a></li>
 </ul>
 </li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT14const_iteratorE"><code class="docutils literal notranslate"><span class="pre">PathT::const_iterator</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERK5HashTI9HASH_SIZEE6size_tRRNSt4listI7ElementEE6size_t"><code class="docutils literal notranslate"><span class="pre">PathT::PathT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERK5PathT"><code class="docutils literal notranslate"><span class="pre">PathT::PathT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERR5PathT"><code class="docutils literal notranslate"><span class="pre">PathT::PathT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">PathT::PathT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">PathT::PathT()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT4rootEv"><code class="docutils literal notranslate"><span class="pre">PathT::root()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT6verifyERK5HashTI9HASH_SIZEE"><code class="docutils literal notranslate"><span class="pre">PathT::verify()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT9serialiseERNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">PathT::serialise()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT11deserialiseERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">PathT::deserialise()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT11deserialiseERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">PathT::deserialise()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathTcvNSt6vectorI7uint8_tEEEv"><code class="docutils literal notranslate"><span class="pre">PathT::operator</span> <span class="pre">std::vector&lt;uint8_t&gt;()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT4sizeEv"><code class="docutils literal notranslate"><span class="pre">PathT::size()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT15serialised_sizeEv"><code class="docutils literal notranslate"><span class="pre">PathT::serialised_size()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT10leaf_indexEv"><code class="docutils literal notranslate"><span class="pre">PathT::leaf_index()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT9max_indexEv"><code class="docutils literal notranslate"><span class="pre">PathT::max_index()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathTixE6size_t"><code class="docutils literal notranslate"><span class="pre">PathT::operator[]()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT5beginEv"><code class="docutils literal notranslate"><span class="pre">PathT::begin()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT3endEv"><code class="docutils literal notranslate"><span class="pre">PathT::end()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT9to_stringE6size_tb"><code class="docutils literal notranslate"><span class="pre">PathT::to_string()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT4leafEv"><code class="docutils literal notranslate"><span class="pre">PathT::leaf()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathTeqERK5PathTI9HASH_SIZE13HASH_FUNCTIONE"><code class="docutils literal notranslate"><span class="pre">PathT::operator==()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathTneERK5PathTI9HASH_SIZE13HASH_FUNCTIONE"><code class="docutils literal notranslate"><span class="pre">PathT::operator!=()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT7ElementE"><code class="docutils literal notranslate"><span class="pre">PathT::Element</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT7Element4hashE"><code class="docutils literal notranslate"><span class="pre">PathT::Element::hash</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT7Element9directionE"><code class="docutils literal notranslate"><span class="pre">PathT::Element::direction</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT14const_iteratorE"><code class="docutils literal notranslate"><span class="pre">const_iterator</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERK5HashTI9HASH_SIZEE6size_tRRNSt4listI7ElementEE6size_t"><code class="docutils literal notranslate"><span class="pre">PathT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERK5PathT"><code class="docutils literal notranslate"><span class="pre">PathT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERR5PathT"><code class="docutils literal notranslate"><span class="pre">PathT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">PathT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">PathT()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT4rootEv"><code class="docutils literal notranslate"><span class="pre">root()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT6verifyERK5HashTI9HASH_SIZEE"><code class="docutils literal notranslate"><span class="pre">verify()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT9serialiseERNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">serialise()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT11deserialiseERKNSt6vectorI7uint8_tEER6size_t"><code class="docutils literal notranslate"><span class="pre">deserialise()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT11deserialiseERKNSt6vectorI7uint8_tEE"><code class="docutils literal notranslate"><span class="pre">deserialise()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathTcvNSt6vectorI7uint8_tEEEv"><code class="docutils literal notranslate"><span class="pre">operator</span> <span class="pre">std::vector&lt;</span> <span class="pre">uint8_t</span> <span class="pre">&gt;()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT4sizeEv"><code class="docutils literal notranslate"><span class="pre">size()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT15serialised_sizeEv"><code class="docutils literal notranslate"><span class="pre">serialised_size()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT10leaf_indexEv"><code class="docutils literal notranslate"><span class="pre">leaf_index()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT9max_indexEv"><code class="docutils literal notranslate"><span class="pre">max_index()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathTixE6size_t"><code class="docutils literal notranslate"><span class="pre">operator[]()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT5beginEv"><code class="docutils literal notranslate"><span class="pre">begin()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT3endEv"><code class="docutils literal notranslate"><span class="pre">end()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT9to_stringE6size_tb"><code class="docutils literal notranslate"><span class="pre">to_string()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT4leafEv"><code class="docutils literal notranslate"><span class="pre">leaf()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathTeqERK5PathTI9HASH_SIZE13HASH_FUNCTIONE"><code class="docutils literal notranslate"><span class="pre">operator==()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathTneERK5PathTI9HASH_SIZE13HASH_FUNCTIONE"><code class="docutils literal notranslate"><span class="pre">operator!=()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT7ElementE"><code class="docutils literal notranslate"><span class="pre">merkle::PathT::Element</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT7Element4hashE"><code class="docutils literal notranslate"><span class="pre">hash</span></code></a></li>
+<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT7Element9directionE"><code class="docutils literal notranslate"><span class="pre">direction</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -1558,13 +1541,13 @@ This function is the compression function of SHA256, which, for the special case
   </nav></div>
 
   <div class="sidebar-secondary-item">
-
-  <div class="tocsection sourcelink">
-    <a href="_sources/index.rst.txt">
-      <i class="fa-solid fa-file-lines"></i> Show Source
-    </a>
-  </div>
-</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/index.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div></div>
 
 </div></div>
               
@@ -1579,8 +1562,8 @@ This function is the compression function of SHA256, which, for the special case
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script src="_static/scripts/bootstrap.js?digest=5b4479735964841361fd"></script>
-<script src="_static/scripts/pydata-sphinx-theme.js?digest=5b4479735964841361fd"></script>
+  <script defer src="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
 
   <footer class="bd-footer">
 <div class="bd-footer__inner bd-page-width">
@@ -1600,7 +1583,7 @@ This function is the compression function of SHA256, which, for the special case
         <div class="footer-item">
 
   <p class="sphinx-version">
-    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 9.1.0.
     <br/>
   </p>
 </div>
@@ -1613,7 +1596,8 @@ This function is the compression function of SHA256, which, for the special case
       
         <div class="footer-item">
 <p class="theme-version">
-  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.14.4.
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
 </p></div>
       
     </div>
