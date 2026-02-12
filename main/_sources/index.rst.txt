@@ -9,7 +9,7 @@ and function.
 A default implementation without further dependencies is provided as
 :cpp:type:`merkle::Tree`, which uses the SHA256 compression function
 (:cpp:func:`merkle::sha256_compress`). merklecpp also provides bindings
-for the respective OpenSSL and mbedTLS functions (see `Hash functions`_),
+for the respective OpenSSL functions (see `Hash functions`_),
 which can be specified as a template parameter as illustrated by the following
 example:
 
@@ -48,20 +48,14 @@ Hash functions
 
 By default, merklecpp uses the SHA256 compression function
 (:cpp:func:`merkle::sha256_compress`) for node hashes. For convenience,
-it also provides bindings to the SHA256 implementations in OpenSSL and mbedTLS.
-To enable these bindings, merklecpp requires the compiler macros
-:code:`HAVE_OPENSSL` and :code:`HAVE_MBEDTLS` to be defined.
+it also provides bindings to the SHA256 implementation in OpenSSL.
+To enable these bindings, merklecpp requires the compiler macro
+:code:`HAVE_OPENSSL` to be defined.
 
 .. doxygenfunction:: merkle::sha256_compress
    :project: merklecpp
 
 .. doxygenfunction:: merkle::sha256_openssl
-   :project: merklecpp
-
-.. doxygenfunction:: merkle::sha256_compress_mbedtls
-   :project: merklecpp
-
-.. doxygenfunction:: merkle::sha256_mbedtls
    :project: merklecpp
 
 .. toctree::

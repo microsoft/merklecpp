@@ -256,7 +256,7 @@ and function.</p>
 <p>A default implementation without further dependencies is provided as
 <a class="reference internal" href="#_CPPv4N6merkle4TreeE" title="merkle::Tree"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">merkle::Tree</span></code></a>, which uses the SHA256 compression function
 (<a class="reference internal" href="#_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE" title="merkle::sha256_compress"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">merkle::sha256_compress()</span></code></a>). merklecpp also provides bindings
-for the respective OpenSSL and mbedTLS functions (see <a class="reference internal" href="#hash-functions">Hash functions</a>),
+for the respective OpenSSL functions (see <a class="reference internal" href="#hash-functions">Hash functions</a>),
 which can be specified as a template parameter as illustrated by the following
 example:</p>
 <div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="w">    </span><span class="n">merkle</span><span class="o">::</span><span class="n">TreeT</span><span class="o">&lt;</span><span class="mi">32</span><span class="p">,</span><span class="w"> </span><span class="n">merkle</span><span class="o">::</span><span class="n">sha256_openssl</span><span class="o">&gt;</span><span class="w"> </span><span class="n">tree</span><span class="p">;</span>
@@ -1290,9 +1290,9 @@ example:</p>
 <h2>Hash functions<a class="headerlink" href="#hash-functions" title="Link to this heading">#</a></h2>
 <p>By default, merklecpp uses the SHA256 compression function
 (<a class="reference internal" href="#_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE" title="merkle::sha256_compress"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">merkle::sha256_compress()</span></code></a>) for node hashes. For convenience,
-it also provides bindings to the SHA256 implementations in OpenSSL and mbedTLS.
-To enable these bindings, merklecpp requires the compiler macros
-<code class="code docutils literal notranslate"><span class="pre">HAVE_OPENSSL</span></code> and <code class="code docutils literal notranslate"><span class="pre">HAVE_MBEDTLS</span></code> to be defined.</p>
+it also provides bindings to the SHA256 implementation in OpenSSL.
+To enable these bindings, merklecpp requires the compiler macro
+<code class="code docutils literal notranslate"><span class="pre">HAVE_OPENSSL</span></code> to be defined.</p>
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE">
 <span id="_CPPv3N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE"></span><span id="_CPPv2N6merkle15sha256_compressERK5HashTIX32EERK5HashTIX32EER5HashTIX32EE"></span><span id="merkle::sha256_compress__HashT:32:CR.HashT:32:CR.HashT:32:R"></span><span class="target" id="merklecpp_8h_1abbb4871ee621c6450873355236d34293"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-prename descclassname"><span class="n"><span class="pre">merkle</span></span><span class="p"><span class="pre">::</span></span></span><span class="sig-name descname"><span class="n"><span class="pre">sha256_compress</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><span class="m"><span class="pre">32</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">l</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><span class="m"><span class="pre">32</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">r</span></span>, <a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><span class="m"><span class="pre">32</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">out</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE" title="Link to this definition">#</a><br /></dt>
@@ -1318,40 +1318,6 @@ This function is the compression function of SHA256, which, for the special case
 <p class="admonition-title">Note</p>
 <p>Some versions of OpenSSL may not provide SHA256_Transform. </p>
 </div>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>l</strong> – Left node hash </p></li>
-<li><p><strong>r</strong> – Right node hash </p></li>
-<li><p><strong>out</strong> – Output node hash </p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4N6merkle23sha256_compress_mbedtlsERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE">
-<span id="_CPPv3N6merkle23sha256_compress_mbedtlsERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE"></span><span id="_CPPv2N6merkle23sha256_compress_mbedtlsERK5HashTIX32EERK5HashTIX32EER5HashTIX32EE"></span><span id="merkle::sha256_compress_mbedtls__HashT:32:CR.HashT:32:CR.HashT:32:R"></span><span class="target" id="merklecpp_8h_1ac6bf3a36c8d484e0bb01f047ddccaa59"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-prename descclassname"><span class="n"><span class="pre">merkle</span></span><span class="p"><span class="pre">::</span></span></span><span class="sig-name descname"><span class="n"><span class="pre">sha256_compress_mbedtls</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><span class="m"><span class="pre">32</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">l</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><span class="m"><span class="pre">32</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">r</span></span>, <a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><span class="m"><span class="pre">32</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">out</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle23sha256_compress_mbedtlsERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE" title="Link to this definition">#</a><br /></dt>
-<dd><p>mbedTLS SHA256 compression function </p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Technically, mbedtls_internal_sha256_process is marked for internal use only. </p>
-</div>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>l</strong> – Left node hash </p></li>
-<li><p><strong>r</strong> – Right node hash </p></li>
-<li><p><strong>out</strong> – Output node hash </p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="cpp function">
-<dt class="sig sig-object cpp" id="_CPPv4N6merkle14sha256_mbedtlsERKN6merkle5HashTIXL32EEEERKN6merkle5HashTIXL32EEEERN6merkle5HashTIXL32EEEE">
-<span id="_CPPv3N6merkle14sha256_mbedtlsERKN6merkle5HashTIXL32EEEERKN6merkle5HashTIXL32EEEERN6merkle5HashTIXL32EEEE"></span><span id="_CPPv2N6merkle14sha256_mbedtlsERKN6merkle5HashTIX32EEERKN6merkle5HashTIX32EEERN6merkle5HashTIX32EEE"></span><span id="merkle::sha256_mbedtls__merkle::HashT:32:CR.merkle::HashT:32:CR.merkle::HashT:32:R"></span><span class="target" id="merklecpp_8h_1a10f25a2192ac852708ae3aaf1df1c3eb"></span><span class="k"><span class="pre">static</span></span><span class="w"> </span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-prename descclassname"><span class="n"><span class="pre">merkle</span></span><span class="p"><span class="pre">::</span></span></span><span class="sig-name descname"><span class="n"><span class="pre">sha256_mbedtls</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">merkle</span></span><span class="p"><span class="pre">::</span></span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><span class="m"><span class="pre">32</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">l</span></span>, <span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">merkle</span></span><span class="p"><span class="pre">::</span></span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><span class="m"><span class="pre">32</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">r</span></span>, <span class="n"><span class="pre">merkle</span></span><span class="p"><span class="pre">::</span></span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><span class="m"><span class="pre">32</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">out</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle14sha256_mbedtlsERKN6merkle5HashTIXL32EEEERKN6merkle5HashTIXL32EEEERN6merkle5HashTIXL32EEEE" title="Link to this definition">#</a><br /></dt>
-<dd><p>mbedTLS SHA256 </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -1529,8 +1495,6 @@ This function is the compression function of SHA256, which, for the special case
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hash-functions">Hash functions</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE"><code class="docutils literal notranslate"><span class="pre">sha256_compress()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle14sha256_opensslERKN6merkle5HashTIXL32EEEERKN6merkle5HashTIXL32EEEERN6merkle5HashTIXL32EEEE"><code class="docutils literal notranslate"><span class="pre">sha256_openssl()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle23sha256_compress_mbedtlsERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE"><code class="docutils literal notranslate"><span class="pre">sha256_compress_mbedtls()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle14sha256_mbedtlsERKN6merkle5HashTIXL32EEEERKN6merkle5HashTIXL32EEEERN6merkle5HashTIXL32EEEE"><code class="docutils literal notranslate"><span class="pre">sha256_mbedtls()</span></code></a></li>
 </ul>
 </li>
 </ul>
