@@ -46,6 +46,52 @@ int main()
     std::cout << "NEW: " << mt.statistics.to_string() << " in " << seconds
               << " sec" << std::endl;
 
+#ifdef HAVE_OPENSSL
+    {
+      auto hashes384 = make_hashesT<48>(num_leaves);
+
+      merkle::Tree384 mt384;
+      size_t j384 = 0;
+      auto start384 = std::chrono::high_resolution_clock::now();
+      for (auto& h : hashes384)
+      {
+        mt384.insert(h);
+        if ((j384++ % root_interval) == 0)
+          mt384.root();
+      }
+      mt384.root();
+      auto stop384 = std::chrono::high_resolution_clock::now();
+      double seconds384 =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(stop384 - start384)
+          .count() /
+        1e9;
+      std::cout << "SHA384: " << mt384.statistics.to_string() << " in "
+                << seconds384 << " sec" << std::endl;
+    }
+
+    {
+      auto hashes512 = make_hashesT<64>(num_leaves);
+
+      merkle::Tree512 mt512;
+      size_t j512 = 0;
+      auto start512 = std::chrono::high_resolution_clock::now();
+      for (auto& h : hashes512)
+      {
+        mt512.insert(h);
+        if ((j512++ % root_interval) == 0)
+          mt512.root();
+      }
+      mt512.root();
+      auto stop512 = std::chrono::high_resolution_clock::now();
+      double seconds512 =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(stop512 - start512)
+          .count() /
+        1e9;
+      std::cout << "SHA512: " << mt512.statistics.to_string() << " in "
+                << seconds512 << " sec" << std::endl;
+    }
+#endif
+
 #ifdef HAVE_EVERCRYPT
     std::vector<uint8_t*> ec_hashes;
     for (auto& h : hashes)
