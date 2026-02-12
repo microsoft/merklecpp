@@ -30,6 +30,7 @@ jobs:
     steps:
     - name: Install packages
       run: sudo apt install libmbedtls-dev doctest-dev clang
+      if: matrix.os == 'ubuntu-latest'
 
     - uses: actions/checkout@v4
 
