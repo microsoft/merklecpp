@@ -34,7 +34,6 @@ if(TARGET evercrypt.host)
 endif()
 
 if(OPENSSL
-   OR MBEDTLS
    OR EVERCRYPT
 )
   add_merklecpp_test(compare_hash_functions compare_hash_functions.cpp)
