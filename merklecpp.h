@@ -1911,6 +1911,68 @@ namespace merkle
       throw std::runtime_error("EVP_Digest failed: " + std::to_string(rc));
     }
   }
+
+  /// @brief OpenSSL SHA384
+  /// @param l Left node hash
+  /// @param r Right node hash
+  /// @param out Output node hash
+  static inline void sha384_openssl(
+    const merkle::HashT<48>& l,
+    const merkle::HashT<48>& r,
+    merkle::HashT<48>& out)
+  {
+    uint8_t block[48 * 2];
+    memcpy(&block[0], l.bytes, 48);
+    memcpy(&block[48], r.bytes, 48);
+
+    const EVP_MD* md = EVP_sha384();
+    int rc =
+      EVP_Digest(&block[0], sizeof(block), out.bytes, nullptr, md, nullptr);
+    if (rc != 1)
+    {
+      throw std::runtime_error("EVP_Digest failed: " + std::to_string(rc));
+    }
+  }
+
+  /// @brief OpenSSL SHA512
+  /// @param l Left node hash
+  /// @param r Right node hash
+  /// @param out Output node hash
+  static inline void sha512_openssl(
+    const merkle::HashT<64>& l,
+    const merkle::HashT<64>& r,
+    merkle::HashT<64>& out)
+  {
+    uint8_t block[64 * 2];
+    memcpy(&block[0], l.bytes, 64);
+    memcpy(&block[64], r.bytes, 64);
+
+    const EVP_MD* md = EVP_sha512();
+    int rc =
+      EVP_Digest(&block[0], sizeof(block), out.bytes, nullptr, md, nullptr);
+    if (rc != 1)
+    {
+      throw std::runtime_error("EVP_Digest failed: " + std::to_string(rc));
+    }
+  }
+
+  /// @brief Type of hashes in the SHA384 tree type
+  typedef HashT<48> Hash384;
+
+  /// @brief Type of paths in the SHA384 tree type
+  typedef PathT<48, sha384_openssl> Path384;
+
+  /// @brief SHA384 tree with OpenSSL hash function
+  typedef TreeT<48, sha384_openssl> Tree384;
+
+  /// @brief Type of hashes in the SHA512 tree type
+  typedef HashT<64> Hash512;
+
+  /// @brief Type of paths in the SHA512 tree type
+  typedef PathT<64, sha512_openssl> Path512;
+
+  /// @brief SHA512 tree with OpenSSL hash function
+  typedef TreeT<64, sha512_openssl> Tree512;
 #endif
 
   /// @brief Type of hashes in the default tree type
