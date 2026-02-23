@@ -214,6 +214,32 @@ void bench(
             << std::endl;
 }
 
+template <typename T, size_t HASH_SIZE>
+void benchT(
+  const std::vector<merkle::HashT<HASH_SIZE>>& hashes,
+  const std::string& name,
+  size_t root_interval)
+{
+  size_t j = 0;
+  auto start = std::chrono::high_resolution_clock::now();
+  T mt;
+  for (auto& h : hashes)
+  {
+    mt.insert(h);
+    if ((j++ % root_interval) == 0)
+      mt.root();
+  }
+  mt.root();
+  auto stop = std::chrono::high_resolution_clock::now();
+  double seconds =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() /
+    1e9;
+  std::cout << std::left << std::setw(10) << name << ": "
+            << mt.statistics.num_insert << " insertions, "
+            << mt.statistics.num_root << " roots in " << seconds << " sec"
+            << std::endl;
+}
+
 #ifdef HAVE_EVERCRYPT
 template <void (*HASH_FUNCTION)(uint8_t* l, uint8_t* r, uint8_t* out)>
 void bench_evercrypt(
@@ -285,6 +311,20 @@ int main()
 
 #ifdef HAVE_OPENSSL
     bench<OpenSSLFullTree>(hashes, "OpenSSL", root_interval);
+#endif
+
+#ifdef HAVE_OPENSSL
+    {
+      std::cout << "--- merklecpp trees with full SHA384: " << std::endl;
+      auto hashes384 = make_hashesT<48>(num_leaves);
+      benchT<merkle::Tree384, 48>(hashes384, "OpenSSL", root_interval);
+    }
+
+    {
+      std::cout << "--- merklecpp trees with full SHA512: " << std::endl;
+      auto hashes512 = make_hashesT<64>(num_leaves);
+      benchT<merkle::Tree512, 64>(hashes512, "OpenSSL", root_interval);
+    }
 #endif
 
 #ifdef HAVE_EVERCRYPT
