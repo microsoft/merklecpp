@@ -14,7 +14,7 @@
 
 #include <merklecpp.h>
 
-#define PRINT_HASH_SIZE 3
+constexpr size_t PRINT_HASH_SIZE = 3;
 
 int main()
 {
@@ -25,9 +25,11 @@ int main()
       auto hashes = make_hashes(num_leaves);
       merkle::Tree tree1;
       for (auto h : hashes)
+      {
         tree1.insert(h);
+      }
       auto root1 = tree1.root();
-      std::cout << "ROOT1=" << root1.to_string() << std::endl;
+      std::cout << "ROOT1=" << root1.to_string() << '\n';
 
       {
         // Write a new file if it doesn't exist.
@@ -37,8 +39,11 @@ int main()
           std::vector<uint8_t> bytes;
           tree1.serialise(bytes);
           std::ofstream f("tree.bytes", std::ofstream::binary);
-          for (char b : bytes)
-            f.write(&b, 1);
+          for (auto b : bytes)
+          {
+            const auto ch = static_cast<char>(b);
+            f.write(&ch, 1);
+          }
           f.close();
           fi.close();
         }
@@ -50,7 +55,7 @@ int main()
       {
         merkle::Tree tree2;
         std::vector<uint8_t> bytes;
-        char t;
+        char t = 0;
         while (!f.eof())
         {
           f.read(&t, 1);
@@ -59,20 +64,22 @@ int main()
         tree2.deserialise(bytes);
         f.close();
         auto root2 = tree2.root();
-        std::cout << "ROOT2=" << root2.to_string() << std::endl;
+        std::cout << "ROOT2=" << root2.to_string() << '\n';
         if (root1 != root2)
+        {
           throw std::runtime_error("root hash mismatch");
+        }
       }
     }
   }
   catch (std::exception& ex)
   {
-    std::cout << "Error: " << ex.what() << std::endl;
+    std::cout << "Error: " << ex.what() << '\n';
     return 1;
   }
   catch (...)
   {
-    std::cout << "Error" << std::endl;
+    std::cout << "Error" << '\n';
     return 1;
   }
 
