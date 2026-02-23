@@ -41,7 +41,7 @@ int main()
     for (size_t k = 0; k < num_trees && !timed_out(timeout, test_start_time);
          k++)
     {
-      std::map<size_t, merkle::Hash> past_roots;
+      const std::map<size_t, merkle::Hash> past_roots;
       const auto num_leaves = static_cast<size_t>(1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
       const auto num_subtrees = static_cast<size_t>(
         1 + (std::rand() / (double)RAND_MAX) * max_num_subtrees);
