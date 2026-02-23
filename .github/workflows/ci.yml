@@ -47,7 +47,7 @@ jobs:
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
-          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON -DCLANG_TIDY=ON
+          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON -DCLANG_TIDY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         else
           cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON
         fi
@@ -56,6 +56,11 @@ jobs:
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       shell: bash
       run: cmake --build . --config ${{ matrix.build_type }}
+
+    - name: Clang-Tidy Header
+      if: matrix.os == 'ubuntu-latest'
+      shell: bash
+      run: clang-tidy merklecpp.h -p build/${{ matrix.build_type }} --warnings-as-errors='*'
 
     - name: Test
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
