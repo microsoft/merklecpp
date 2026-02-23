@@ -51,6 +51,12 @@ int main()
           mt.retract_to(mt.max_index() - 1);
           total_retractions++;
           mt.insert(hashes[i]);
+          const auto max_before = mt.max_index();
+          mt.retract_to(mt.max_index());
+          if (mt.max_index() != max_before)
+          {
+            throw std::runtime_error("retract_to(max_index()) changed max_index");
+          }
         }
 
         if ((std::rand() / (double)RAND_MAX) > 0.95)
