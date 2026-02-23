@@ -2,15 +2,27 @@
 Checks: >
   -*,
   bugprone-*,
+  -bugprone-easily-swappable-parameters,
   cert-*,
+  -cert-msc30-c,
+  -cert-msc32-c,
+  -cert-msc50-cpp,
+  -cert-msc51-cpp,
   clang-analyzer-*,
   concurrency-*,
+  -concurrency-mt-unsafe,
   cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-magic-numbers,
   hicpp-*,
   misc-*,
+  -misc-include-cleaner,
   modernize-*,
+  -modernize-use-trailing-return-type,
   performance-*,
   portability-*,
-  readability-*
+  readability-*,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-magic-numbers
 WarningsAsErrors: '*'
 FormatStyle: file

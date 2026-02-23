@@ -14,6 +14,7 @@
 #include <memory>
 #include <sstream>
 #include <stack>
+#include <stdexcept>
 #include <vector>
 
 #ifdef HAVE_OPENSSL
@@ -1660,6 +1661,8 @@ namespace merkle
         else
         {
           assert(n->left && n->right);
+          if (!n->left || !n->right)
+            throw std::runtime_error("unexpected null child node");
           HASH_FUNCTION(n->left->hash, n->right->hash, n->hash);
           statistics.num_hash++;
           MERKLECPP_TRACE(
