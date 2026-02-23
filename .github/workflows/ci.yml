@@ -32,7 +32,7 @@ jobs:
 
     steps:
     - name: Install packages
-      run: sudo apt install doctest-dev clang
+      run: sudo apt install doctest-dev clang clang-tidy
       if: matrix.os == 'ubuntu-latest'
 
     - uses: actions/checkout@v4
@@ -47,7 +47,7 @@ jobs:
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
-          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON
+          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON -DCLANG_TIDY=ON
         else
           cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON
         fi
