@@ -8,8 +8,8 @@
 #include <iostream>
 #include <merklecpp.h>
 
-#define HSZ 32
-#define PRNTSZ 3
+constexpr size_t HSZ = 32;
+constexpr size_t PRNTSZ = 3;
 
 #ifdef HAVE_EVERCRYPT
 #  include <Hacl_Hash.h>
@@ -47,7 +47,7 @@ typedef merkle::TreeT<32, sha256_evercrypt> EverCryptFullTree;
 #endif
 
 #ifdef HAVE_OPENSSL
-typedef merkle::TreeT<32, merkle::sha256_openssl> OpenSSLFullTree;
+using OpenSSLFullTree = merkle::TreeT<32, merkle::sha256_openssl>;
 #endif
 
 template <
@@ -68,11 +68,11 @@ void compare_roots(
   if (mt1_root != mt2_root)
   {
     std::cout << mt1.num_leaves() << ": " << mt1_root.to_string()
-              << " != " << mt2_root.to_string() << std::endl;
-    std::cout << "mt1: " << std::endl;
-    std::cout << mt1.to_string(PRNTSZ) << std::endl;
-    std::cout << name << ": " << std::endl;
-    std::cout << mt2.to_string(PRNTSZ) << std::endl;
+              << " != " << mt2_root.to_string() << '\n';
+    std::cout << "mt1: " << '\n';
+    std::cout << mt1.to_string(PRNTSZ) << '\n';
+    std::cout << name << ": " << '\n';
+    std::cout << mt2.to_string(PRNTSZ) << '\n';
     throw std::runtime_error("root hash mismatch");
   }
 }
@@ -87,7 +87,8 @@ void compare_compression_hashes()
   const size_t root_interval = 128;
 #endif
 
-  size_t total_inserts = 0, total_roots = 0;
+  size_t total_inserts = 0;
+  size_t total_roots = 0;
 
   for (size_t k = 0; k < num_trees; k++)
   {
@@ -129,7 +130,7 @@ void compare_compression_hashes()
 
   std::cout << num_trees << " trees, " << total_inserts << " inserts, "
             << total_roots << " roots with SHA256 compression function: OK"
-            << std::endl;
+            << '\n';
 }
 
 #if defined(HAVE_OPENSSL) && defined(HAVE_EVERCRYPT)
@@ -143,7 +144,8 @@ void compare_full_hashes()
   const size_t root_interval = 128;
 #  endif
 
-  size_t total_inserts = 0, total_roots = 0;
+  size_t total_inserts = 0;
+  size_t total_roots = 0;
 
   for (size_t k = 0; k < num_trees; k++)
   {
@@ -184,7 +186,7 @@ void compare_full_hashes()
   }
 
   std::cout << num_trees << " trees, " << total_inserts << " inserts, "
-            << total_roots << " roots with full SHA256: OK" << std::endl;
+            << total_roots << " roots with full SHA256: OK" << '\n';
 }
 #endif
 
@@ -197,21 +199,23 @@ void bench(
   size_t j = 0;
   auto start = std::chrono::high_resolution_clock::now();
   T mt;
-  for (auto& h : hashes)
+  for (const auto& h : hashes)
   {
     mt.insert(h);
     if ((j++ % root_interval) == 0)
+    {
       mt.root();
+    }
   }
   mt.root();
   auto stop = std::chrono::high_resolution_clock::now();
-  double seconds =
-    std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() /
+  const double seconds =
+    static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) /
     1e9;
   std::cout << std::left << std::setw(10) << name << ": "
             << mt.statistics.num_insert << " insertions, "
             << mt.statistics.num_root << " roots in " << seconds << " sec"
-            << std::endl;
+            << '\n';
 }
 
 template <typename T, size_t HASH_SIZE>
@@ -223,21 +227,23 @@ void benchT(
   size_t j = 0;
   auto start = std::chrono::high_resolution_clock::now();
   T mt;
-  for (auto& h : hashes)
+  for (const auto& h : hashes)
   {
     mt.insert(h);
     if ((j++ % root_interval) == 0)
+    {
       mt.root();
+    }
   }
   mt.root();
   auto stop = std::chrono::high_resolution_clock::now();
-  double seconds =
-    std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() /
+  const double seconds =
+    static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) /
     1e9;
   std::cout << std::left << std::setw(10) << name << ": "
             << mt.statistics.num_insert << " insertions, "
             << mt.statistics.num_root << " roots in " << seconds << " sec"
-            << std::endl;
+            << '\n';
 }
 
 #ifdef HAVE_EVERCRYPT
@@ -269,7 +275,7 @@ void bench_evercrypt(
     1e9;
   std::cout << std::left << std::setw(10) << name << ": " << num_inserts
             << " insertions, " << num_roots << " roots in " << seconds << " sec"
-            << std::endl;
+            << '\n';
   mt_free_hash(ec_root);
   mt_free(ec_mt);
 }
@@ -280,7 +286,7 @@ int main()
   try
   {
     // std::srand(0);
-    std::srand(std::time(0));
+    std::srand(std::time(nullptr));
 
     compare_compression_hashes();
 
@@ -292,14 +298,14 @@ int main()
     const size_t num_leaves = 128 * 1024;
     const size_t root_interval = 128;
 #else
-    const size_t num_leaves = 16 * 1024 * 1024;
+    const size_t num_leaves = static_cast<size_t>(16) * 1024 * 1024;
     const size_t root_interval = 1024;
 #endif
 
     auto hashes = make_hashes(num_leaves);
 
     std::cout << "--- merklecpp trees with SHA256 compression function: "
-              << std::endl;
+              << '\n';
 
     bench<merkle::Tree>(hashes, "merklecpp", root_interval);
 
@@ -307,7 +313,7 @@ int main()
     bench<EverCryptTree>(hashes, "EverCrypt", root_interval);
 #endif
 
-    std::cout << "--- merklecpp trees with full SHA256: " << std::endl;
+    std::cout << "--- merklecpp trees with full SHA256: " << '\n';
 
 #ifdef HAVE_OPENSSL
     bench<OpenSSLFullTree>(hashes, "OpenSSL", root_interval);
@@ -315,13 +321,13 @@ int main()
 
 #ifdef HAVE_OPENSSL
     {
-      std::cout << "--- merklecpp trees with full SHA384: " << std::endl;
+      std::cout << "--- merklecpp trees with full SHA384: " << '\n';
       auto hashes384 = make_hashesT<48>(num_leaves);
       benchT<merkle::Tree384, 48>(hashes384, "OpenSSL", root_interval);
     }
 
     {
-      std::cout << "--- merklecpp trees with full SHA512: " << std::endl;
+      std::cout << "--- merklecpp trees with full SHA512: " << '\n';
       auto hashes512 = make_hashesT<64>(num_leaves);
       benchT<merkle::Tree512, 64>(hashes512, "OpenSSL", root_interval);
     }
@@ -340,10 +346,10 @@ int main()
     }
 
     std::cout << "--- EverCrypt trees with SHA256 compression function: "
-              << std::endl;
+              << '\n';
     bench_evercrypt<mt_sha256_compress>(ec_hashes, "EverCrypt", root_interval);
 
-    std::cout << "--- EverCrypt trees with full SHA256: " << std::endl;
+    std::cout << "--- EverCrypt trees with full SHA256: " << '\n';
     bench_evercrypt<mt_sha256_evercrypt>(ec_hashes, "EverCrypt", root_interval);
 
     for (auto h : ec_hashes)
@@ -352,12 +358,12 @@ int main()
   }
   catch (std::exception& ex)
   {
-    std::cout << "Error: " << ex.what() << std::endl;
+    std::cout << "Error: " << ex.what() << '\n';
     return 1;
   }
   catch (...)
   {
-    std::cout << "Error" << std::endl;
+    std::cout << "Error" << '\n';
     return 1;
   }
 

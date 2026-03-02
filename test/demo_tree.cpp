@@ -13,7 +13,7 @@
 
 #include <merklecpp.h>
 
-#define PRINT_HASH_SIZE 3
+constexpr size_t PRINT_HASH_SIZE = 3;
 
 int main()
 {
@@ -26,21 +26,25 @@ int main()
       // Insert a number of hashes into the tree
       merkle::Tree mt;
       for (auto h : hashes)
+      {
         mt.insert(h);
-      merkle::Tree::Hash root = mt.root();
-      std::cout << mt.to_string(PRINT_HASH_SIZE) << std::endl;
+      }
+      const merkle::Tree::Hash root = mt.root();
+      std::cout << mt.to_string(PRINT_HASH_SIZE) << '\n';
 
       // Extract some paths
-      std::cout << "Paths: " << std::endl;
+      std::cout << "Paths: " << '\n';
       for (size_t i = mt.min_index(); i <= mt.max_index(); i++)
       {
         mt.flush_to(i);
         auto path = mt.path(i);
         std::cout << "P" << std::setw(2) << std::setfill('0') << i << ": "
-                  << path->to_string(PRINT_HASH_SIZE) << " " << std::endl;
+                  << path->to_string(PRINT_HASH_SIZE) << " " << '\n';
         if (!path->verify(root))
-          throw std::runtime_error("root hash mismatch");
-        std::vector<uint8_t> chk = *path;
+          {
+            throw std::runtime_error("root hash mismatch");
+          }
+        const std::vector<uint8_t> chk = *path;
       }
 
       // Serialise, then deserialise the tree
@@ -48,9 +52,11 @@ int main()
       mt.serialise(buffer);
       merkle::Tree dmt(buffer);
       if (mt.root() != dmt.root())
-        throw std::runtime_error("root hash mismatch");
+        {
+          throw std::runtime_error("root hash mismatch");
+        }
 
-      std::cout << std::endl;
+      std::cout << '\n';
     }
 
 #ifdef HAVE_OPENSSL
@@ -59,7 +65,9 @@ int main()
       /// SNIPPET_START: OpenSSL-SHA256
       merkle::TreeT<32, merkle::sha256_openssl> tree;
       for (auto h : hashes)
+      {
         tree.insert(h);
+      }
       auto root = tree.root();
       auto path = tree.path(hashes.size() - 1);
       assert(path->verify(root));
@@ -70,12 +78,12 @@ int main()
   }
   catch (std::exception& ex)
   {
-    std::cout << "Error: " << ex.what() << std::endl;
+    std::cout << "Error: " << ex.what() << '\n';
     return 1;
   }
   catch (...)
   {
-    std::cout << "Error" << std::endl;
+    std::cout << "Error" << '\n';
     return 1;
   }
 

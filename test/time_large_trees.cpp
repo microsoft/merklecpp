@@ -12,7 +12,7 @@
 
 #include <merklecpp.h>
 
-#define HSZ 32
+constexpr size_t HSZ = 32;
 
 int main()
 {
@@ -22,7 +22,7 @@ int main()
     const size_t num_leaves = 128 * 1024;
     const size_t root_interval = 128;
 #else
-    const size_t num_leaves = 16 * 1024 * 1024;
+    const size_t num_leaves = static_cast<size_t>(16) * 1024 * 1024;
     const size_t root_interval = 1024;
 #endif
 
@@ -35,16 +35,18 @@ int main()
     {
       mt.insert(h);
       if ((j++ % root_interval) == 0)
+      {
         mt.root();
+      }
     }
     mt.root();
     auto stop = std::chrono::high_resolution_clock::now();
-    double seconds =
-      std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
-        .count() /
+    const double seconds =
+      static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
+        .count()) /
       1e9;
     std::cout << "NEW: " << mt.statistics.to_string() << " in " << seconds
-              << " sec" << std::endl;
+              << " sec" << '\n';
 
 #ifdef HAVE_OPENSSL
     {
@@ -57,16 +59,18 @@ int main()
       {
         mt384.insert(h);
         if ((j384++ % root_interval) == 0)
+        {
           mt384.root();
+        }
       }
       mt384.root();
       auto stop384 = std::chrono::high_resolution_clock::now();
-      double seconds384 =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(stop384 - start384)
-          .count() /
+      const double seconds384 =
+        static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop384 - start384)
+          .count()) /
         1e9;
       std::cout << "SHA384: " << mt384.statistics.to_string() << " in "
-                << seconds384 << " sec" << std::endl;
+                << seconds384 << " sec" << '\n';
     }
 
     {
@@ -79,16 +83,18 @@ int main()
       {
         mt512.insert(h);
         if ((j512++ % root_interval) == 0)
+        {
           mt512.root();
+        }
       }
       mt512.root();
       auto stop512 = std::chrono::high_resolution_clock::now();
-      double seconds512 =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(stop512 - start512)
-          .count() /
+      const double seconds512 =
+        static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop512 - start512)
+          .count()) /
         1e9;
       std::cout << "SHA512: " << mt512.statistics.to_string() << " in "
-                << seconds512 << " sec" << std::endl;
+                << seconds512 << " sec" << '\n';
     }
 #endif
 
@@ -121,7 +127,7 @@ int main()
     std::cout << "EC :"
               << " num_insert=" << ec_hashes.size()
               << " num_root=" << num_ec_roots << " in " << seconds << " sec"
-              << std::endl;
+              << '\n';
 
     for (auto h : ec_hashes)
       mt_free_hash(h);
@@ -131,12 +137,12 @@ int main()
   }
   catch (std::exception& ex)
   {
-    std::cout << "Error: " << ex.what() << std::endl;
+    std::cout << "Error: " << ex.what() << '\n';
     return 1;
   }
   catch (...)
   {
-    std::cout << "Error" << std::endl;
+    std::cout << "Error" << '\n';
     return 1;
   }
 
