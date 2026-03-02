@@ -2052,7 +2052,7 @@ namespace merkle
     memcpy(&block[32], r.bytes, 32);
 
     const EVP_MD* md = EVP_sha256();
-    int rc =
+    const int rc =
       EVP_Digest(&block[0], sizeof(block), out.bytes, nullptr, md, nullptr);
     if (rc != 1)
     {
@@ -2074,7 +2074,7 @@ namespace merkle
     memcpy(&block[48], r.bytes, 48);
 
     const EVP_MD* md = EVP_sha384();
-    int rc =
+    const int rc =
       EVP_Digest(&block[0], sizeof(block), out.bytes, nullptr, md, nullptr);
     if (rc != 1)
     {
@@ -2096,7 +2096,7 @@ namespace merkle
     memcpy(&block[64], r.bytes, 64);
 
     const EVP_MD* md = EVP_sha512();
-    int rc =
+    const int rc =
       EVP_Digest(&block[0], sizeof(block), out.bytes, nullptr, md, nullptr);
     if (rc != 1)
     {
@@ -2105,22 +2105,22 @@ namespace merkle
   }
 
   /// @brief Type of hashes in the SHA384 tree type
-  typedef HashT<48> Hash384;
+  using Hash384 = HashT<48>;
 
   /// @brief Type of paths in the SHA384 tree type
-  typedef PathT<48, sha384_openssl> Path384;
+  using Path384 = PathT<48, sha384_openssl>;
 
   /// @brief SHA384 tree with OpenSSL hash function
-  typedef TreeT<48, sha384_openssl> Tree384;
+  using Tree384 = TreeT<48, sha384_openssl>;
 
   /// @brief Type of hashes in the SHA512 tree type
-  typedef HashT<64> Hash512;
+  using Hash512 = HashT<64>;
 
   /// @brief Type of paths in the SHA512 tree type
-  typedef PathT<64, sha512_openssl> Path512;
+  using Path512 = PathT<64, sha512_openssl>;
 
   /// @brief SHA512 tree with OpenSSL hash function
-  typedef TreeT<64, sha512_openssl> Tree512;
+  using Tree512 = TreeT<64, sha512_openssl>;
 #endif
 
   /// @brief Type of hashes in the default tree type

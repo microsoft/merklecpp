@@ -59,13 +59,15 @@ int main()
       {
         mt384.insert(h);
         if ((j384++ % root_interval) == 0)
+        {
           mt384.root();
+        }
       }
       mt384.root();
       auto stop384 = std::chrono::high_resolution_clock::now();
-      double seconds384 =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(stop384 - start384)
-          .count() /
+      const double seconds384 =
+        static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop384 - start384)
+          .count()) /
         1e9;
       std::cout << "SHA384: " << mt384.statistics.to_string() << " in "
                 << seconds384 << " sec" << '\n';
@@ -81,13 +83,15 @@ int main()
       {
         mt512.insert(h);
         if ((j512++ % root_interval) == 0)
+        {
           mt512.root();
+        }
       }
       mt512.root();
       auto stop512 = std::chrono::high_resolution_clock::now();
-      double seconds512 =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(stop512 - start512)
-          .count() /
+      const double seconds512 =
+        static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop512 - start512)
+          .count()) /
         1e9;
       std::cout << "SHA512: " << mt512.statistics.to_string() << " in "
                 << seconds512 << " sec" << '\n';
