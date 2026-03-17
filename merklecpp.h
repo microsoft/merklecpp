@@ -1463,7 +1463,7 @@ namespace merkle
         level_no++;
       }
 
-      assert(level.size() == 0 || level.size() == 1);
+      assert(level.empty() || level.size() == 1);
 
       if (level.size() == 1)
       {

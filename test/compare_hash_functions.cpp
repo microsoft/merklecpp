@@ -295,7 +295,7 @@ int main()
 #endif
 
 #ifndef NDEBUG
-    const size_t num_leaves = 128 * 1024;
+    const size_t num_leaves = static_cast<size_t>(128) * 1024;
     const size_t root_interval = 128;
 #else
     const size_t num_leaves = static_cast<size_t>(16) * 1024 * 1024;

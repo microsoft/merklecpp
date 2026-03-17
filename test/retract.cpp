@@ -23,7 +23,7 @@ int main()
   {
 #ifndef NDEBUG
     const size_t num_trees = 128;
-    const size_t max_num_leaves = 64 * 1024;
+    const size_t max_num_leaves = static_cast<size_t>(64) * 1024;
     const size_t max_retractions = 16;
 #else
     const size_t num_trees = 256;

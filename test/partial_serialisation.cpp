@@ -25,7 +25,7 @@ int main()
   {
 #ifndef NDEBUG
     const size_t num_trees = 64;
-    const size_t max_num_leaves = 8 * 1024;
+    const size_t max_num_leaves = static_cast<size_t>(8) * 1024;
     const size_t max_num_subtrees = 32;
 #else
     const size_t num_trees = 256;
