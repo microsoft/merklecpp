@@ -41,7 +41,7 @@ int main()
     }
     mt.root();
     auto stop = std::chrono::high_resolution_clock::now();
-    const double seconds =
+    double seconds =
       static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
         .count()) /
       1e9;
