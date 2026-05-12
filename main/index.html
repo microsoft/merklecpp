@@ -27,40 +27,47 @@
   </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
-<link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+  <link href="_static/styles/theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=55c26ed414f5f8a31ebb" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=a746c00c" />
   
   <!-- So that users can add custom icons -->
-  <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <script defer src="_static/scripts/fontawesome.js?digest=55c26ed414f5f8a31ebb"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
-<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb" />
 
     <script src="_static/documentation_options.js?v=8d563738"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'index';</script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
+  
+    
+    <script src="_static/searchtools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <script src="searchindex.js"></script>
+  
   </head>
-  
-  
-  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
-
+  <body data-default-mode="">
   
   
   <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
   
   <div id="pst-scroll-pixel-helper"></div>
   
   <button type="button" class="btn rounded-pill" id="pst-back-to-top">
     <i class="fa-solid fa-arrow-up"></i>Back to top</button>
-
+  
+  
+  
   
   <dialog id="pst-search-dialog">
     
@@ -86,7 +93,7 @@
 </div>
 
   
-    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
 <div class="bd-header__inner bd-page-width">
   <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
     <span class="fa-solid fa-bars"></span>
@@ -261,7 +268,9 @@ which can be specified as a template parameter as illustrated by the following
 example:</p>
 <div class="highlight-cpp notranslate"><div class="highlight"><pre><span></span><span class="w">    </span><span class="n">merkle</span><span class="o">::</span><span class="n">TreeT</span><span class="o">&lt;</span><span class="mi">32</span><span class="p">,</span><span class="w"> </span><span class="n">merkle</span><span class="o">::</span><span class="n">sha256_openssl</span><span class="o">&gt;</span><span class="w"> </span><span class="n">tree</span><span class="p">;</span>
 <span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="k">auto</span><span class="w"> </span><span class="n">h</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="n">hashes</span><span class="p">)</span>
+<span class="w">    </span><span class="p">{</span>
 <span class="w">      </span><span class="n">tree</span><span class="p">.</span><span class="n">insert</span><span class="p">(</span><span class="n">h</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
 <span class="w">    </span><span class="k">auto</span><span class="w"> </span><span class="n">root</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tree</span><span class="p">.</span><span class="n">root</span><span class="p">();</span>
 <span class="w">    </span><span class="k">auto</span><span class="w"> </span><span class="n">path</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tree</span><span class="p">.</span><span class="n">path</span><span class="p">(</span><span class="n">hashes</span><span class="p">.</span><span class="n">size</span><span class="p">()</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
 <span class="w">    </span><span class="n">assert</span><span class="p">(</span><span class="n">path</span><span class="o">-&gt;</span><span class="n">verify</span><span class="p">(</span><span class="n">root</span><span class="p">));</span>
@@ -285,19 +294,19 @@ example:</p>
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-types">Public Types</p>
 <dl class="cpp type">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT4HashE">
-<span id="_CPPv3N6merkle5TreeT4HashE"></span><span id="_CPPv2N6merkle5TreeT4HashE"></span><span id="merkle::TreeT::Hash"></span><span class="target" id="classmerkle_1_1TreeT_1a4a859472a1bca30ce1fb0c6676df5d8b"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Hash</span></span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT4HashE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5TreeT4HashE"></span><span id="_CPPv2N6merkle5TreeT4HashE"></span><span class="target" id="classmerkle_1_1TreeT_1a4cb64b6ff8f71fcb8ac1bb152aaf5911"></span><span class="k"><span class="pre">using</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Hash</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT4HashE" title="Link to this definition">#</a><br /></dt>
 <dd><p>The type of hashes in the tree. </p>
 </dd></dl>
 
 <dl class="cpp type">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT4PathE">
-<span id="_CPPv3N6merkle5TreeT4PathE"></span><span id="_CPPv2N6merkle5TreeT4PathE"></span><span id="merkle::TreeT::Path"></span><span class="target" id="classmerkle_1_1TreeT_1a1dbc2804c63c63510573b306b475dadc"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5PathTE" title="merkle::PathT"><span class="n"><span class="pre">PathT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT::HASH_FUNCTION"><span class="n"><span class="pre">HASH_FUNCTION</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Path</span></span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT4PathE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5TreeT4PathE"></span><span id="_CPPv2N6merkle5TreeT4PathE"></span><span class="target" id="classmerkle_1_1TreeT_1ab368e13251a7d7773c76b90f4be89d94"></span><span class="k"><span class="pre">using</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Path</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5PathTE" title="merkle::PathT"><span class="n"><span class="pre">PathT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT::HASH_FUNCTION"><span class="n"><span class="pre">HASH_FUNCTION</span></span></a><span class="p"><span class="pre">&gt;</span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT4PathE" title="Link to this definition">#</a><br /></dt>
 <dd><p>The type of paths in the tree. </p>
 </dd></dl>
 
 <dl class="cpp type">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT4TreeE">
-<span id="_CPPv3N6merkle5TreeT4TreeE"></span><span id="_CPPv2N6merkle5TreeT4TreeE"></span><span id="merkle::TreeT::Tree"></span><span class="target" id="classmerkle_1_1TreeT_1a0c1228b52c330c9320f44ff2c7a78c4a"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT"><span class="n"><span class="pre">TreeT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT::HASH_FUNCTION"><span class="n"><span class="pre">HASH_FUNCTION</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Tree</span></span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT4TreeE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5TreeT4TreeE"></span><span id="_CPPv2N6merkle5TreeT4TreeE"></span><span class="target" id="classmerkle_1_1TreeT_1a016677e86f25a71351e870653dcd83fe"></span><span class="k"><span class="pre">using</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Tree</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT"><span class="n"><span class="pre">TreeT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT::HASH_FUNCTION"><span class="n"><span class="pre">HASH_FUNCTION</span></span></a><span class="p"><span class="pre">&gt;</span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT4TreeE" title="Link to this definition">#</a><br /></dt>
 <dd><p>The type of the tree. </p>
 </dd></dl>
 
@@ -306,7 +315,7 @@ example:</p>
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT5TreeTEv">
-<span id="_CPPv3N6merkle5TreeT5TreeTEv"></span><span id="_CPPv2N6merkle5TreeT5TreeTEv"></span><span id="merkle::TreeT::TreeT"></span><span class="target" id="classmerkle_1_1TreeT_1a58bbc00f77eaf31423cb21e741fd870d"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">TreeT</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT5TreeTEv" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5TreeT5TreeTEv"></span><span id="_CPPv2N6merkle5TreeT5TreeTEv"></span><span id="merkle::TreeT::TreeT"></span><span class="target" id="classmerkle_1_1TreeT_1a932e3504e93f1d91317ec97d08c81c05"></span><span class="sig-name descname"><span class="n"><span class="pre">TreeT</span></span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">default</span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT5TreeTEv" title="Link to this definition">#</a><br /></dt>
 <dd><p>Constructs an empty tree. </p>
 </dd></dl>
 
@@ -318,7 +327,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5TreeT5TreeTERR5TreeT">
-<span id="_CPPv3N6merkle5TreeT5TreeTERR5TreeT"></span><span id="_CPPv2N6merkle5TreeT5TreeTERR5TreeT"></span><span id="merkle::TreeT::TreeT__TreeTRR"></span><span class="target" id="classmerkle_1_1TreeT_1a34d9320eb35d97e6f0cf7749e4034ac9"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">TreeT</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6merkle5TreeT5TreeTERR5TreeT" title="merkle::TreeT::TreeT"><span class="n"><span class="pre">TreeT</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">other</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5TreeT5TreeTERR5TreeT" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5TreeT5TreeTERR5TreeT"></span><span id="_CPPv2N6merkle5TreeT5TreeTERR5TreeT"></span><span id="merkle::TreeT::TreeT__TreeTRR"></span><span class="target" id="classmerkle_1_1TreeT_1abfe295644b15bc043e834179ba7f6580"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">TreeT</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6merkle5TreeT5TreeTERR5TreeT" title="merkle::TreeT::TreeT"><span class="n"><span class="pre">TreeT</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">other</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">noexcept</span></span><a class="headerlink" href="#_CPPv4N6merkle5TreeT5TreeTERR5TreeT" title="Link to this definition">#</a><br /></dt>
 <dd><p>Moves a tree. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -823,7 +832,7 @@ example:</p>
 
 <dl class="cpp type">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle4TreeE">
-<span id="_CPPv3N6merkle4TreeE"></span><span id="_CPPv2N6merkle4TreeE"></span><span id="merkle::Tree"></span><span class="target" id="merklecpp_8h_1ae946b18ae687567ab2ea99904a214d6f"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT"><span class="n"><span class="pre">TreeT</span></span></a><span class="p"><span class="pre">&lt;</span></span><span class="m"><span class="pre">32</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE" title="merkle::sha256_compress"><span class="n"><span class="pre">sha256_compress</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-prename descclassname"><span class="n"><span class="pre">merkle</span></span><span class="p"><span class="pre">::</span></span></span><span class="sig-name descname"><span class="n"><span class="pre">Tree</span></span></span><a class="headerlink" href="#_CPPv4N6merkle4TreeE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle4TreeE"></span><span id="_CPPv2N6merkle4TreeE"></span><span class="target" id="merklecpp_8h_1a7785ccb68b089048d0b4b8ac3c0c838f"></span><span class="k"><span class="pre">using</span></span><span class="w"> </span><span class="sig-prename descclassname"><span class="n"><span class="pre">merkle</span></span><span class="p"><span class="pre">::</span></span></span><span class="sig-name descname"><span class="n"><span class="pre">Tree</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE" title="merkle::TreeT"><span class="n"><span class="pre">TreeT</span></span></a><span class="p"><span class="pre">&lt;</span></span><span class="m"><span class="pre">32</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle15sha256_compressERK5HashTIXL32EEERK5HashTIXL32EEER5HashTIXL32EEE" title="merkle::sha256_compress"><span class="n"><span class="pre">sha256_compress</span></span></a><span class="p"><span class="pre">&gt;</span></span><a class="headerlink" href="#_CPPv4N6merkle4TreeE" title="Link to this definition">#</a><br /></dt>
 <dd><p>Default tree with default hash size and function. </p>
 </dd></dl>
 
@@ -1026,26 +1035,21 @@ example:</p>
 </dl>
 <div class="breathe-sectiondef docutils container">
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-types">Public Types</p>
-<dl class="cpp enum">
-<dt class="sig sig-object cpp" id="_CPPv4N6merkle5PathT9DirectionE">
-<span id="_CPPv3N6merkle5PathT9DirectionE"></span><span id="_CPPv2N6merkle5PathT9DirectionE"></span><span class="target" id="classmerkle_1_1PathT_1aeca4b46f2be59509b391917e0ed3a41a"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Direction</span></span></span><a class="headerlink" href="#_CPPv4N6merkle5PathT9DirectionE" title="Link to this definition">#</a><br /></dt>
+<dl class="cpp type">
+<dt class="sig sig-object cpp">
+<span class="target" id="classmerkle_1_1PathT_1a80e2f66ff5d6f24123345e8888859ff6"></span><span class="sig-name descname"><span class="pre">Direction</span> <span class="pre">=</span> <span class="pre">enum</span> <span class="pre">{</span> <span class="pre">PATH_LEFT,</span> <span class="pre">PATH_RIGHT</span> <span class="pre">}</span></span></dt>
 <dd><p>Path direction. </p>
-<p><em>Values:</em></p>
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N6merkle5PathT9Direction9PATH_LEFTE">
-<span id="_CPPv3N6merkle5PathT9Direction9PATH_LEFTE"></span><span id="_CPPv2N6merkle5PathT9Direction9PATH_LEFTE"></span><span class="target" id="classmerkle_1_1PathT_1aeca4b46f2be59509b391917e0ed3a41aaad5ff0308471c0c7e9b8b885411ade9f"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">PATH_LEFT</span></span></span><a class="headerlink" href="#_CPPv4N6merkle5PathT9Direction9PATH_LEFTE" title="Link to this definition">#</a><br /></dt>
-<dd></dd></dl>
+</dd></dl>
 
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N6merkle5PathT9Direction10PATH_RIGHTE">
-<span id="_CPPv3N6merkle5PathT9Direction10PATH_RIGHTE"></span><span id="_CPPv2N6merkle5PathT9Direction10PATH_RIGHTE"></span><span class="target" id="classmerkle_1_1PathT_1aeca4b46f2be59509b391917e0ed3a41aaba85f1eb8d976972fb59445dbf2d9bef"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">PATH_RIGHT</span></span></span><a class="headerlink" href="#_CPPv4N6merkle5PathT9Direction10PATH_RIGHTE" title="Link to this definition">#</a><br /></dt>
-<dd></dd></dl>
-
+<dl class="cpp type">
+<dt class="sig sig-object cpp">
+<span class="target" id="classmerkle_1_1PathT_1a3caf6dc2f3a98637043156e38361f625"></span><span class="sig-name descname"><span class="pre">Element</span> <span class="pre">=</span> <span class="pre">struct</span> <span class="pre">{</span> <span class="pre">HashT&lt;</span> <span class="pre">HASH_SIZE</span> <span class="pre">&gt;</span> <span class="pre">hash</span></span></dt>
+<dd><p>Path element. </p>
 </dd></dl>
 
 <dl class="cpp type">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5PathT14const_iteratorE">
-<span id="_CPPv3N6merkle5PathT14const_iteratorE"></span><span id="_CPPv2N6merkle5PathT14const_iteratorE"></span><span id="merkle::PathT::const_iterator"></span><span class="target" id="classmerkle_1_1PathT_1a14feb032d6eeeeeee3e84a91c03bf41c"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">list</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N6merkle5PathT7ElementE" title="merkle::PathT::Element"><span class="n"><span class="pre">Element</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">const_iterator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">const_iterator</span></span></span><a class="headerlink" href="#_CPPv4N6merkle5PathT14const_iteratorE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5PathT14const_iteratorE"></span><span id="_CPPv2N6merkle5PathT14const_iteratorE"></span><span class="target" id="classmerkle_1_1PathT_1a01495f393047ffbb4591c9002bd837f5"></span><span class="k"><span class="pre">using</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">const_iterator</span></span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">typename</span></span><span class="w"> </span><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">list</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">Element</span></span><span class="p"><span class="pre">&gt;</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">const_iterator</span></span><a class="headerlink" href="#_CPPv4N6merkle5PathT14const_iteratorE" title="Link to this definition">#</a><br /></dt>
 <dd><p>Iterator for path elements. </p>
 </dd></dl>
 
@@ -1054,7 +1058,7 @@ example:</p>
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-functions">Public Functions</p>
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5PathT5PathTERK5HashTI9HASH_SIZEE6size_tRRNSt4listI7ElementEE6size_t">
-<span id="_CPPv3N6merkle5PathT5PathTERK5HashTI9HASH_SIZEE6size_tRRNSt4listI7ElementEE6size_t"></span><span id="_CPPv2N6merkle5PathT5PathTERK5HashTI9HASH_SIZEE6size_tRRNSt4listI7ElementEE6size_t"></span><span id="merkle::PathT::PathT__HashT:HASH_SIZE:CR.s.std::list:Element:RR.s"></span><span class="target" id="classmerkle_1_1PathT_1a08b5f8c9475039448420cbdb788e14a2"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">PathT</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5PathTE" title="merkle::PathT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">leaf</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">leaf_index</span></span>, <span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">list</span></span><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4N6merkle5PathT7ElementE" title="merkle::PathT::Element"><span class="n"><span class="pre">Element</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">elements</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">max_index</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5PathT5PathTERK5HashTI9HASH_SIZEE6size_tRRNSt4listI7ElementEE6size_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5PathT5PathTERK5HashTI9HASH_SIZEE6size_tRRNSt4listI7ElementEE6size_t"></span><span id="_CPPv2N6merkle5PathT5PathTERK5HashTI9HASH_SIZEE6size_tRRNSt4listI7ElementEE6size_t"></span><span id="merkle::PathT::PathT__HashT:HASH_SIZE:CR.s.std::list:Element:RR.s"></span><span class="target" id="classmerkle_1_1PathT_1a08b5f8c9475039448420cbdb788e14a2"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">PathT</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5PathTE" title="merkle::PathT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">leaf</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">leaf_index</span></span>, <span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">list</span></span><span class="p"><span class="pre">&lt;</span></span><span class="n"><span class="pre">Element</span></span><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">elements</span></span>, <span class="n"><span class="pre">size_t</span></span><span class="w"> </span><span class="n sig-param"><span class="pre">max_index</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5PathT5PathTERK5HashTI9HASH_SIZEE6size_tRRNSt4listI7ElementEE6size_t" title="Link to this definition">#</a><br /></dt>
 <dd><p>Path constructor. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1070,7 +1074,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5PathT5PathTERK5PathT">
-<span id="_CPPv3N6merkle5PathT5PathTERK5PathT"></span><span id="_CPPv2N6merkle5PathT5PathTERK5PathT"></span><span id="merkle::PathT::PathT__PathTCR"></span><span class="target" id="classmerkle_1_1PathT_1a5c9c6b7d697913bc4a752f85b5b05050"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">PathT</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5PathT5PathTERK5PathT" title="merkle::PathT::PathT"><span class="n"><span class="pre">PathT</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">other</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5PathT5PathTERK5PathT" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5PathT5PathTERK5PathT"></span><span id="_CPPv2N6merkle5PathT5PathTERK5PathT"></span><span id="merkle::PathT::PathT__PathTCR"></span><span class="target" id="classmerkle_1_1PathT_1a9fc5690e8d6cc825392a8cee35d137e8"></span><span class="sig-name descname"><span class="n"><span class="pre">PathT</span></span></span><span class="sig-paren">(</span><span class="k"><span class="pre">const</span></span><span class="w"> </span><a class="reference internal" href="#_CPPv4N6merkle5PathT5PathTERK5PathT" title="merkle::PathT::PathT"><span class="n"><span class="pre">PathT</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">other</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">default</span></span><a class="headerlink" href="#_CPPv4N6merkle5PathT5PathTERK5PathT" title="Link to this definition">#</a><br /></dt>
 <dd><p>Path copy constructor. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1081,7 +1085,7 @@ example:</p>
 
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv4N6merkle5PathT5PathTERR5PathT">
-<span id="_CPPv3N6merkle5PathT5PathTERR5PathT"></span><span id="_CPPv2N6merkle5PathT5PathTERR5PathT"></span><span id="merkle::PathT::PathT__PathTRR"></span><span class="target" id="classmerkle_1_1PathT_1a98a32619a08b73b9832a00454c30ed32"></span><span class="k"><span class="pre">inline</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">PathT</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6merkle5PathT5PathTERR5PathT" title="merkle::PathT::PathT"><span class="n"><span class="pre">PathT</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">other</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N6merkle5PathT5PathTERR5PathT" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N6merkle5PathT5PathTERR5PathT"></span><span id="_CPPv2N6merkle5PathT5PathTERR5PathT"></span><span id="merkle::PathT::PathT__PathTRR"></span><span class="target" id="classmerkle_1_1PathT_1ad5329d23b936a2947679a066d2f0c7a3"></span><span class="sig-name descname"><span class="n"><span class="pre">PathT</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="#_CPPv4N6merkle5PathT5PathTERR5PathT" title="merkle::PathT::PathT"><span class="n"><span class="pre">PathT</span></span></a><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">other</span></span><span class="sig-paren">)</span><span class="w"> </span><span class="k"><span class="pre">noexcept</span></span><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="k"><span class="pre">default</span></span><a class="headerlink" href="#_CPPv4N6merkle5PathT5PathTERR5PathT" title="Link to this definition">#</a><br /></dt>
 <dd><p>Path move constructor. </p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1258,21 +1262,11 @@ example:</p>
 </dd></dl>
 
 </div>
-<dl class="cpp struct">
-<dt class="sig sig-object cpp" id="_CPPv4N6merkle5PathT7ElementE">
-<span id="_CPPv3N6merkle5PathT7ElementE"></span><span id="_CPPv2N6merkle5PathT7ElementE"></span><span id="merkle::PathT::Element"></span><span class="target" id="structmerkle_1_1PathT_1_1Element"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">Element</span></span></span><a class="headerlink" href="#_CPPv4N6merkle5PathT7ElementE" title="Link to this definition">#</a><br /></dt>
-<dd><p>Path element. </p>
 <div class="breathe-sectiondef docutils container">
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N6merkle5PathT7Element4hashE">
-<span id="_CPPv3N6merkle5PathT7Element4hashE"></span><span id="_CPPv2N6merkle5PathT7Element4hashE"></span><span id="merkle::PathT::Element::hash__HashT:HASH_SIZE:"></span><span class="target" id="structmerkle_1_1PathT_1_1Element_1a0c71574cf1b76314bc015038de2bcbf4"></span><a class="reference internal" href="#_CPPv4I_6size_tEN6merkle5HashTE" title="merkle::HashT"><span class="n"><span class="pre">HashT</span></span></a><span class="p"><span class="pre">&lt;</span></span><a class="reference internal" href="#_CPPv4I_6size_t_vEN6merkle5PathTE" title="merkle::PathT::HASH_SIZE"><span class="n"><span class="pre">HASH_SIZE</span></span></a><span class="p"><span class="pre">&gt;</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">hash</span></span></span><a class="headerlink" href="#_CPPv4N6merkle5PathT7Element4hashE" title="Link to this definition">#</a><br /></dt>
-<dd><p>The hash of the path element. </p>
-</dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N6merkle5PathT7Element9directionE">
-<span id="_CPPv3N6merkle5PathT7Element9directionE"></span><span id="_CPPv2N6merkle5PathT7Element9directionE"></span><span id="merkle::PathT::Element::direction__Direction"></span><span class="target" id="structmerkle_1_1PathT_1_1Element_1aa5e2e5cd75a4cd2c967e2e516d54c6c9"></span><a class="reference internal" href="#_CPPv4N6merkle5PathT9DirectionE" title="merkle::PathT::Direction"><span class="n"><span class="pre">Direction</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">direction</span></span></span><a class="headerlink" href="#_CPPv4N6merkle5PathT7Element9directionE" title="Link to this definition">#</a><br /></dt>
+<dt class="sig sig-object cpp" id="_CPPv4N6merkle5PathT9directionE">
+<span id="_CPPv3N6merkle5PathT9directionE"></span><span id="_CPPv2N6merkle5PathT9directionE"></span><span id="merkle::PathT::direction__Direction"></span><span class="target" id="classmerkle_1_1PathT_1a56e3a6398ad64c3e1b4f910f08eef8a3"></span><span class="n"><span class="pre">Direction</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">direction</span></span></span><a class="headerlink" href="#_CPPv4N6merkle5PathT9directionE" title="Link to this definition">#</a><br /></dt>
 <dd><p>The direction at which <code class="docutils literal notranslate"><span class="pre">hash</span></code> joins at this path element. </p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -1281,8 +1275,6 @@ example:</p>
 </dd></dl>
 
 </div>
-</dd></dl>
-
 </dd></dl>
 
 </section>
@@ -1368,9 +1360,9 @@ This function is the compression function of SHA256, which, for the special case
     class="page-toc tocsection onthispage">
     <i class="fa-solid fa-list"></i> On this page
   </div>
-  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
-    <ul class="visible nav section-nav flex-column">
-<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">merklecpp Documentation</a><ul class="visible nav section-nav flex-column">
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h1 nav-item toc-entry"><a class="reference internal nav-link" href="#">merklecpp Documentation</a><ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trees">Trees</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I_6size_t_vEN6merkle5TreeTE"><code class="docutils literal notranslate"><span class="pre">merkle::TreeT</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5TreeT4HashE"><code class="docutils literal notranslate"><span class="pre">Hash</span></code></a></li>
@@ -1455,11 +1447,6 @@ This function is the compression function of SHA256, which, for the special case
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#paths">Paths</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4I_6size_t_vEN6merkle5PathTE"><code class="docutils literal notranslate"><span class="pre">merkle::PathT</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT9DirectionE"><code class="docutils literal notranslate"><span class="pre">Direction</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT9Direction9PATH_LEFTE"><code class="docutils literal notranslate"><span class="pre">PATH_LEFT</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT9Direction10PATH_RIGHTE"><code class="docutils literal notranslate"><span class="pre">PATH_RIGHT</span></code></a></li>
-</ul>
-</li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT14const_iteratorE"><code class="docutils literal notranslate"><span class="pre">const_iterator</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERK5HashTI9HASH_SIZEE6size_tRRNSt4listI7ElementEE6size_t"><code class="docutils literal notranslate"><span class="pre">PathT()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT5PathTERK5PathT"><code class="docutils literal notranslate"><span class="pre">PathT()</span></code></a></li>
@@ -1483,11 +1470,7 @@ This function is the compression function of SHA256, which, for the special case
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathT4leafEv"><code class="docutils literal notranslate"><span class="pre">leaf()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4NK6merkle5PathTeqERK5PathTI9HASH_SIZE13HASH_FUNCTIONE"><code class="docutils literal notranslate"><span class="pre">operator==()</span></code></a></li>
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathTneERK5PathTI9HASH_SIZE13HASH_FUNCTIONE"><code class="docutils literal notranslate"><span class="pre">operator!=()</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT7ElementE"><code class="docutils literal notranslate"><span class="pre">merkle::PathT::Element</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT7Element4hashE"><code class="docutils literal notranslate"><span class="pre">hash</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT7Element9directionE"><code class="docutils literal notranslate"><span class="pre">direction</span></code></a></li>
-</ul>
-</li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N6merkle5PathT9directionE"><code class="docutils literal notranslate"><span class="pre">direction</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -1505,13 +1488,13 @@ This function is the compression function of SHA256, which, for the special case
   </nav></div>
 
   <div class="sidebar-secondary-item">
-  <div role="note" aria-label="source link">
-    <h3>This Page</h3>
-    <ul class="this-page-menu">
-      <li><a href="_sources/index.rst.txt"
-            rel="nofollow">Show Source</a></li>
-    </ul>
-   </div></div>
+
+  <div class="tocsection sourcelink">
+    <a href="_sources/index.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
+</div>
 
 </div></div>
               
@@ -1526,8 +1509,8 @@ This function is the compression function of SHA256, which, for the special case
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script defer src="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
-<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+  <script defer src="_static/scripts/bootstrap.js?digest=55c26ed414f5f8a31ebb"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=55c26ed414f5f8a31ebb"></script>
 
   <footer class="bd-footer">
 <div class="bd-footer__inner bd-page-width">
@@ -1561,7 +1544,7 @@ This function is the compression function of SHA256, which, for the special case
         <div class="footer-item">
 <p class="theme-version">
   <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
-  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.17.1.
 </p></div>
       
     </div>
