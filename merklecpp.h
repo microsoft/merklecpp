@@ -304,10 +304,7 @@ namespace merkle
 
     /// @brief Path move constructor
     /// @param other Path to move
-    PathT(PathT&& other) noexcept :
-      _leaf(std::move(other._leaf)),
-      elements(std::move(other.elements))
-    {}
+    PathT(PathT&& other) noexcept = default;
 
     /// @brief Deserialises a path
     /// @param bytes Vector to deserialise from
