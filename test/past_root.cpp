@@ -12,34 +12,75 @@
 
 #include "util.h"
 
-#define PRINT_HASH_SIZE 3
+constexpr size_t PRINT_HASH_SIZE = 3;
 
 int main()
 {
   auto test_start_time = std::chrono::high_resolution_clock::now();
-  double timeout = get_timeout();
-  auto seed = std::time(0);
-  std::cout << "seed=" << seed << " timeout=" << timeout << std::endl;
+  const double timeout = get_timeout();
+  auto seed = std::time(nullptr);
+  std::cout << "seed=" << seed << " timeout=" << timeout << '\n';
 
   std::srand((unsigned)seed);
 
   try
   {
+    // Deterministic test: verify past_root at every leaf index for small trees.
+    // This ensures both PATH_LEFT and PATH_RIGHT path elements are exercised.
+    for (size_t num_leaves = 2; num_leaves <= 64; num_leaves++)
+    {
+      auto hashes = make_hashes(num_leaves);
+
+      // Record the root after each insertion
+      std::map<size_t, merkle::Hash> expected_roots;
+      {
+        merkle::Tree mt;
+        for (size_t i = 0; i < hashes.size(); i++)
+        {
+          mt.insert(hashes[i]);
+          expected_roots[i] = mt.root();
+        }
+      }
+
+      // Build a new tree with all leaves, then check every past_root
+      merkle::Tree mt;
+      for (const auto& h : hashes)
+      {
+        mt.insert(h);
+      }
+
+      for (const auto& kv : expected_roots)
+      {
+        auto pr = mt.past_root(kv.first);
+        if (*pr != kv.second)
+        {
+          std::cout << "past_root mismatch at tree size " << num_leaves
+                    << " index " << kv.first << ": "
+                    << pr->to_string(PRINT_HASH_SIZE)
+                    << " != " << kv.second.to_string(PRINT_HASH_SIZE) << '\n';
+          throw std::runtime_error("deterministic past_root mismatch");
+        }
+      }
+    }
+    std::cout << "Deterministic past_root test passed for trees of size 2-64"
+              << '\n';
+
 #ifndef NDEBUG
     const size_t num_trees = 64;
-    const size_t max_num_leaves = 8 * 1024;
+    const size_t max_num_leaves = static_cast<size_t>(8) * 1024;
 #else
     const size_t num_trees = 128;
-    const size_t max_num_leaves = 32 * 1024;
+    const size_t max_num_leaves = static_cast<size_t>(32) * 1024;
 #endif
 
-    size_t total_leaves = 0, total_roots = 0;
+    size_t total_leaves = 0;
+    size_t total_roots = 0;
 
     for (size_t k = 0; k < num_trees && !timed_out(timeout, test_start_time);
          k++)
     {
       std::map<size_t, merkle::Hash> past_roots;
-      size_t num_leaves = (size_t)(1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
+      const auto num_leaves = static_cast<size_t>(1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
       total_leaves += num_leaves;
       auto hashes = make_hashes(num_leaves);
 
@@ -50,14 +91,18 @@ int main()
         {
           mt.insert(hashes[i]);
           if ((std::rand() / (double)RAND_MAX) > 0.95)
+          {
             past_roots[i] = mt.root();
+          }
         }
       }
 
       // Build new tree without taking roots
       merkle::Tree mt;
       for (auto& h : hashes)
+      {
         mt.insert(h);
+      }
 
       // Extract and check past roots
       for (auto& kv : past_roots)
@@ -68,27 +113,27 @@ int main()
         {
           std::cout << pr->to_string(PRINT_HASH_SIZE)
                     << " != " << kv.second.to_string(PRINT_HASH_SIZE)
-                    << std::endl;
+                    << '\n';
           throw std::runtime_error("past root hash mismatch");
         }
       }
 
-      if ((k && k % 1000 == 999) || k == num_trees - 1)
+      if ((k != 0 && k % 1000 == 999) || k == num_trees - 1)
       {
         std::cout << k + 1 << " trees, " << total_leaves << " leaves, "
                   << total_roots << " roots"
-                  << ": OK." << std::endl;
+                  << ": OK." << '\n';
       }
     }
   }
   catch (std::exception& ex)
   {
-    std::cout << "Error: " << ex.what() << std::endl;
+    std::cout << "Error: " << ex.what() << '\n';
     return 1;
   }
   catch (...)
   {
-    std::cout << "Error" << std::endl;
+    std::cout << "Error" << '\n';
     return 1;
   }
 
