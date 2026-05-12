@@ -1002,7 +1002,7 @@ namespace merkle
         MERKLECPP_TOUT << " - " << result->to_string(TRACE_HASH_SIZE)
                        << std::endl;);
 
-      for (auto e : *p)
+      for (const auto& e : *p)
       {
         if (e.direction == Path::Direction::PATH_LEFT)
         {

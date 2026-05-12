@@ -25,6 +25,46 @@ int main()
 
   try
   {
+    // Deterministic test: verify past_root at every leaf index for small trees.
+    // This ensures both PATH_LEFT and PATH_RIGHT path elements are exercised.
+    for (size_t num_leaves = 2; num_leaves <= 64; num_leaves++)
+    {
+      auto hashes = make_hashes(num_leaves);
+
+      // Record the root after each insertion
+      std::map<size_t, merkle::Hash> expected_roots;
+      {
+        merkle::Tree mt;
+        for (size_t i = 0; i < hashes.size(); i++)
+        {
+          mt.insert(hashes[i]);
+          expected_roots[i] = mt.root();
+        }
+      }
+
+      // Build a new tree with all leaves, then check every past_root
+      merkle::Tree mt;
+      for (auto& h : hashes)
+      {
+        mt.insert(h);
+      }
+
+      for (const auto& kv : expected_roots)
+      {
+        auto pr = mt.past_root(kv.first);
+        if (*pr != kv.second)
+        {
+          std::cout << "past_root mismatch at tree size " << num_leaves
+                    << " index " << kv.first << ": "
+                    << pr->to_string(PRINT_HASH_SIZE)
+                    << " != " << kv.second.to_string(PRINT_HASH_SIZE) << '\n';
+          throw std::runtime_error("deterministic past_root mismatch");
+        }
+      }
+    }
+    std::cout << "Deterministic past_root test passed for trees of size 2-64"
+              << '\n';
+
 #ifndef NDEBUG
     const size_t num_trees = 64;
     const size_t max_num_leaves = static_cast<size_t>(8) * 1024;
