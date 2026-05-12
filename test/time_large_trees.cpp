@@ -41,7 +41,7 @@ int main()
     }
     mt.root();
     auto stop = std::chrono::high_resolution_clock::now();
-    double seconds =
+    const double seconds =
       static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
         .count()) /
       1e9;
@@ -121,12 +121,12 @@ int main()
     }
     mt_get_root(ec_mt, ec_root);
     stop = std::chrono::high_resolution_clock::now();
-    seconds = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
+    const double ec_seconds = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
                 .count() /
       1e9;
     std::cout << "EC :"
               << " num_insert=" << ec_hashes.size()
-              << " num_root=" << num_ec_roots << " in " << seconds << " sec"
+              << " num_root=" << num_ec_roots << " in " << ec_seconds << " sec"
               << '\n';
 
     for (auto h : ec_hashes)
