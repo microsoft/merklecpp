@@ -39,12 +39,9 @@
 #  define MERKLECPP_TRACE(X)
 #endif
 
-enum : std::uint8_t
-{
-  MERKLECPP_VERSION_MAJOR = 1,
-  MERKLECPP_VERSION_MINOR = 0,
-  MERKLECPP_VERSION_PATCH = 0
-};
+static constexpr std::uint8_t MERKLECPP_VERSION_MAJOR = 1;
+static constexpr std::uint8_t MERKLECPP_VERSION_MINOR = 0;
+static constexpr std::uint8_t MERKLECPP_VERSION_PATCH = 0;
 
 namespace merkle
 {
