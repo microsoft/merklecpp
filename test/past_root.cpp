@@ -44,7 +44,7 @@ int main()
 
       // Build a new tree with all leaves, then check every past_root
       merkle::Tree mt;
-      for (auto& h : hashes)
+      for (const auto& h : hashes)
       {
         mt.insert(h);
       }
