@@ -300,7 +300,7 @@ namespace merkle
 
     /// @brief Path copy constructor
     /// @param other Path to copy
-    PathT(const PathT& other) : _leaf(other._leaf), elements(other.elements) {}
+    PathT(const PathT& other) = default;
 
     /// @brief Path move constructor
     /// @param other Path to move
