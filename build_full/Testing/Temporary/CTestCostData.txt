@@ -1,0 +1,13 @@
+demo_tree 2 0.00217861
+time_large_trees 2 9.59827
+paths 2 6.24444
+flush 2 1.67949
+retract 2 1.02286
+past_root 2 4.77577
+past_paths 2 4.26023
+serialisation 2 1.0286
+partial_serialisation 2 0.460938
+serialise_to_file 2 0.00116805
+compare_hash_functions 2 12.8832
+unit_tests 1 0.00916231
+---
