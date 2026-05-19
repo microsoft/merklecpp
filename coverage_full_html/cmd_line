@@ -1,1 +1,0 @@
-genhtml coverage_full_filtered.info --output-directory coverage_full_html
