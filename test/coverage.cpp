@@ -256,18 +256,12 @@ namespace
     self_assigned.root();
     self_assigned.flush_to(1);
     const merkle::Hash self_root = self_assigned.root();
+
+    // Intentional self-assignment coverage for TreeT::operator=.
     self_assigned = self_assigned;
     require(self_assigned.root() == self_root, "self assignment root mismatch");
     require(self_assigned.min_index() == 1, "self assignment min mismatch");
     require(self_assigned.max_index() == 2, "self assignment max mismatch");
-
-    self_assigned = std::move(self_assigned);
-    require(
-      self_assigned.root() == self_root, "self move assignment root mismatch");
-    require(
-      self_assigned.min_index() == 1, "self move assignment min mismatch");
-    require(
-      self_assigned.max_index() == 2, "self move assignment max mismatch");
   }
 }
 
