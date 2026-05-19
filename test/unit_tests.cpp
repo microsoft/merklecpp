@@ -131,6 +131,98 @@ TEST_CASE("HashT methods")
   REQUIRE(converted[5] == 0x42);
 }
 
+TEST_CASE("PathT equality")
+{
+  // Build a two-leaf tree and get paths to both leaves
+  const merkle::Tree::Hash h0;
+  merkle::Tree::Hash h1;
+  h1.bytes[31] = 1;
+
+  merkle::Tree tree;
+  tree.insert(h0);
+  tree.insert(h1);
+
+  const auto path0a = tree.path(0);
+  const auto path0b = tree.path(0); // same path extracted twice
+  const auto path1 = tree.path(1);  // path to a different leaf
+
+  // Two paths to the same leaf should be equal
+  REQUIRE(*path0a == *path0b);
+  REQUIRE_FALSE(*path0a != *path0b);
+
+  // Paths to different leaves differ in leaf hash → first return false branch
+  REQUIRE_FALSE(*path0a == *path1);
+  REQUIRE(*path0a != *path1);
+
+  // Same leaf, different element hash → second return false branch
+  merkle::Tree tree_diff;
+  tree_diff.insert(h0);
+  merkle::Tree::Hash h3;
+  h3.bytes[0] = 3;
+  tree_diff.insert(h3);
+
+  const auto path_orig = tree.path(0);  // h0 leaf, element has h1
+  const auto path_diff = tree_diff.path(0); // h0 leaf, element has h3
+  REQUIRE_FALSE(*path_orig == *path_diff);
+  REQUIRE(*path_orig != *path_diff);
+}
+
+TEST_CASE("TreeT to_string")
+{
+  // Empty tree produces "<EMPTY>"
+  merkle::Tree empty_tree;
+  const std::string empty_str = empty_tree.to_string();
+  REQUIRE(empty_str.find("<EMPTY>") != std::string::npos);
+
+  // Non-empty tree produces normal output
+  merkle::Tree::Hash h;
+  h.bytes[0] = 1;
+  merkle::Tree tree;
+  tree.insert(h);
+  const std::string tree_str = tree.to_string();
+  REQUIRE(tree_str.find("<EMPTY>") == std::string::npos);
+  REQUIRE(!tree_str.empty());
+}
+
+TEST_CASE("TreeT leaf bounds and uninserted leaves")
+{
+  // leaf() out of bounds on empty tree
+  merkle::Tree empty_tree;
+  REQUIRE_THROWS(empty_tree.leaf(0));
+
+  // Access leaf before insertion is flushed (uninserted_leaf_nodes path)
+  merkle::Tree tree;
+  merkle::Tree::Hash h0;
+  merkle::Tree::Hash h1;
+  h1.bytes[0] = 1;
+  tree.insert(h0);
+  tree.insert(h1);
+
+  // leaf() on valid indices before root is computed
+  REQUIRE(tree.leaf(0) == h0);
+  REQUIRE(tree.leaf(1) == h1);
+
+  // leaf() out of bounds throws
+  REQUIRE_THROWS(tree.leaf(2));
+  REQUIRE_THROWS(tree.leaf(100));
+}
+
+TEST_CASE("TreeT size with uninserted leaves")
+{
+  merkle::Tree tree;
+  // size() when tree has uninserted leaves triggers insert_leaves()
+  merkle::Tree::Hash h;
+  tree.insert(h);
+  // size() forces lazy insertion
+  const size_t sz = tree.size();
+  REQUIRE(sz > 0);
+
+  // Tree copy
+  merkle::Tree copy = tree; // NOLINT(misc-const-correctness)
+  REQUIRE(copy.size() == tree.size());
+  REQUIRE(copy.root() == tree.root());
+}
+
 TEST_CASE("Empty tree")
 {
   merkle::Tree tree;
