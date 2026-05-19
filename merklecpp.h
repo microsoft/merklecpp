@@ -497,7 +497,10 @@ namespace merkle
     /// @brief Equality operator for paths
     bool operator==(const PathT<HASH_SIZE, HASH_FUNCTION>& other) const
     {
-      if (_leaf != other._leaf || elements.size() != other.elements.size())
+      if (
+        _leaf != other._leaf || _leaf_index != other._leaf_index ||
+        _max_index != other._max_index ||
+        elements.size() != other.elements.size())
       {
         return false;
       }
@@ -1338,7 +1341,7 @@ namespace merkle
                                      << to << std::endl;);
 
       if (
-        (from < min_index() || max_index() < from) ||
+        empty() || (from < min_index() || max_index() < from) ||
         (to < min_index() || max_index() < to) || from > to)
       {
         throw std::runtime_error("invalid leaf indices");
@@ -1577,6 +1580,13 @@ namespace merkle
     /// @return The number of bytes required to serialise the tree segment
     size_t serialised_size(size_t from, size_t to)
     {
+      if (
+        empty() || (from < min_index() || max_index() < from) ||
+        (to < min_index() || max_index() < to) || from > to)
+      {
+        throw std::runtime_error("invalid leaf indices");
+      }
+
       size_t num_extras = 0;
       walk_to(from, false, [&num_extras](Node*&, bool go_right) {
         if (go_right)
