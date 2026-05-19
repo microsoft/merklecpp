@@ -226,6 +226,7 @@ namespace
 
   void test_tree_assignment_and_moves()
   {
+    const auto source_hashes = make_hashes(5);
     auto source = make_tree(5);
     source.root();
     source.flush_to(1);
@@ -237,7 +238,9 @@ namespace
     require(moved.root() == expected_root, "move constructor root mismatch");
     require(moved.min_index() == expected_min, "move constructor min mismatch");
     require(moved.max_index() == expected_max, "move constructor max mismatch");
-    require(moved.leaf(expected_min) == hash_with_byte(1), "moved leaf mismatch");
+    require(
+      moved.leaf(expected_min) == source_hashes[expected_min],
+      "moved leaf mismatch");
 
     auto assign_source = make_tree(4);
     const merkle::Hash assign_root = assign_source.root();

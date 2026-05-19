@@ -519,7 +519,7 @@ namespace merkle
     }
 
     /// @brief Inequality operator for paths
-    bool operator!=(const PathT<HASH_SIZE, HASH_FUNCTION>& other)
+    bool operator!=(const PathT<HASH_SIZE, HASH_FUNCTION>& other) const
     {
       return !this->operator==(other);
     }
