@@ -1,1 +1,0 @@
-/usr/bin/c++ -g -Wl,--dependency-file=CMakeFiles/unit_tests.dir/link.d CMakeFiles/unit_tests.dir/unit_tests.cpp.o -o unit_tests  -lcrypto

@@ -1,1 +1,0 @@
-/usr/bin/c++ --coverage -g --coverage -Wl,--dependency-file=CMakeFiles/serialise_to_file.dir/link.d CMakeFiles/serialise_to_file.dir/serialise_to_file.cpp.o -o serialise_to_file  -lcrypto
