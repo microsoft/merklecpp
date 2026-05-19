@@ -1340,12 +1340,7 @@ namespace merkle
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> serialise from " << from << " to "
                                      << to << std::endl;);
 
-      if (
-        empty() || (from < min_index() || max_index() < from) ||
-        (to < min_index() || max_index() < to) || from > to)
-      {
-        throw std::runtime_error("invalid leaf indices");
-      }
+      validate_partial_range(from, to);
 
       serialise_uint64_t(to - from + 1, bytes);
       serialise_uint64_t(from, bytes);
@@ -1580,12 +1575,7 @@ namespace merkle
     /// @return The number of bytes required to serialise the tree segment
     size_t serialised_size(size_t from, size_t to)
     {
-      if (
-        empty() || (from < min_index() || max_index() < from) ||
-        (to < min_index() || max_index() < to) || from > to)
-      {
-        throw std::runtime_error("invalid leaf indices");
-      }
+      validate_partial_range(from, to);
 
       size_t num_extras = 0;
       walk_to(from, false, [&num_extras](Node*&, bool go_right) {
@@ -1699,6 +1689,16 @@ namespace merkle
     }
 
   protected:
+    void validate_partial_range(size_t from, size_t to) const
+    {
+      if (
+        empty() || (from < min_index() || max_index() < from) ||
+        (to < min_index() || max_index() < to) || from > to)
+      {
+        throw std::runtime_error("invalid leaf indices");
+      }
+    }
+
     /// @brief Vector of leaf nodes current in the tree
     std::vector<Node*> leaf_nodes;
 
