@@ -98,7 +98,8 @@ namespace
     size_t position = 1;
     const auto value = merkle::deserialise_uint64_t(buffer, position);
     require(value == 0x0102030405060708ULL, "deserialise_uint64_t mismatch");
-    require(position == buffer.size(), "deserialise_uint64_t position mismatch");
+    require(
+      position == buffer.size(), "deserialise_uint64_t position mismatch");
 
     std::vector<uint8_t> short_buffer(7, 0);
     size_t short_position = 0;
@@ -246,7 +247,8 @@ namespace
     const merkle::Hash assign_root = assign_source.root();
     merkle::Tree move_assigned(hash_with_byte(0xAA));
     move_assigned = std::move(assign_source);
-    require(move_assigned.root() == assign_root, "move assignment root mismatch");
+    require(
+      move_assigned.root() == assign_root, "move assignment root mismatch");
     require(move_assigned.min_index() == 0, "move assignment min mismatch");
     require(move_assigned.max_index() == 3, "move assignment max mismatch");
 
@@ -261,10 +263,11 @@ namespace
 
     self_assigned = std::move(self_assigned);
     require(
-      self_assigned.root() == self_root,
-      "self move assignment root mismatch");
-    require(self_assigned.min_index() == 1, "self move assignment min mismatch");
-    require(self_assigned.max_index() == 2, "self move assignment max mismatch");
+      self_assigned.root() == self_root, "self move assignment root mismatch");
+    require(
+      self_assigned.min_index() == 1, "self move assignment min mismatch");
+    require(
+      self_assigned.max_index() == 2, "self move assignment max mismatch");
   }
 }
 
