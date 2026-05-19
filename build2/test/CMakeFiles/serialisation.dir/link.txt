@@ -1,0 +1,1 @@
+/usr/bin/c++ -g -Wl,--dependency-file=CMakeFiles/serialisation.dir/link.d CMakeFiles/serialisation.dir/serialisation.cpp.o -o serialisation  -lcrypto
