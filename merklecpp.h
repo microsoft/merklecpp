@@ -1691,9 +1691,10 @@ namespace merkle
   protected:
     void validate_partial_range(size_t from, size_t to) const
     {
-      if (
-        empty() || (from < min_index() || max_index() < from) ||
-        (to < min_index() || max_index() < to) || from > to)
+      const bool from_out_of_range = from < min_index() || max_index() < from;
+      const bool to_out_of_range = to < min_index() || max_index() < to;
+      const bool reversed_range = from > to;
+      if (empty() || from_out_of_range || to_out_of_range || reversed_range)
       {
         throw std::runtime_error("invalid leaf indices");
       }
