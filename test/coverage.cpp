@@ -27,7 +27,7 @@ namespace
   {
     try
     {
-      f();
+      std::forward<F>(f)();
     }
     catch (const std::exception&)
     {
@@ -57,14 +57,14 @@ namespace
 
     std::list<merkle::Path::Element> elements;
     elements.push_back(e);
-    return merkle::Path(leaf, leaf_index, std::move(elements), max_index);
+    return {leaf, leaf_index, std::move(elements), max_index};
   }
 
   merkle::Tree make_tree(size_t num_leaves)
   {
     merkle::Tree tree;
     auto hashes = make_hashes(num_leaves);
-    for (auto& hash : hashes)
+    for (const auto& hash : hashes)
     {
       tree.insert(hash);
     }
@@ -112,7 +112,7 @@ namespace
   {
     merkle::Tree tree;
     const auto hashes = make_hashes(4);
-    for (auto& hash : hashes)
+    for (const auto& hash : hashes)
     {
       tree.insert(hash);
     }
@@ -138,7 +138,7 @@ namespace
       position == serialised_path.size(),
       "position constructor should advance position");
 
-    std::vector<uint8_t> exact_path(
+    const std::vector<uint8_t> exact_path(
       serialised_path.begin() + 1, serialised_path.end());
     const merkle::Path from_exact_buffer(exact_path);
     require(from_exact_buffer == *path, "buffer constructor should round-trip");
@@ -153,8 +153,10 @@ namespace
       leaf, 4, 10, sibling, merkle::Path::Direction::PATH_LEFT);
     const auto different_direction = single_element_path(
       leaf, 4, 9, sibling, merkle::Path::Direction::PATH_RIGHT);
+    const auto equivalent = single_element_path(
+      leaf, 4, 9, sibling, merkle::Path::Direction::PATH_LEFT);
 
-    require(same == same, "path should equal itself");
+    require(same == equivalent, "path should equal equivalent path");
     require(
       !(same == different_leaf_index),
       "path equality should include leaf index");
@@ -246,7 +248,7 @@ namespace
     auto assign_source = make_tree(4);
     const merkle::Hash assign_root = assign_source.root();
     merkle::Tree move_assigned(hash_with_byte(0xAA));
-    move_assigned = std::move(assign_source);
+    move_assigned = assign_source;
     require(
       move_assigned.root() == assign_root, "move assignment root mismatch");
     require(move_assigned.min_index() == 0, "move assignment min mismatch");

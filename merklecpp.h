@@ -730,7 +730,10 @@ namespace merkle
       insertion_stack(std::move(other.insertion_stack)),
       hashing_stack(std::move(other.hashing_stack)),
       walk_stack(std::move(other.walk_stack))
-    {}
+    {
+      other._root = nullptr;
+      other.num_flushed = 0;
+    }
 
     /// @brief Deserialises a tree
     /// @param bytes Byte buffer containing a serialised tree
@@ -944,6 +947,10 @@ namespace merkle
     /// @return The tree
     Tree& operator=(const Tree& other)
     {
+      if (this == &other)
+      {
+        return *this;
+      }
       leaf_nodes.clear();
       for (auto n : uninserted_leaf_nodes)
       {
@@ -953,6 +960,8 @@ namespace merkle
       insertion_stack.clear();
       hashing_stack.clear();
       walk_stack.clear();
+      delete (_root);
+      _root = nullptr;
 
       size_t to_skip = (other.num_flushed % 2 == 0) ? 0 : 1;
       _root = Node::copy_node(
