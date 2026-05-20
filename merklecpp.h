@@ -497,7 +497,10 @@ namespace merkle
     /// @brief Equality operator for paths
     bool operator==(const PathT<HASH_SIZE, HASH_FUNCTION>& other) const
     {
-      if (_leaf != other._leaf || elements.size() != other.elements.size())
+      if (
+        _leaf != other._leaf || _leaf_index != other._leaf_index ||
+        _max_index != other._max_index ||
+        elements.size() != other.elements.size())
       {
         return false;
       }
@@ -516,7 +519,7 @@ namespace merkle
     }
 
     /// @brief Inequality operator for paths
-    bool operator!=(const PathT<HASH_SIZE, HASH_FUNCTION>& other)
+    bool operator!=(const PathT<HASH_SIZE, HASH_FUNCTION>& other) const
     {
       return !this->operator==(other);
     }
@@ -727,7 +730,15 @@ namespace merkle
       insertion_stack(std::move(other.insertion_stack)),
       hashing_stack(std::move(other.hashing_stack)),
       walk_stack(std::move(other.walk_stack))
-    {}
+    {
+      other.leaf_nodes.clear();
+      other.uninserted_leaf_nodes.clear();
+      other._root = nullptr;
+      other.num_flushed = 0;
+      other.insertion_stack.clear();
+      other.hashing_stack.clear();
+      other.walk_stack.clear();
+    }
 
     /// @brief Deserialises a tree
     /// @param bytes Byte buffer containing a serialised tree
@@ -941,6 +952,10 @@ namespace merkle
     /// @return The tree
     Tree& operator=(const Tree& other)
     {
+      if (this == &other)
+      {
+        return *this;
+      }
       leaf_nodes.clear();
       for (auto n : uninserted_leaf_nodes)
       {
@@ -950,6 +965,8 @@ namespace merkle
       insertion_stack.clear();
       hashing_stack.clear();
       walk_stack.clear();
+      delete (_root);
+      _root = nullptr;
 
       size_t to_skip = (other.num_flushed % 2 == 0) ? 0 : 1;
       _root = Node::copy_node(
@@ -965,6 +982,46 @@ namespace merkle
       num_flushed = other.num_flushed;
       assert(min_index() == other.min_index());
       assert(max_index() == other.max_index());
+      return *this;
+    }
+
+    /// @brief Assigns a tree by move
+    /// @param other The tree to assign
+    /// @return The tree
+    Tree& operator=(Tree&& other) noexcept
+    {
+      if (this == &other)
+      {
+        return *this;
+      }
+
+      leaf_nodes.clear();
+      for (auto n : uninserted_leaf_nodes)
+      {
+        delete (n);
+      }
+      uninserted_leaf_nodes.clear();
+      insertion_stack.clear();
+      hashing_stack.clear();
+      walk_stack.clear();
+      delete (_root);
+      _root = nullptr;
+
+      leaf_nodes = std::move(other.leaf_nodes);
+      uninserted_leaf_nodes = std::move(other.uninserted_leaf_nodes);
+      _root = other._root;
+      num_flushed = other.num_flushed;
+      insertion_stack = std::move(other.insertion_stack);
+      hashing_stack = std::move(other.hashing_stack);
+      walk_stack = std::move(other.walk_stack);
+
+      other.leaf_nodes.clear();
+      other.uninserted_leaf_nodes.clear();
+      other._root = nullptr;
+      other.num_flushed = 0;
+      other.insertion_stack.clear();
+      other.hashing_stack.clear();
+      other.walk_stack.clear();
       return *this;
     }
 
@@ -1337,12 +1394,7 @@ namespace merkle
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> serialise from " << from << " to "
                                      << to << std::endl;);
 
-      if (
-        (from < min_index() || max_index() < from) ||
-        (to < min_index() || max_index() < to) || from > to)
-      {
-        throw std::runtime_error("invalid leaf indices");
-      }
+      validate_partial_range(from, to);
 
       serialise_uint64_t(to - from + 1, bytes);
       serialise_uint64_t(from, bytes);
@@ -1577,6 +1629,8 @@ namespace merkle
     /// @return The number of bytes required to serialise the tree segment
     size_t serialised_size(size_t from, size_t to)
     {
+      validate_partial_range(from, to);
+
       size_t num_extras = 0;
       walk_to(from, false, [&num_extras](Node*&, bool go_right) {
         if (go_right)
@@ -1689,6 +1743,17 @@ namespace merkle
     }
 
   protected:
+    void validate_partial_range(size_t from, size_t to) const
+    {
+      const bool from_out_of_range = from < min_index() || max_index() < from;
+      const bool to_out_of_range = to < min_index() || max_index() < to;
+      const bool reversed_range = from > to;
+      if (empty() || from_out_of_range || to_out_of_range || reversed_range)
+      {
+        throw std::runtime_error("invalid leaf indices");
+      }
+    }
+
     /// @brief Vector of leaf nodes current in the tree
     std::vector<Node*> leaf_nodes;
 
