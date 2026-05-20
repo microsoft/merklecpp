@@ -731,8 +731,13 @@ namespace merkle
       hashing_stack(std::move(other.hashing_stack)),
       walk_stack(std::move(other.walk_stack))
     {
+      other.leaf_nodes.clear();
+      other.uninserted_leaf_nodes.clear();
       other._root = nullptr;
       other.num_flushed = 0;
+      other.insertion_stack.clear();
+      other.hashing_stack.clear();
+      other.walk_stack.clear();
     }
 
     /// @brief Deserialises a tree
@@ -977,6 +982,46 @@ namespace merkle
       num_flushed = other.num_flushed;
       assert(min_index() == other.min_index());
       assert(max_index() == other.max_index());
+      return *this;
+    }
+
+    /// @brief Assigns a tree by move
+    /// @param other The tree to assign
+    /// @return The tree
+    Tree& operator=(Tree&& other) noexcept
+    {
+      if (this == &other)
+      {
+        return *this;
+      }
+
+      leaf_nodes.clear();
+      for (auto n : uninserted_leaf_nodes)
+      {
+        delete (n);
+      }
+      uninserted_leaf_nodes.clear();
+      insertion_stack.clear();
+      hashing_stack.clear();
+      walk_stack.clear();
+      delete (_root);
+      _root = nullptr;
+
+      leaf_nodes = std::move(other.leaf_nodes);
+      uninserted_leaf_nodes = std::move(other.uninserted_leaf_nodes);
+      _root = other._root;
+      num_flushed = other.num_flushed;
+      insertion_stack = std::move(other.insertion_stack);
+      hashing_stack = std::move(other.hashing_stack);
+      walk_stack = std::move(other.walk_stack);
+
+      other.leaf_nodes.clear();
+      other.uninserted_leaf_nodes.clear();
+      other._root = nullptr;
+      other.num_flushed = 0;
+      other.insertion_stack.clear();
+      other.hashing_stack.clear();
+      other.walk_stack.clear();
       return *this;
     }
 

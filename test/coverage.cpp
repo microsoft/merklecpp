@@ -155,7 +155,9 @@ namespace
       leaf, 4, 9, sibling, merkle::Path::Direction::PATH_RIGHT);
     const auto equivalent = single_element_path(
       leaf, 4, 9, sibling, merkle::Path::Direction::PATH_LEFT);
+    const auto& same_ref = same;
 
+    require(same == same_ref, "path should equal itself");
     require(same == equivalent, "path should equal equivalent path");
     require(
       !(same == different_leaf_index),
@@ -248,7 +250,7 @@ namespace
     auto assign_source = make_tree(4);
     const merkle::Hash assign_root = assign_source.root();
     merkle::Tree move_assigned(hash_with_byte(0xAA));
-    move_assigned = assign_source;
+    move_assigned = std::move(assign_source);
     require(
       move_assigned.root() == assign_root, "move assignment root mismatch");
     require(move_assigned.min_index() == 0, "move assignment min mismatch");
