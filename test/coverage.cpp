@@ -108,6 +108,26 @@ namespace
       "deserialise_uint64_t should reject short buffers");
   }
 
+  void test_hash_string_parsing()
+  {
+    const std::string valid_hex(64, 'a');
+    const merkle::Hash valid_hash(valid_hex);
+    for (const auto byte : valid_hash.bytes)
+    {
+      require(byte == 0xAA, "valid hash string parsed incorrectly");
+    }
+
+    require_throws(
+      [] { merkle::Hash(std::string(64, 'z')); },
+      "hash string should reject non-hex digits");
+
+    std::string partially_invalid(64, '0');
+    partially_invalid[1] = 'z';
+    require_throws(
+      [&] { merkle::Hash(partially_invalid); },
+      "hash string should reject partially parsed hex bytes");
+  }
+
   void test_path_metadata_and_equality()
   {
     merkle::Tree tree;
@@ -274,6 +294,7 @@ int main()
   try
   {
     test_serialisation_helpers();
+    test_hash_string_parsing();
     test_path_metadata_and_equality();
     test_tree_partial_serialisation_bounds();
     test_tree_assignment_and_moves();

@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -120,7 +121,12 @@ namespace merkle
       for (size_t i = 0; i < SIZE; i++)
       {
         int tmp = 0;
-        sscanf(s.c_str() + 2 * i, "%02x", &tmp);
+        int consumed = 0;
+        if (sscanf(s.c_str() + 2 * i, "%2x%n", &tmp, &consumed) != 1 ||
+            consumed != 2)
+        {
+          throw std::runtime_error("invalid hash string");
+        }
         bytes[i] = tmp;
       }
     }
