@@ -120,14 +120,14 @@ namespace merkle
       }
       for (size_t i = 0; i < SIZE; i++)
       {
-        int tmp = 0;
-        int consumed = 0;
-        if (sscanf(s.c_str() + 2 * i, "%2x%n", &tmp, &consumed) != 1 ||
-            consumed != 2)
+        unsigned int tmp = 0;
+        char extra = 0;
+        const char byte_string[3] = {s[2 * i], s[2 * i + 1], 0};
+        if (sscanf(byte_string, "%2x%c", &tmp, &extra) != 1)
         {
           throw std::runtime_error("invalid hash string");
         }
-        bytes[i] = tmp;
+        bytes[i] = static_cast<uint8_t>(tmp);
       }
     }
 
