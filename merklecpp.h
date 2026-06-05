@@ -7,9 +7,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstddef>
-#include <cstdio>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <list>
@@ -90,6 +88,26 @@ namespace merkle
     return r;
   }
 
+  static inline bool decode_hex_digit(char c, uint8_t& value)
+  {
+    if ('0' <= c && c <= '9')
+    {
+      value = static_cast<uint8_t>(c - '0');
+      return true;
+    }
+    if ('a' <= c && c <= 'f')
+    {
+      value = static_cast<uint8_t>(c - 'a' + 10);
+      return true;
+    }
+    if ('A' <= c && c <= 'F')
+    {
+      value = static_cast<uint8_t>(c - 'A' + 10);
+      return true;
+    }
+    return false;
+  }
+
   /// @brief Template for fixed-size hashes
   /// @tparam SIZE Size of the hash in number of bytes
   template <size_t SIZE>
@@ -121,13 +139,14 @@ namespace merkle
       }
       for (size_t i = 0; i < SIZE; i++)
       {
-        char hex_byte[3] = {};
-        if (sscanf(s.c_str() + 2 * i, "%2[0-9a-fA-F]", hex_byte) != 1 ||
-            hex_byte[1] == 0)
+        uint8_t high = 0;
+        uint8_t low = 0;
+        if (!decode_hex_digit(s[2 * i], high) ||
+            !decode_hex_digit(s[2 * i + 1], low))
         {
           throw std::runtime_error("invalid hash string");
         }
-        bytes[i] = static_cast<uint8_t>(std::strtoul(hex_byte, nullptr, 16));
+        bytes[i] = static_cast<uint8_t>((high << 4) | low);
       }
     }
 
