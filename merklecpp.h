@@ -121,9 +121,12 @@ namespace merkle
       for (size_t i = 0; i < SIZE; i++)
       {
         unsigned int tmp = 0;
-        char extra = 0;
+        char high[2] = {};
+        char low[2] = {};
         const char byte_string[3] = {s[2 * i], s[2 * i + 1], 0};
-        if (sscanf(byte_string, "%2x%c", &tmp, &extra) != 1)
+        if (sscanf(byte_string, "%1[0-9a-fA-F]%1[0-9a-fA-F]", high, low) !=
+              2 ||
+            sscanf(byte_string, "%2x", &tmp) != 1)
         {
           throw std::runtime_error("invalid hash string");
         }

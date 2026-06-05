@@ -124,7 +124,7 @@ namespace
     std::string partially_invalid(64, '0');
     partially_invalid[1] = 'z';
     require_throws(
-      [&] { merkle::Hash(partially_invalid); },
+      [&] { (void)merkle::Hash(partially_invalid); },
       "hash string should reject partially parsed hex bytes");
   }
 
