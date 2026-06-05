@@ -749,7 +749,7 @@ namespace merkle
     /// @param other Tree to move
     TreeT(TreeT&& other) noexcept
     {
-      move_from(std::move(other));
+      move_from(other);
     }
 
     /// @brief Deserialises a tree
@@ -994,7 +994,7 @@ namespace merkle
       }
 
       clear();
-      move_from(std::move(other));
+      move_from(other);
       return *this;
     }
 
@@ -1731,7 +1731,7 @@ namespace merkle
       num_flushed = 0;
     }
 
-    void move_from(TreeT&& other) noexcept
+    void move_from(TreeT& other) noexcept
     {
       leaf_nodes = std::move(other.leaf_nodes);
       uninserted_leaf_nodes = std::move(other.uninserted_leaf_nodes);
