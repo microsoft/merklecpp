@@ -117,6 +117,12 @@ namespace
       require(byte == 0xAA, "valid hash string parsed incorrectly");
     }
 
+    std::string mixed_case_hex(64, '0');
+    mixed_case_hex[0] = 'A';
+    mixed_case_hex[1] = 'f';
+    const merkle::Hash mixed_case_hash(mixed_case_hex);
+    require(mixed_case_hash.bytes[0] == 0xAF, "mixed-case hash string parsed incorrectly");
+
     require_throws(
       [] { merkle::Hash(std::string(64, 'z')); },
       "hash string should reject non-hex digits");
