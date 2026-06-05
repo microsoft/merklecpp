@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <list>
@@ -118,32 +119,15 @@ namespace merkle
       {
         throw std::runtime_error("invalid hash string");
       }
-      const auto hex_value = [](char c) {
-        if (c >= '0' && c <= '9')
-        {
-          return static_cast<uint8_t>(c - '0');
-        }
-        if (c >= 'a' && c <= 'f')
-        {
-          return static_cast<uint8_t>(c - 'a' + 10);
-        }
-        if (c >= 'A' && c <= 'F')
-        {
-          return static_cast<uint8_t>(c - 'A' + 10);
-        }
-        throw std::runtime_error("invalid hash string");
-      };
       for (size_t i = 0; i < SIZE; i++)
       {
         char hex_byte[3] = {};
-        const char byte_string[3] = {s[2 * i], s[2 * i + 1], 0};
-        if (sscanf(byte_string, "%2[0-9a-fA-F]", hex_byte) != 1 ||
+        if (sscanf(s.c_str() + 2 * i, "%2[0-9a-fA-F]", hex_byte) != 1 ||
             hex_byte[1] == 0)
         {
           throw std::runtime_error("invalid hash string");
         }
-        bytes[i] = static_cast<uint8_t>(
-          (hex_value(hex_byte[0]) << 4) | hex_value(hex_byte[1]));
+        bytes[i] = static_cast<uint8_t>(std::strtoul(hex_byte, nullptr, 16));
       }
     }
 
