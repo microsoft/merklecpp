@@ -38,6 +38,11 @@ TEST_CASE("HashT constructors and error paths")
   const merkle::Hash h_str(valid_hex);
   REQUIRE(h_str.bytes[0] == 0xAB);
 
+  valid_hex[0] = 'A';
+  valid_hex[1] = 'f';
+  const merkle::Hash mixed_case_h_str(valid_hex);
+  REQUIRE(mixed_case_h_str.bytes[0] == 0xAF);
+
   // String constructor: invalid length throws
   REQUIRE_THROWS(merkle::Hash(std::string(63, '0')));
   REQUIRE_THROWS(merkle::Hash(std::string(65, '0')));
