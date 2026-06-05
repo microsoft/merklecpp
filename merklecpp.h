@@ -127,20 +127,23 @@ namespace merkle
         {
           return static_cast<uint8_t>(c - 'a' + 10);
         }
-        return static_cast<uint8_t>(c - 'A' + 10);
+        if (c >= 'A' && c <= 'F')
+        {
+          return static_cast<uint8_t>(c - 'A' + 10);
+        }
+        throw std::runtime_error("invalid hash string");
       };
       for (size_t i = 0; i < SIZE; i++)
       {
-        char high[2] = {};
-        char low[2] = {};
+        char hex_byte[3] = {};
         const char byte_string[3] = {s[2 * i], s[2 * i + 1], 0};
-        if (sscanf(byte_string, "%1[0-9a-fA-F]%1[0-9a-fA-F]", high, low) !=
-            2)
+        if (sscanf(byte_string, "%2[0-9a-fA-F]", hex_byte) != 1 ||
+            hex_byte[1] == 0)
         {
           throw std::runtime_error("invalid hash string");
         }
-        bytes[i] =
-          static_cast<uint8_t>((hex_value(high[0]) << 4) | hex_value(low[0]));
+        bytes[i] = static_cast<uint8_t>(
+          (hex_value(hex_byte[0]) << 4) | hex_value(hex_byte[1]));
       }
     }
 
