@@ -307,12 +307,12 @@ int main()
   }
   catch (const std::exception& ex)
   {
-    std::cout << "Error: " << ex.what() << '\n';
+    std::cerr << "Error: " << ex.what() << '\n';
     return 1;
   }
   catch (...)
   {
-    std::cout << "Error" << '\n';
+    std::cerr << "Error" << '\n';
     return 1;
   }
 

@@ -747,22 +747,9 @@ namespace merkle
 
     /// @brief Moves a tree
     /// @param other Tree to move
-    TreeT(TreeT&& other) noexcept :
-      leaf_nodes(std::move(other.leaf_nodes)),
-      uninserted_leaf_nodes(std::move(other.uninserted_leaf_nodes)),
-      _root(std::move(other._root)),
-      num_flushed(other.num_flushed),
-      insertion_stack(std::move(other.insertion_stack)),
-      hashing_stack(std::move(other.hashing_stack)),
-      walk_stack(std::move(other.walk_stack))
+    TreeT(TreeT&& other) noexcept
     {
-      other.leaf_nodes.clear();
-      other.uninserted_leaf_nodes.clear();
-      other._root = nullptr;
-      other.num_flushed = 0;
-      other.insertion_stack.clear();
-      other.hashing_stack.clear();
-      other.walk_stack.clear();
+      move_from(std::move(other));
     }
 
     /// @brief Deserialises a tree
@@ -790,11 +777,7 @@ namespace merkle
     /// @brief Deconstructor
     ~TreeT()
     {
-      delete (_root);
-      for (auto n : uninserted_leaf_nodes)
-      {
-        delete (n);
-      }
+      clear();
     }
 
     /// @brief Invariant of the tree
@@ -981,17 +964,7 @@ namespace merkle
       {
         return *this;
       }
-      leaf_nodes.clear();
-      for (auto n : uninserted_leaf_nodes)
-      {
-        delete (n);
-      }
-      uninserted_leaf_nodes.clear();
-      insertion_stack.clear();
-      hashing_stack.clear();
-      walk_stack.clear();
-      delete (_root);
-      _root = nullptr;
+      clear();
 
       size_t to_skip = (other.num_flushed % 2 == 0) ? 0 : 1;
       _root = Node::copy_node(
@@ -1020,33 +993,8 @@ namespace merkle
         return *this;
       }
 
-      leaf_nodes.clear();
-      for (auto n : uninserted_leaf_nodes)
-      {
-        delete (n);
-      }
-      uninserted_leaf_nodes.clear();
-      insertion_stack.clear();
-      hashing_stack.clear();
-      walk_stack.clear();
-      delete (_root);
-      _root = nullptr;
-
-      leaf_nodes = std::move(other.leaf_nodes);
-      uninserted_leaf_nodes = std::move(other.uninserted_leaf_nodes);
-      _root = other._root;
-      num_flushed = other.num_flushed;
-      insertion_stack = std::move(other.insertion_stack);
-      hashing_stack = std::move(other.hashing_stack);
-      walk_stack = std::move(other.walk_stack);
-
-      other.leaf_nodes.clear();
-      other.uninserted_leaf_nodes.clear();
-      other._root = nullptr;
-      other.num_flushed = 0;
-      other.insertion_stack.clear();
-      other.hashing_stack.clear();
-      other.walk_stack.clear();
+      clear();
+      move_from(std::move(other));
       return *this;
     }
 
@@ -1468,17 +1416,7 @@ namespace merkle
     {
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> deserialise " << std::endl;);
 
-      delete (_root);
-      leaf_nodes.clear();
-      for (auto n : uninserted_leaf_nodes)
-      {
-        delete (n);
-      }
-      uninserted_leaf_nodes.clear();
-      insertion_stack.clear();
-      hashing_stack.clear();
-      walk_stack.clear();
-      _root = nullptr;
+      clear();
 
       size_t num_leaf_nodes = deserialise_uint64_t(bytes, position);
       num_flushed = deserialise_uint64_t(bytes, position);
@@ -1770,13 +1708,46 @@ namespace merkle
   protected:
     void validate_partial_range(size_t from, size_t to) const
     {
-      const bool from_out_of_range = from < min_index() || max_index() < from;
-      const bool to_out_of_range = to < min_index() || max_index() < to;
-      const bool reversed_range = from > to;
-      if (empty() || from_out_of_range || to_out_of_range || reversed_range)
+      if (
+        empty() || !(min_index() <= from && from <= to && to <= max_index()))
       {
         throw std::runtime_error("invalid leaf indices");
       }
+    }
+
+    void clear()
+    {
+      leaf_nodes.clear();
+      for (auto n : uninserted_leaf_nodes)
+      {
+        delete (n);
+      }
+      uninserted_leaf_nodes.clear();
+      insertion_stack.clear();
+      hashing_stack.clear();
+      walk_stack.clear();
+      delete (_root);
+      _root = nullptr;
+      num_flushed = 0;
+    }
+
+    void move_from(TreeT&& other) noexcept
+    {
+      leaf_nodes = std::move(other.leaf_nodes);
+      uninserted_leaf_nodes = std::move(other.uninserted_leaf_nodes);
+      _root = other._root;
+      num_flushed = other.num_flushed;
+      insertion_stack = std::move(other.insertion_stack);
+      hashing_stack = std::move(other.hashing_stack);
+      walk_stack = std::move(other.walk_stack);
+
+      other.leaf_nodes.clear();
+      other.uninserted_leaf_nodes.clear();
+      other._root = nullptr;
+      other.num_flushed = 0;
+      other.insertion_stack.clear();
+      other.hashing_stack.clear();
+      other.walk_stack.clear();
     }
 
     /// @brief Vector of leaf nodes current in the tree
