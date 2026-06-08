@@ -1741,7 +1741,6 @@ namespace merkle
       insertion_stack = std::exchange(other.insertion_stack, {});
       hashing_stack = std::exchange(other.hashing_stack, {});
       walk_stack = std::exchange(other.walk_stack, {});
-      other.clear();
     }
 
     /// @brief Vector of leaf nodes current in the tree
