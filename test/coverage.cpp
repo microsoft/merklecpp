@@ -265,6 +265,15 @@ namespace
     const auto expected_min = source.min_index();
     const auto expected_max = source.max_index();
 
+    merkle::Tree copy_assigned(hash_with_byte(0xEE));
+    copy_assigned = source;
+    require(copy_assigned.root() == expected_root, "copy assignment root mismatch");
+    require(copy_assigned.min_index() == expected_min, "copy assignment min mismatch");
+    require(copy_assigned.max_index() == expected_max, "copy assignment max mismatch");
+    require(
+      copy_assigned.leaf(expected_min) == source_hashes[expected_min],
+      "copy-assigned leaf mismatch");
+
     merkle::Tree moved(std::move(source));
     require(moved.root() == expected_root, "move constructor root mismatch");
     require(moved.min_index() == expected_min, "move constructor min mismatch");
@@ -307,12 +316,12 @@ int main()
   }
   catch (const std::exception& ex)
   {
-    std::cout << "Error: " << ex.what() << '\n';
+    std::cerr << "Error: " << ex.what() << '\n';
     return 1;
   }
   catch (...)
   {
-    std::cout << "Error" << '\n';
+    std::cerr << "Error" << '\n';
     return 1;
   }
 
