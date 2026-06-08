@@ -15,6 +15,7 @@
 #include <sstream>
 #include <stack>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #ifdef HAVE_OPENSSL
@@ -1733,21 +1734,14 @@ namespace merkle
 
     void move_from(TreeT& other) noexcept
     {
-      leaf_nodes = std::move(other.leaf_nodes);
-      uninserted_leaf_nodes = std::move(other.uninserted_leaf_nodes);
-      _root = other._root;
-      num_flushed = other.num_flushed;
-      insertion_stack = std::move(other.insertion_stack);
-      hashing_stack = std::move(other.hashing_stack);
-      walk_stack = std::move(other.walk_stack);
-
-      other.leaf_nodes.clear();
-      other.uninserted_leaf_nodes.clear();
-      other._root = nullptr;
-      other.num_flushed = 0;
-      other.insertion_stack.clear();
-      other.hashing_stack.clear();
-      other.walk_stack.clear();
+      leaf_nodes = std::exchange(other.leaf_nodes, {});
+      uninserted_leaf_nodes = std::exchange(other.uninserted_leaf_nodes, {});
+      _root = std::exchange(other._root, nullptr);
+      num_flushed = std::exchange(other.num_flushed, 0);
+      insertion_stack = std::exchange(other.insertion_stack, {});
+      hashing_stack = std::exchange(other.hashing_stack, {});
+      walk_stack = std::exchange(other.walk_stack, {});
+      other.clear();
     }
 
     /// @brief Vector of leaf nodes current in the tree
