@@ -35,7 +35,7 @@ jobs:
       run: sudo apt install doctest-dev clang clang-tidy
       if: matrix.os == 'ubuntu-latest'
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
     - name: Create Build Environment
       run: cmake -E make_directory ${{github.workspace}}/build/${{ matrix.build_type }}

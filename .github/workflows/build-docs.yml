@@ -19,7 +19,7 @@ jobs:
 
     steps:
     - name: Check out sources
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
     - name: Install dependencies
       run: |
@@ -45,7 +45,7 @@ jobs:
         # The above command will fail if no changes were present, so we ignore
         # the return code.
     - name: Push changes
-      uses: ad-m/github-push-action@master
+      uses: ad-m/github-push-action@d91a481090679876dfc4178fef17f286781251df # v0.8.0
       if: ${{ ! github.base_ref }}
       with:
         branch: gh-pages
