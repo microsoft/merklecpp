@@ -6,14 +6,15 @@ on:
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [ main ]
-  # schedule:
-  #   - cron: '22 12 * * 1'
+  schedule:
+    - cron: '22 12 * * 1'
 
 jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       security-events: write
 
@@ -25,6 +26,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      with:
+        persist-credentials: false
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
@@ -36,14 +39,14 @@ jobs:
         # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
     - name: Create Build Environment
-      run: cmake -E make_directory ${{github.workspace}}/build/${{ matrix.build_type }}
+      run: cmake -E make_directory ${{github.workspace}}/build
 
     - name: Configure merklecpp
-      working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
+      working-directory: ${{github.workspace}}/build
       run: cmake -DCMAKE_BUILD_TYPE=Debug -DTESTS=ON $GITHUB_WORKSPACE
 
     - name: Build merklecpp
-      working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
+      working-directory: ${{github.workspace}}/build
       run: cmake --build . --config Debug
 
     - name: Perform CodeQL Analysis
