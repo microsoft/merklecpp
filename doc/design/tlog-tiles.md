@@ -696,6 +696,12 @@ compatible":
   mitigate this.
 - **`flush_to` alignment.** Must flush only to a 256-multiple (minus retention)
   to uphold the coverage invariant; enforced inside `TiledTreeT::checkpoint`.
+- **Rollback vs. immutable tiles.** Tiles are write-once, so rolling the tree
+  back (`retract_to`) over already-tiled entries would leave stale, never-
+  rewritten tiles and is forbidden: `TiledTreeT::retract_to` throws if the
+  resulting size is below `checkpoint_size()`, permitting only rollback of the
+  un-tiled (post-checkpoint) frontier. Retracting the underlying tree directly
+  via `tree_ref()` bypasses this guard and must be avoided.
 - **Very large indices.** Index math uses `uint64_t`; encoding handles
   multi-group indices. Level bound `≤ 63` per spec (8 suffices for `2^64`).
 - **Open question — `subtree_root` in core vs. `past_path`-derived memory

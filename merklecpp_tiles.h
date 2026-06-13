@@ -1255,6 +1255,25 @@ namespace merkle
         return tree.min_index();
       }
 
+      /// @brief Rolls the tree back so that @p index becomes the last leaf,
+      /// removing all leaves after it (same semantics as TreeT::retract_to).
+      /// @note Tiles are immutable, so entries already committed to tiles
+      /// cannot be rolled back: this throws if the resulting size would be
+      /// smaller than checkpoint_size(). Only un-checkpointed (not-yet-tiled)
+      /// entries may be rolled back. (Retracting the underlying tree directly
+      /// via tree_ref() bypasses this guard and can leave stale tiles -- do not
+      /// do that.)
+      void retract_to(size_t index)
+      {
+        if ((uint64_t)index + 1 < tiles_size)
+        {
+          throw std::runtime_error(
+            "TiledTree::retract_to: cannot roll back entries already committed "
+            "to immutable tiles (resulting size < checkpoint size)");
+        }
+        tree.retract_to(index);
+      }
+
       /// @brief Inclusion proof for @p index in a tree of @p proof_size leaves.
       /// @note Served from tiles (flushed past) combined with the resident tree
       /// (recent frontier); @p proof_size may exceed checkpoint_size().

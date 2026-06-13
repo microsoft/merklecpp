@@ -255,6 +255,66 @@ int main()
 
     std::cout << "tiled tree (flush + combination): OK" << '\n';
 
+    // ---- Part 3: rollback. Only un-tiled (post-checkpoint) entries may be
+    //      rolled back; rolling back committed entries is refused.
+    {
+      TiledTree::Config cfg;
+      cfg.prefix = base / "rb";
+      TiledTree rb(cfg);
+      for (uint64_t i = 0; i < 300; i++)
+      {
+        rb.append(hashes[i]);
+      }
+      rb.checkpoint(); // tiles_size = 300
+      expect(rb.checkpoint_size() == 300, "rb checkpoint size");
+
+      // Append an un-tiled frontier, roll part of it back, then re-append
+      // DIFFERENT leaves. The tiled region [0,300) is never touched.
+      for (uint64_t i = 300; i < 400; i++)
+      {
+        rb.append(hashes[i]);
+      }
+      rb.retract_to(349); // keep [0,349], size 350
+      expect(rb.size() == 350, "rb retracted to 350");
+      for (uint64_t i = 350; i < 400; i++)
+      {
+        rb.append(hashes[1000 + i]); // different leaves
+      }
+      rb.checkpoint(); // tiles_size = 400
+
+      // Tile-derived root equals the tree root: no corruption.
+      merkle::tiles::TileHashSource src(rb.store_ref(), rb.checkpoint_size());
+      ProofEngine eng(src);
+      expect(
+        eng.root(rb.checkpoint_size()) == rb.tree_ref().root(),
+        "rb frontier rollback keeps tiles consistent");
+
+      // Rolling back already-tiled entries is refused.
+      bool threw = false;
+      try
+      {
+        rb.retract_to(100);
+      }
+      catch (const std::exception&)
+      {
+        threw = true;
+      }
+      expect(threw, "rb retract below tiled size throws");
+
+      // Boundary: resulting size tiles_size-1 (399 < 400) throws.
+      threw = false;
+      try
+      {
+        rb.retract_to(398);
+      }
+      catch (const std::exception&)
+      {
+        threw = true;
+      }
+      expect(threw, "rb retract to size 399 throws");
+    }
+    std::cout << "rollback: OK" << '\n';
+
     std::cout << "tiles_tree: OK" << '\n';
 
     std::error_code ec;
