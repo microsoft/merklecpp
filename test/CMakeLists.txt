@@ -31,6 +31,7 @@ add_merklecpp_test(serialise_to_file serialise_to_file.cpp)
 add_merklecpp_test(coverage coverage.cpp)
 add_merklecpp_test(tiles_store tiles_store.cpp)
 add_merklecpp_test(tiles_writer tiles_writer.cpp)
+add_merklecpp_test(tiles_proofs tiles_proofs.cpp)
 
 if(TARGET evercrypt.host)
   add_merklecpp_test(compare_evercrypt compare_evercrypt.cpp)

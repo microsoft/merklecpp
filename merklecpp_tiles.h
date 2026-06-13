@@ -622,11 +622,388 @@ namespace merkle
       }
     };
 
+    /// @brief Abstract source of Merkle subtree roots for proof generation.
+    /// @note Implementations resolve the root of a complete (balanced) subtree
+    /// from tiles, from an in-memory tree, or from a combination of the two.
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    struct HashSourceT
+    {
+      /// @brief The type of hashes resolved.
+      using Hash = HashT<HASH_SIZE>;
+
+      virtual ~HashSourceT() = default;
+
+      /// @brief Resolves MTH(D[index << level : (index + 1) << level]).
+      /// @param level The subtree height (the subtree spans 2**level leaves)
+      /// @param index The subtree index at that height
+      /// @param out Set to the subtree root on success
+      /// @return Whether the complete, balanced subtree could be resolved
+      virtual bool subtree_root(
+        uint8_t level, uint64_t index, Hash& out) const = 0;
+
+      /// @brief Resolves the level-0 leaf hash at @p index.
+      virtual bool leaf(uint64_t index, Hash& out) const
+      {
+        return subtree_root(0, index, out);
+      }
+    };
+
+    /// @brief Resolves subtree roots from tlog-tiles tile files.
+    /// @note @p available_size is the largest tree size whose tiles are durably
+    /// written; any complete subtree within it is resolvable. A missing tile
+    /// (e.g. a frontier partial that was not written) yields false so that a
+    /// proof builder can fall back to another source.
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class TileHashSourceT : public HashSourceT<HASH_SIZE, HASH_FUNCTION>
+    {
+    public:
+      using Hash = HashT<HASH_SIZE>;
+      using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
+
+      /// @brief Constructs a source over @p store for trees up to
+      /// @p available_size leaves.
+      TileHashSourceT(const Store& store, uint64_t available_size) :
+        store(store), available_size(available_size)
+      {}
+
+      bool subtree_root(uint8_t level, uint64_t index, Hash& out) const override
+      {
+        const uint8_t L = level / TILE_HEIGHT;
+        const uint8_t r = level % TILE_HEIGHT;
+        const uint64_t span = (uint64_t)1 << r; // entries spanned in level L
+        const uint64_t first = index << r; // first level-L entry index
+
+        const uint64_t entries = entries_at_level(available_size, L);
+        if (first + span > entries)
+        {
+          return false; // extends into the incomplete frontier
+        }
+
+        const uint64_t n = first / TILE_WIDTH;
+        const uint64_t off = first % TILE_WIDTH;
+
+        // Choose the full or current partial tile holding these entries.
+        TileRef ref{L, n, 0};
+        if ((n + 1) * TILE_WIDTH > entries)
+        {
+          ref.width = (uint16_t)(entries - n * TILE_WIDTH);
+        }
+        if (!store.has_tile(ref))
+        {
+          return false;
+        }
+
+        const std::vector<Hash> tile = store.read_tile(ref);
+        if (span == 1)
+        {
+          out = tile.at(off);
+          return true;
+        }
+        const std::vector<Hash> sub(
+          tile.begin() + off, tile.begin() + off + span);
+        out = perfect_root<HASH_SIZE, HASH_FUNCTION>(sub);
+        return true;
+      }
+
+    protected:
+      const Store& store;
+      uint64_t available_size;
+
+      static uint64_t entries_at_level(uint64_t size, uint8_t level)
+      {
+        const unsigned shift = 8u * (unsigned)level;
+        return shift >= 64 ? 0 : (size >> shift);
+      }
+    };
+
+    /// @brief Builds and verifies inclusion and consistency proofs.
+    /// @note Proofs are assembled from a HashSource using the tree's
+    /// HASH_FUNCTION, so an inclusion proof is byte-identical to the one
+    /// produced by merkle::TreeT::path()/past_path() and verifies with
+    /// PathT::verify().
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class ProofEngineT
+    {
+    public:
+      using Hash = HashT<HASH_SIZE>;
+      using Path = PathT<HASH_SIZE, HASH_FUNCTION>;
+      using Source = HashSourceT<HASH_SIZE, HASH_FUNCTION>;
+
+      explicit ProofEngineT(const Source& source) : source(source) {}
+
+      /// @brief The Merkle root of a tree of @p size leaves.
+      Hash root(uint64_t size) const
+      {
+        if (size == 0)
+        {
+          throw std::runtime_error("empty tree has no root");
+        }
+        Hash out;
+        if (!mth_range(0, size, out))
+        {
+          throw std::runtime_error("unresolved subtree while computing root");
+        }
+        return out;
+      }
+
+      /// @brief Inclusion proof for leaf @p index in a tree of @p size leaves.
+      /// @note Equivalent to TreeT::path(index) when size == num_leaves(), and
+      /// to TreeT::past_path(index, size - 1) otherwise.
+      std::shared_ptr<Path> inclusion_proof(uint64_t index, uint64_t size) const
+      {
+        if (index >= size)
+        {
+          throw std::runtime_error("leaf index out of bounds");
+        }
+
+        std::list<typename Path::Element> elements; // leaf -> root order
+        uint64_t lo = 0;
+        uint64_t hi = size;
+        while (hi - lo > 1)
+        {
+          const uint64_t k = largest_pow2_lt(hi - lo);
+          typename Path::Element e;
+          if (index - lo < k)
+          {
+            if (!mth_range(lo + k, hi, e.hash))
+            {
+              throw std::runtime_error("unresolved subtree in inclusion proof");
+            }
+            e.direction = Path::PATH_RIGHT;
+            hi = lo + k;
+          }
+          else
+          {
+            if (!mth_range(lo, lo + k, e.hash))
+            {
+              throw std::runtime_error("unresolved subtree in inclusion proof");
+            }
+            e.direction = Path::PATH_LEFT;
+            lo = lo + k;
+          }
+          elements.push_front(std::move(e));
+        }
+
+        Hash leaf;
+        if (!source.leaf(index, leaf))
+        {
+          throw std::runtime_error("unresolved leaf in inclusion proof");
+        }
+        return std::make_shared<Path>(
+          leaf, index, std::move(elements), size - 1);
+      }
+
+      /// @brief Consistency proof that a tree of @p m leaves is a prefix of a
+      /// tree of @p n leaves (RFC 6962).
+      std::vector<Hash> consistency_proof(uint64_t m, uint64_t n) const
+      {
+        if (m == 0 || m > n)
+        {
+          throw std::runtime_error("invalid consistency proof sizes");
+        }
+        std::vector<Hash> proof;
+        if (m == n)
+        {
+          return proof;
+        }
+        subproof(m, 0, n, true, proof);
+        return proof;
+      }
+
+      /// @brief Verifies an RFC 6962 consistency proof reconciling the roots of
+      /// trees of @p m and @p n leaves.
+      static bool verify_consistency(
+        uint64_t m,
+        uint64_t n,
+        const Hash& first_hash,
+        const Hash& second_hash,
+        std::vector<Hash> proof)
+      {
+        if (m > n)
+        {
+          return false;
+        }
+        if (m == n)
+        {
+          return proof.empty() && first_hash == second_hash;
+        }
+        if (m == 0)
+        {
+          return proof.empty();
+        }
+
+        if (is_pow2(m))
+        {
+          proof.insert(proof.begin(), first_hash);
+        }
+        if (proof.empty())
+        {
+          return false;
+        }
+
+        uint64_t fn = m - 1;
+        uint64_t sn = n - 1;
+        while ((fn & 1) != 0)
+        {
+          fn >>= 1;
+          sn >>= 1;
+        }
+
+        Hash fr = proof[0];
+        Hash sr = proof[0];
+        for (size_t i = 1; i < proof.size(); i++)
+        {
+          if (sn == 0)
+          {
+            return false;
+          }
+          const Hash& c = proof[i];
+          if ((fn & 1) != 0 || fn == sn)
+          {
+            HASH_FUNCTION(c, fr, fr);
+            HASH_FUNCTION(c, sr, sr);
+            if ((fn & 1) == 0)
+            {
+              while ((fn & 1) == 0 && fn != 0)
+              {
+                fn >>= 1;
+                sn >>= 1;
+              }
+            }
+          }
+          else
+          {
+            HASH_FUNCTION(sr, c, sr);
+          }
+          fn >>= 1;
+          sn >>= 1;
+        }
+
+        return fr == first_hash && sr == second_hash && sn == 0;
+      }
+
+    protected:
+      const Source& source;
+
+      static bool is_pow2(uint64_t n)
+      {
+        return n != 0 && (n & (n - 1)) == 0;
+      }
+
+      static uint64_t largest_pow2_lt(uint64_t n)
+      {
+        uint64_t k = 1;
+        while ((k << 1) < n)
+        {
+          k <<= 1;
+        }
+        return k;
+      }
+
+      static uint8_t log2_exact(uint64_t n)
+      {
+        uint8_t r = 0;
+        while (n > 1)
+        {
+          n >>= 1;
+          r++;
+        }
+        return r;
+      }
+
+      /// @brief MTH(D[a:b]) via the source; falls back to splitting when a
+      /// perfect subtree cannot be resolved directly.
+      bool mth_range(uint64_t a, uint64_t b, Hash& out) const
+      {
+        const uint64_t w = b - a;
+        if (w == 1)
+        {
+          return source.leaf(a, out);
+        }
+        if (is_pow2(w) && (a % w == 0))
+        {
+          if (source.subtree_root(log2_exact(w), a / w, out))
+          {
+            return true;
+          }
+        }
+        const uint64_t k = largest_pow2_lt(w);
+        Hash left;
+        Hash right;
+        if (!mth_range(a, a + k, left) || !mth_range(a + k, b, right))
+        {
+          return false;
+        }
+        HASH_FUNCTION(left, right, out);
+        return true;
+      }
+
+      void subproof(
+        uint64_t m,
+        uint64_t lo,
+        uint64_t hi,
+        bool complete,
+        std::vector<Hash>& proof) const
+      {
+        if (m == hi - lo)
+        {
+          if (!complete)
+          {
+            Hash h;
+            if (!mth_range(lo, hi, h))
+            {
+              throw std::runtime_error(
+                "unresolved subtree in consistency proof");
+            }
+            proof.push_back(h);
+          }
+          return;
+        }
+        const uint64_t k = largest_pow2_lt(hi - lo);
+        Hash h;
+        if (m <= k)
+        {
+          subproof(m, lo, lo + k, complete, proof);
+          if (!mth_range(lo + k, hi, h))
+          {
+            throw std::runtime_error("unresolved subtree in consistency proof");
+          }
+        }
+        else
+        {
+          subproof(m - k, lo + k, hi, false, proof);
+          if (!mth_range(lo, lo + k, h))
+          {
+            throw std::runtime_error("unresolved subtree in consistency proof");
+          }
+        }
+        proof.push_back(h);
+      }
+    };
+
     /// @brief Default tile store (SHA256, default hash function).
     using TileStore = TileStoreT<32, sha256_compress>;
 
     /// @brief Default tile writer (SHA256, default hash function).
     using TileWriter = TileWriterT<32, sha256_compress>;
+
+    /// @brief Default abstract hash source (SHA256, default hash function).
+    using HashSource = HashSourceT<32, sha256_compress>;
+
+    /// @brief Default tile-backed hash source (SHA256, default hash function).
+    using TileHashSource = TileHashSourceT<32, sha256_compress>;
+
+    /// @brief Default proof engine (SHA256, default hash function).
+    using ProofEngine = ProofEngineT<32, sha256_compress>;
 
 #ifdef HAVE_OPENSSL
     /// @brief SHA384 tile store.
@@ -640,6 +1017,16 @@ namespace merkle
 
     /// @brief SHA512 tile writer.
     using TileWriter512 = TileWriterT<64, sha512_openssl>;
+
+    /// @brief SHA384 hash source, tile-backed source and proof engine.
+    using HashSource384 = HashSourceT<48, sha384_openssl>;
+    using TileHashSource384 = TileHashSourceT<48, sha384_openssl>;
+    using ProofEngine384 = ProofEngineT<48, sha384_openssl>;
+
+    /// @brief SHA512 hash source, tile-backed source and proof engine.
+    using HashSource512 = HashSourceT<64, sha512_openssl>;
+    using TileHashSource512 = TileHashSourceT<64, sha512_openssl>;
+    using ProofEngine512 = ProofEngineT<64, sha512_openssl>;
 #endif
   }
 }
