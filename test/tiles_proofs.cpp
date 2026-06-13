@@ -49,8 +49,8 @@ static void check_size(
   }
   const Hash root = tree.root();
 
-  TileHashSource source(store, n);
-  ProofEngine engine(source);
+  const TileHashSource source(store, n);
+  const ProofEngine engine(source);
 
   // Root recomputed from tiles equals the library root.
   expect(engine.root(n) == root, "root" + at);
@@ -66,14 +66,15 @@ static void check_size(
   }
   else
   {
-    for (uint64_t i : {(uint64_t)0, (uint64_t)1, n / 3, n / 2, n - 2, n - 1})
+    for (const uint64_t i :
+         {(uint64_t)0, (uint64_t)1, n / 3, n / 2, n - 2, n - 1})
     {
       indices.push_back(i);
     }
   }
 
   // Inclusion proofs are identical to TreeT::path and verify.
-  for (uint64_t i : indices)
+  for (const uint64_t i : indices)
   {
     if (i >= n)
     {
@@ -98,14 +99,7 @@ static void check_size(
   }
   else
   {
-    for (auto pr :
-         {std::make_pair<uint64_t, uint64_t>(1, (uint64_t)n),
-          std::make_pair(n / 2, n),
-          std::make_pair(n - 1, n),
-          std::make_pair((uint64_t)1, (uint64_t)2)})
-    {
-      pairs.push_back(pr);
-    }
+    pairs = {{1, n}, {n / 2, n}, {n - 1, n}, {1, 2}};
     // Tile-boundary crossings.
     if (n > 256)
     {
@@ -118,7 +112,7 @@ static void check_size(
   {
     const uint64_t m = pr.first;
     const uint64_t k = pr.second;
-    if (!(m >= 1 && m < k && k <= n))
+    if (m == 0 || m >= k || k > n)
     {
       continue;
     }
@@ -149,13 +143,13 @@ static void check_size(
 
     // Tampering with a proof element or a root is rejected.
     auto bad = cp;
-    bad[0].bytes[0] ^= 0xFFu;
+    bad[0].bytes[0] ^= 0xFFU;
     expect(
       !ProofEngine::verify_consistency(m, k, rm, rk, bad),
       "consistency tamper rejected" + at);
 
     Hash wrong = rk;
-    wrong.bytes[0] ^= 0xFFu;
+    wrong.bytes[0] ^= 0xFFU;
     expect(
       !ProofEngine::verify_consistency(m, k, rm, wrong, cp),
       "consistency wrong root rejected" + at);
@@ -179,7 +173,7 @@ int main()
   {
     const auto hashes = make_hashes(70000);
 
-    for (uint64_t n :
+    for (const uint64_t n :
          {(uint64_t)1,
           (uint64_t)2,
           (uint64_t)3,

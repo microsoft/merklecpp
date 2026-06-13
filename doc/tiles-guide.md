@@ -131,7 +131,9 @@ log.retract_to(index);   // keep leaves [0, index], drop the rest
 
 Both proof types come from `TiledTree` (or, at a lower level, from
 `ProofEngine`). They are produced with your tree's hash function, so they match
-what `merkle::Tree` would produce.
+what `merkle::Tree` would produce. Requests outside the current tree (e.g. a
+size greater than `size()`, or an out-of-range index) throw `std::runtime_error`
+rather than returning an incorrect proof.
 
 ### Inclusion proofs
 

@@ -41,8 +41,8 @@ static void check_memory_source(uint64_t n, const std::vector<Hash>& hashes)
   }
   const Hash root = tree.root();
 
-  MemoryHashSource source(tree);
-  ProofEngine engine(source);
+  const MemoryHashSource source(tree);
+  const ProofEngine engine(source);
 
   expect(engine.root(n) == root, "mem root" + at);
 
@@ -56,13 +56,13 @@ static void check_memory_source(uint64_t n, const std::vector<Hash>& hashes)
   }
   else
   {
-    for (uint64_t i : {(uint64_t)0, (uint64_t)1, n / 2, n - 1})
+    for (const uint64_t i : {(uint64_t)0, (uint64_t)1, n / 2, n - 1})
     {
       indices.push_back(i);
     }
   }
 
-  for (uint64_t i : indices)
+  for (const uint64_t i : indices)
   {
     const auto p = engine.inclusion_proof(i, n);
     expect(
@@ -120,7 +120,7 @@ int main()
     const auto hashes = make_hashes(1500);
 
     // ---- Part 1: memory-source proofs (exercises TreeT::subtree_root).
-    for (uint64_t n :
+    for (const uint64_t n :
          {(uint64_t)1,
           (uint64_t)2,
           (uint64_t)3,
@@ -187,7 +187,7 @@ int main()
 
     // Indices that are: flushed (tiles only), in the checkpointed-but-resident
     // overlap, and on the un-checkpointed resident frontier.
-    for (uint64_t i :
+    for (const uint64_t i :
          {(uint64_t)0,
           (uint64_t)767,
           (uint64_t)800,
@@ -247,7 +247,7 @@ int main()
     expect(tt.checkpoint_size() == N, "second checkpoint size");
     expect(tt.tree_ref().min_index() == 1280, "flushed to 1280");
 
-    for (uint64_t i :
+    for (const uint64_t i :
          {(uint64_t)0,
           (uint64_t)1000,
           (uint64_t)1279,
@@ -320,7 +320,7 @@ int main()
         expect(rb.root() == exp_root, "rb root matches reference");
 
         // Proofs for a tiled index and a frontier index match the reference.
-        for (uint64_t i : {(uint64_t)100, (uint64_t)299, (uint64_t)399})
+        for (const uint64_t i : {(uint64_t)100, (uint64_t)299, (uint64_t)399})
         {
           const auto p = rb.inclusion_proof(i, 400);
           expect(

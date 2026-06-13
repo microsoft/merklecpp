@@ -22,7 +22,7 @@
 // byte-identical to those produced by merkle::TreeT (see
 // doc/design/tlog-tiles.md).
 
-namespace merkle
+namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 {
   namespace tiles
   {
@@ -212,7 +212,7 @@ namespace merkle
       {
         std::string text =
           std::to_string(size) + "\n" + root_hash.to_string() + "\n";
-        std::vector<uint8_t> bytes(text.begin(), text.end());
+        const std::vector<uint8_t> bytes(text.begin(), text.end());
         write_file_atomically(checkpoint_path(), bytes);
       }
 
@@ -309,14 +309,16 @@ namespace merkle
           {
             throw std::runtime_error("truncated entry bundle");
           }
-          const uint16_t len =
+          const auto len =
             (uint16_t)(((uint16_t)bytes[pos] << 8) | bytes[pos + 1]);
           pos += 2;
           if (pos + len > bytes.size())
           {
             throw std::runtime_error("truncated entry bundle");
           }
-          out.emplace_back(bytes.begin() + pos, bytes.begin() + pos + len);
+          out.emplace_back(
+            bytes.begin() + static_cast<std::ptrdiff_t>(pos),
+            bytes.begin() + static_cast<std::ptrdiff_t>(pos + len));
           pos += len;
         }
         return out;
@@ -345,9 +347,8 @@ namespace merkle
         {
           throw std::runtime_error("cannot open file: " + path.string());
         }
-        return std::vector<uint8_t>(
-          (std::istreambuf_iterator<char>(f)),
-          std::istreambuf_iterator<char>());
+        return {
+          std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
       }
 
       /// @brief Writes a file atomically via a temporary file and rename.
@@ -548,6 +549,7 @@ namespace merkle
 
     protected:
       /// @brief The tile store written to.
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
       Store& store;
 
       /// @brief Write-path options.
@@ -569,7 +571,7 @@ namespace merkle
       /// size.
       static uint64_t entries_at_level(uint64_t size, uint8_t level)
       {
-        const unsigned shift = 8u * (unsigned)level;
+        const unsigned shift = 8U * (unsigned)level;
         return shift >= 64 ? 0 : (size >> shift);
       }
 
@@ -794,12 +796,13 @@ namespace merkle
       }
 
     protected:
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
       const Store& store;
       uint64_t available_size;
 
       static uint64_t entries_at_level(uint64_t size, uint8_t level)
       {
-        const unsigned shift = 8u * (unsigned)level;
+        const unsigned shift = 8U * (unsigned)level;
         return shift >= 64 ? 0 : (size >> shift);
       }
     };
@@ -986,6 +989,7 @@ namespace merkle
       }
 
     protected:
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
       const Source& source;
 
       static bool is_pow2(uint64_t n)
@@ -1019,6 +1023,10 @@ namespace merkle
       bool mth_range(uint64_t a, uint64_t b, Hash& out) const
       {
         const uint64_t w = b - a;
+        if (w == 0)
+        {
+          return false;
+        }
         if (w == 1)
         {
           return source.leaf(a, out);
@@ -1106,6 +1114,7 @@ namespace merkle
       }
 
     protected:
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
       Tree& tree;
     };
 
@@ -1134,7 +1143,9 @@ namespace merkle
       }
 
     protected:
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
       const Source& primary;
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
       const Source& secondary;
     };
 
@@ -1409,6 +1420,7 @@ namespace merkle
       }
 
     protected:
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
       Store& store;
       Options options;
       uint64_t next_full = 0;

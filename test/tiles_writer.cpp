@@ -68,7 +68,7 @@ int main()
       expect(store.has_full_tile(0, 0), "A L0 full tile");
       expect(
         fs::file_size(store.tile_path(TileRef{0, 0, 0})) ==
-          256u * Hash().size(),
+          256U * Hash().size(),
         "A L0 full tile size");
       expect(!partial_dir_exists(store, 0, 0), "A no L0 partial");
       expect(!store.has_full_tile(1, 0), "A no L1 full tile");
@@ -116,7 +116,7 @@ int main()
       expect(store.has_tile(TileRef{0, 273, 112}), "B L0 partial width 112");
       expect(
         fs::file_size(store.tile_path(TileRef{0, 273, 112})) ==
-          112u * Hash().size(),
+          112U * Hash().size(),
         "B L0 partial size");
 
       expect(store.has_full_tile(1, 0), "B L1 tile 0");
