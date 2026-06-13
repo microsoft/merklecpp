@@ -230,6 +230,15 @@ int main()
         ProofEngine::verify_consistency(
           m, N, *ref.past_root(m - 1), ref_root, cp2),
         "consistency m->N across flush");
+
+      // Index-based variant: consistency_proof_from_indices(i, j) ==
+      // consistency_proof(i + 1, j + 1), spanning tiles and the live tree.
+      const auto cpi = tt.consistency_proof_from_indices(m - 1, N - 1);
+      expect(cpi == cp2, "consistency index variant across flush");
+      expect(
+        ProofEngine::verify_consistency(
+          m, N, *ref.past_root(m - 1), ref_root, cpi),
+        "consistency index variant verifies");
     }
 
     // A second checkpoint flushes further; proofs for now-flushed indices still

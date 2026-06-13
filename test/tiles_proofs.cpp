@@ -142,6 +142,11 @@ static void check_size(
       ProofEngine::verify_consistency(m, k, rm, rk, cp),
       "consistency " + std::to_string(m) + "->" + std::to_string(k) + at);
 
+    // The index-based variant is consistency_proof(i+1, j+1).
+    expect(
+      engine.consistency_proof_from_indices(m - 1, k - 1) == cp,
+      "consistency index variant" + at);
+
     // Tampering with a proof element or a root is rejected.
     auto bad = cp;
     bad[0].bytes[0] ^= 0xFFu;

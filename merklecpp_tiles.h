@@ -901,6 +901,18 @@ namespace merkle
         return proof;
       }
 
+      /// @brief Consistency proof between the trees whose last leaves are at
+      /// indices @p first_index and @p second_index (first_index <=
+      /// second_index).
+      /// @note Equivalent to consistency_proof(first_index + 1,
+      /// second_index + 1): it proves the tree of the first first_index + 1
+      /// leaves is a prefix of the tree of the first second_index + 1 leaves.
+      std::vector<Hash> consistency_proof_from_indices(
+        uint64_t first_index, uint64_t second_index) const
+      {
+        return consistency_proof(first_index + 1, second_index + 1);
+      }
+
       /// @brief Verifies an RFC 6962 consistency proof reconciling the roots of
       /// trees of @p m and @p n leaves.
       static bool verify_consistency(
@@ -1294,6 +1306,17 @@ namespace merkle
         CombinedHashSourceT<HASH_SIZE, HASH_FUNCTION> combined(mem, tile_src);
         ProofEngineT<HASH_SIZE, HASH_FUNCTION> engine(combined);
         return engine.consistency_proof(m, n);
+      }
+
+      /// @brief Consistency proof between the trees whose last leaves are at
+      /// indices @p first_index and @p second_index (first_index <=
+      /// second_index).
+      /// @note Equivalent to consistency_proof(first_index + 1,
+      /// second_index + 1).
+      std::vector<Hash> consistency_proof_from_indices(
+        uint64_t first_index, uint64_t second_index)
+      {
+        return consistency_proof(first_index + 1, second_index + 1);
       }
 
     protected:

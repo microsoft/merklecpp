@@ -163,6 +163,18 @@ bool ok = merkle::tiles::ProofEngine::verify_consistency(
 `verify_consistency` is a static helper, so you can verify on a client that only
 has the two roots and the proof.
 
+The arguments are tree **sizes** (leaf counts). If you have leaf **indices**
+instead, use the variant that maps index `i` to the tree of size `i + 1` (the
+"last leaf" convention, matching `past_path`/`retract_to`):
+
+```cpp
+// Equivalent to consistency_proof(i + 1, j + 1).
+auto proof = log.consistency_proof_from_indices(i, j);   // i <= j
+```
+
+Both `TiledTree` and the lower-level `ProofEngine` provide
+`consistency_proof_from_indices`.
+
 ## Lower-level building blocks
 
 If you manage your own tree/storage you can use the pieces directly instead of
