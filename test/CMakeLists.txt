@@ -33,6 +33,7 @@ add_merklecpp_test(tiles_store tiles_store.cpp)
 add_merklecpp_test(tiles_writer tiles_writer.cpp)
 add_merklecpp_test(tiles_proofs tiles_proofs.cpp)
 add_merklecpp_test(tiles_tree tiles_tree.cpp)
+add_merklecpp_test(tiles_entries tiles_entries.cpp)
 
 if(TARGET evercrypt.host)
   add_merklecpp_test(compare_evercrypt compare_evercrypt.cpp)

@@ -21,6 +21,40 @@ unusual features like flushing, retracting, and tree segment serialisation.
     assert(path->verify(root));
 
 
+## Tiled storage (tlog-tiles)
+
+The companion header `merklecpp_tiles.h` adds optional, header-only support for
+persisting a tree as [tlog-tiles](https://c2sp.org/tlog-tiles) tile files
+*progressively* (on compaction) and for retrieving inclusion and consistency
+proofs from those tiles, from the in-memory tree, or from a combination of the
+two. The hashing is unchanged: tiles and tile-derived proofs are templated on
+the tree's existing hash function, so a tile-derived inclusion proof is
+byte-identical to one from `merkle::Tree::path()` and verifies with the same
+`merkle::Path::verify()`.
+
+    #include <merklecpp_tiles.h>
+
+    merkle::tiles::TiledTree::Config cfg;
+    cfg.prefix = "/var/log/mylog";   // tile files and checkpoint live here
+    cfg.retention_margin = 1024;     // keep the most recent leaves in memory
+
+    merkle::tiles::TiledTree log(cfg);
+    for (const auto& leaf_hash : batch)
+      log.append(leaf_hash);
+
+    // Write newly-complete tiles and a checkpoint, then compact (flush) memory.
+    log.checkpoint();
+
+    // Proofs are served from tiles + the resident tree, even for flushed leaves.
+    auto inclusion = log.inclusion_proof(/*index=*/0, log.size());
+    assert(inclusion->verify(log.root()));
+
+    auto consistency = log.consistency_proof(/*m=*/100, /*n=*/log.size());
+
+See [doc/design/tlog-tiles.md](doc/design/tlog-tiles.md) for the full design,
+file/directory layout, and the proof algorithms.
+
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

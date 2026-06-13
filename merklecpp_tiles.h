@@ -240,6 +240,88 @@ namespace merkle
         return true;
       }
 
+      /// @brief Whether a full entry bundle exists on disk.
+      [[nodiscard]] bool has_entry_bundle(uint64_t index) const
+      {
+        return std::filesystem::exists(entries_path(index, 0));
+      }
+
+      /// @brief Writes an entry bundle to disk atomically.
+      /// @param index The bundle index
+      /// @param width The bundle width; 0 denotes a full bundle (TILE_WIDTH)
+      /// @param entries The raw log entries (exactly width, or TILE_WIDTH)
+      /// @note Entries are stored in the tlog-tiles entry-bundle format: a
+      /// sequence of big-endian uint16 length-prefixed byte strings.
+      void write_entry_bundle(
+        uint64_t index,
+        uint16_t width,
+        const std::vector<std::vector<uint8_t>>& entries)
+      {
+        const uint16_t expected = width == 0 ? TILE_WIDTH : width;
+        if (entries.size() != expected)
+        {
+          throw std::runtime_error("entry bundle width mismatch");
+        }
+        write_file_atomically(
+          entries_path(index, width), encode_entries(entries));
+      }
+
+      /// @brief Reads an entry bundle from disk.
+      /// @param index The bundle index
+      /// @param width The bundle width; 0 denotes a full bundle (TILE_WIDTH)
+      /// @return The raw log entries
+      [[nodiscard]] std::vector<std::vector<uint8_t>> read_entry_bundle(
+        uint64_t index, uint16_t width = 0) const
+      {
+        const uint16_t count = width == 0 ? TILE_WIDTH : width;
+        return decode_entries(read_file(entries_path(index, width)), count);
+      }
+
+      /// @brief Encodes log entries into the tlog-tiles entry-bundle format.
+      static std::vector<uint8_t> encode_entries(
+        const std::vector<std::vector<uint8_t>>& entries)
+      {
+        std::vector<uint8_t> bytes;
+        for (const auto& e : entries)
+        {
+          if (e.size() > 0xFFFF)
+          {
+            throw std::runtime_error(
+              "entry too large for uint16 length prefix");
+          }
+          bytes.push_back((uint8_t)((e.size() >> 8) & 0xFF));
+          bytes.push_back((uint8_t)(e.size() & 0xFF));
+          bytes.insert(bytes.end(), e.begin(), e.end());
+        }
+        return bytes;
+      }
+
+      /// @brief Decodes @p count entries from the entry-bundle format.
+      static std::vector<std::vector<uint8_t>> decode_entries(
+        const std::vector<uint8_t>& bytes, size_t count)
+      {
+        std::vector<std::vector<uint8_t>> out;
+        out.reserve(count);
+        size_t pos = 0;
+        for (size_t i = 0; i < count; i++)
+        {
+          if (pos + 2 > bytes.size())
+          {
+            throw std::runtime_error("truncated entry bundle");
+          }
+          const uint16_t len =
+            (uint16_t)(((uint16_t)bytes[pos] << 8) | bytes[pos + 1]);
+          pos += 2;
+          if (pos + len > bytes.size())
+          {
+            throw std::runtime_error("truncated entry bundle");
+          }
+          out.emplace_back(bytes.begin() + pos, bytes.begin() + pos + len);
+          pos += len;
+        }
+        return out;
+      }
+
     protected:
       /// @brief The root directory of the store.
       std::filesystem::path prefix;
@@ -1182,6 +1264,187 @@ namespace merkle
       uint64_t tiles_size = 0;
     };
 
+    /// @brief Writes tlog-tiles entry bundles (raw log entries) for a growing
+    /// log.
+    /// @note Entry bundles are level-0 only and application-owned: merklecpp
+    /// stores leaf hashes, while the raw entries (and the leaf-hash derivation
+    /// linking each entry to its level-0 tile hash) are the application's
+    /// responsibility. Full bundles are immutable and written once; only the
+    /// rightmost partial bundle may grow or be removed once superseded.
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class EntryBundleWriterT
+    {
+    public:
+      using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
+
+      /// @brief Supplies the raw bytes of the log entry at a given index.
+      using EntryFn = std::function<std::vector<uint8_t>(uint64_t)>;
+
+      /// @brief Write-path options.
+      struct Options
+      {
+        /// @brief Write the partial (rightmost) bundle for the current size.
+        bool write_partial = true;
+
+        /// @brief Remove a partial bundle once superseded by a full bundle (or
+        /// a wider partial at the same index).
+        bool remove_superseded_partials = true;
+      };
+
+      /// @brief Counts of work performed by a write_up_to call.
+      struct Stats
+      {
+        uint64_t full_written = 0;
+        uint64_t partial_written = 0;
+        uint64_t partial_removed = 0;
+      };
+
+      explicit EntryBundleWriterT(Store& store, Options options = {}) :
+        store(store), options(options)
+      {}
+
+      /// @brief Writes all newly-complete full bundles and the partial bundle
+      /// for a log of @p size entries.
+      /// @param size The current number of entries
+      /// @param entry_at Returns the raw bytes of the entry at an index in
+      /// [0, size)
+      /// @return Counts of bundles written/removed
+      Stats write_up_to(uint64_t size, const EntryFn& entry_at)
+      {
+        Stats stats;
+        const uint64_t full = size / TILE_WIDTH;
+
+        if (!cursor_inited)
+        {
+          next_full = full_prefix_length();
+          cursor_inited = true;
+        }
+
+        for (uint64_t n = next_full; n < full; n++)
+        {
+          if (store.has_entry_bundle(n))
+          {
+            continue; // immutable: never rewrite an existing full bundle
+          }
+          store.write_entry_bundle(
+            n, 0, collect(n * TILE_WIDTH, TILE_WIDTH, entry_at));
+          stats.full_written++;
+        }
+        if (full > next_full)
+        {
+          next_full = full;
+        }
+
+        if (options.write_partial)
+        {
+          write_partial(full, (uint16_t)(size % TILE_WIDTH), entry_at, stats);
+        }
+        return stats;
+      }
+
+    protected:
+      Store& store;
+      Options options;
+      uint64_t next_full = 0;
+      bool cursor_inited = false;
+      uint64_t last_partial_index = 0;
+      uint16_t last_partial_width = 0;
+      bool has_last_partial = false;
+
+      std::vector<std::vector<uint8_t>> collect(
+        uint64_t first, uint64_t count, const EntryFn& entry_at)
+      {
+        std::vector<std::vector<uint8_t>> out;
+        out.reserve(count);
+        for (uint64_t i = 0; i < count; i++)
+        {
+          out.push_back(entry_at(first + i));
+        }
+        return out;
+      }
+
+      [[nodiscard]] uint64_t full_prefix_length() const
+      {
+        if (!store.has_entry_bundle(0))
+        {
+          return 0;
+        }
+        uint64_t lo = 0;
+        uint64_t hi = 1;
+        while (store.has_entry_bundle(hi))
+        {
+          lo = hi;
+          hi <<= 1;
+        }
+        while (hi - lo > 1)
+        {
+          const uint64_t mid = lo + (hi - lo) / 2;
+          if (store.has_entry_bundle(mid))
+          {
+            lo = mid;
+          }
+          else
+          {
+            hi = mid;
+          }
+        }
+        return lo + 1;
+      }
+
+      void write_partial(
+        uint64_t index, uint16_t width, const EntryFn& entry_at, Stats& stats)
+      {
+        if (width == 0)
+        {
+          if (options.remove_superseded_partials && has_last_partial)
+          {
+            remove_partial(last_partial_index);
+            has_last_partial = false;
+            stats.partial_removed++;
+          }
+          return;
+        }
+
+        if (
+          has_last_partial && last_partial_index == index &&
+          last_partial_width == width)
+        {
+          return;
+        }
+
+        if (options.remove_superseded_partials && has_last_partial)
+        {
+          if (last_partial_index != index)
+          {
+            remove_partial(last_partial_index);
+            stats.partial_removed++;
+          }
+          else
+          {
+            remove_partial(index);
+          }
+        }
+
+        store.write_entry_bundle(
+          index, width, collect(index * TILE_WIDTH, width, entry_at));
+        stats.partial_written++;
+        last_partial_index = index;
+        last_partial_width = width;
+        has_last_partial = true;
+      }
+
+      void remove_partial(uint64_t index)
+      {
+        const std::filesystem::path dir =
+          store.entries_path(index, 1).parent_path();
+        std::error_code ec;
+        std::filesystem::remove_all(dir, ec);
+      }
+    };
+
     /// @brief Default tile store (SHA256, default hash function).
     using TileStore = TileStoreT<32, sha256_compress>;
 
@@ -1205,6 +1468,9 @@ namespace merkle
 
     /// @brief Default tiled tree (SHA256, default hash function).
     using TiledTree = TiledTreeT<32, sha256_compress>;
+
+    /// @brief Default entry-bundle writer (SHA256, default hash function).
+    using EntryBundleWriter = EntryBundleWriterT<32, sha256_compress>;
 
 #ifdef HAVE_OPENSSL
     /// @brief SHA384 tile store.
@@ -1238,6 +1504,10 @@ namespace merkle
     using MemoryHashSource512 = MemoryHashSourceT<64, sha512_openssl>;
     using CombinedHashSource512 = CombinedHashSourceT<64, sha512_openssl>;
     using TiledTree512 = TiledTreeT<64, sha512_openssl>;
+
+    /// @brief SHA384/512 entry-bundle writers.
+    using EntryBundleWriter384 = EntryBundleWriterT<48, sha384_openssl>;
+    using EntryBundleWriter512 = EntryBundleWriterT<64, sha512_openssl>;
 #endif
   }
 }
