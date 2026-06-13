@@ -255,63 +255,145 @@ int main()
 
     std::cout << "tiled tree (flush + combination): OK" << '\n';
 
-    // ---- Part 3: rollback. Only un-tiled (post-checkpoint) entries may be
-    //      rolled back; rolling back committed entries is refused.
+    // ---- Part 3: rollback. Tiles are immutable, so only un-tiled
+    //      (post-checkpoint) entries may be rolled back.
     {
-      TiledTree::Config cfg;
-      cfg.prefix = base / "rb";
-      TiledTree rb(cfg);
-      for (uint64_t i = 0; i < 300; i++)
+      // 3a. Before any checkpoint nothing is tiled, so rollback is
+      // unrestricted.
       {
-        rb.append(hashes[i]);
+        TiledTree::Config cfg;
+        cfg.prefix = base / "rb_pre";
+        TiledTree rb(cfg);
+        for (uint64_t i = 0; i < 50; i++)
+        {
+          rb.append(hashes[i]);
+        }
+        rb.retract_to(29); // tiles_size == 0 -> allowed
+        expect(rb.size() == 30, "rb pre-checkpoint retract allowed");
       }
-      rb.checkpoint(); // tiles_size = 300
-      expect(rb.checkpoint_size() == 300, "rb checkpoint size");
 
-      // Append an un-tiled frontier, roll part of it back, then re-append
-      // DIFFERENT leaves. The tiled region [0,300) is never touched.
-      for (uint64_t i = 300; i < 400; i++)
+      // 3b. After a checkpoint, the un-tiled frontier can be rolled back and
+      // the
+      //     tiled region stays consistent and provable; committed entries
+      //     can't.
       {
-        rb.append(hashes[i]);
-      }
-      rb.retract_to(349); // keep [0,349], size 350
-      expect(rb.size() == 350, "rb retracted to 350");
-      for (uint64_t i = 350; i < 400; i++)
-      {
-        rb.append(hashes[1000 + i]); // different leaves
-      }
-      rb.checkpoint(); // tiles_size = 400
+        TiledTree::Config cfg;
+        cfg.prefix = base / "rb";
+        TiledTree rb(cfg);
+        for (uint64_t i = 0; i < 300; i++)
+        {
+          rb.append(hashes[i]);
+        }
+        rb.checkpoint(); // tiles_size = 300
+        for (uint64_t i = 300; i < 400; i++)
+        {
+          rb.append(hashes[i]);
+        }
+        rb.retract_to(349); // keep [0,349]
+        expect(rb.size() == 350, "rb retracted to 350");
+        for (uint64_t i = 350; i < 400; i++)
+        {
+          rb.append(hashes[1000 + i]); // re-append DIFFERENT leaves
+        }
+        rb.checkpoint(); // tiles_size = 400
 
-      // Tile-derived root equals the tree root: no corruption.
-      merkle::tiles::TileHashSource src(rb.store_ref(), rb.checkpoint_size());
-      ProofEngine eng(src);
-      expect(
-        eng.root(rb.checkpoint_size()) == rb.tree_ref().root(),
-        "rb frontier rollback keeps tiles consistent");
+        // Reference tree of the exact post-rollback state.
+        merkle::Tree exp_tree;
+        for (uint64_t i = 0; i < 350; i++)
+        {
+          exp_tree.insert(hashes[i]);
+        }
+        for (uint64_t i = 350; i < 400; i++)
+        {
+          exp_tree.insert(hashes[1000 + i]);
+        }
+        const Hash exp_root = exp_tree.root();
+        expect(rb.root() == exp_root, "rb root matches reference");
 
-      // Rolling back already-tiled entries is refused.
-      bool threw = false;
-      try
-      {
-        rb.retract_to(100);
-      }
-      catch (const std::exception&)
-      {
-        threw = true;
-      }
-      expect(threw, "rb retract below tiled size throws");
+        // Proofs for a tiled index and a frontier index match the reference.
+        for (uint64_t i : {(uint64_t)100, (uint64_t)299, (uint64_t)399})
+        {
+          const auto p = rb.inclusion_proof(i, 400);
+          expect(
+            *p == *exp_tree.path(i),
+            "rb inclusion==ref i=" + std::to_string(i));
+          expect(
+            p->verify(exp_root), "rb inclusion verify i=" + std::to_string(i));
+        }
+        const auto cp = rb.consistency_proof(300, 400);
+        expect(
+          ProofEngine::verify_consistency(
+            300, 400, *exp_tree.past_root(299), exp_root, cp),
+          "rb consistency 300->400");
 
-      // Boundary: resulting size tiles_size-1 (399 < 400) throws.
-      threw = false;
-      try
-      {
-        rb.retract_to(398);
+        // Rolling back committed entries is refused (below and at the
+        // boundary); rolling back to exactly the tiled size removes nothing and
+        // is allowed.
+        bool threw = false;
+        try
+        {
+          rb.retract_to(100);
+        }
+        catch (const std::exception&)
+        {
+          threw = true;
+        }
+        expect(threw, "rb retract below tiled size throws");
+        threw = false;
+        try
+        {
+          rb.retract_to(398);
+        }
+        catch (const std::exception&)
+        {
+          threw = true;
+        }
+        expect(threw, "rb retract to size 399 throws");
+        rb.retract_to(399);
+        expect(rb.size() == 400, "rb retract to tiled size is a no-op");
       }
-      catch (const std::exception&)
+
+      // 3c. Rollback interacts correctly with compaction (flushed + tiled
+      // past).
       {
-        threw = true;
+        TiledTree::Config cfg;
+        cfg.prefix = base / "rb_compact";
+        cfg.compact_on_checkpoint = true;
+        TiledTree rb(cfg);
+        for (uint64_t i = 0; i < 1000; i++)
+        {
+          rb.append(hashes[i]);
+        }
+        rb.checkpoint(); // tiles_size = 1000; flush to 768
+        expect(rb.tree_ref().min_index() == 768, "rb compact flushed to 768");
+        for (uint64_t i = 1000; i < 1200; i++)
+        {
+          rb.append(hashes[i]);
+        }
+        rb.retract_to(1099); // frontier rollback (>= tiles_size) is allowed
+        expect(rb.size() == 1100, "rb compact frontier retract ok");
+
+        merkle::Tree exp_tree;
+        for (uint64_t i = 0; i < 1100; i++)
+        {
+          exp_tree.insert(hashes[i]);
+        }
+        const Hash exp_root = exp_tree.root();
+        const auto p = rb.inclusion_proof(0, 1100); // leaf 0 is flushed + tiled
+        expect(*p == *exp_tree.path(0), "rb compact flushed inclusion==ref");
+        expect(p->verify(exp_root), "rb compact flushed inclusion verify");
+
+        bool threw = false;
+        try
+        {
+          rb.retract_to(500);
+        }
+        catch (const std::exception&)
+        {
+          threw = true;
+        }
+        expect(threw, "rb compact retract below tiled throws");
       }
-      expect(threw, "rb retract to size 399 throws");
     }
     std::cout << "rollback: OK" << '\n';
 

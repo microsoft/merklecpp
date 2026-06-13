@@ -54,7 +54,9 @@ byte-identical to one from `merkle::Tree::path()` and verifies with the same
 
     auto consistency = log.consistency_proof(/*m=*/100, /*n=*/log.size());
 
-See [doc/design/tlog-tiles.md](doc/design/tlog-tiles.md) for the full design,
+See the [tiled storage guide](doc/tiles-guide.md) for a how-to covering
+checkpoints, compaction, rollback, proofs, and the lower-level building blocks,
+and [doc/design/tlog-tiles.md](doc/design/tlog-tiles.md) for the full design,
 file/directory layout, and the proof algorithms.
 
 
