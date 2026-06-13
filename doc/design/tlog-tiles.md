@@ -509,7 +509,8 @@ class TiledTreeT {
 public:
   struct Config {
     std::filesystem::path prefix;
-    uint64_t retention_margin = 0;    // keep this many recent leaves resident
+    uint64_t retention_margin = 0;       // keep this many recent leaves resident
+    bool compact_on_checkpoint = false;  // opt in to dropping tiled leaves
     TileWriterT::Options writer = {};
   };
   explicit TiledTreeT(Config);
@@ -518,8 +519,13 @@ public:
   uint64_t size() const;                              // tree.num_leaves
   Hash root();                                        // tree.root
 
-  // Write newly-complete tiles + partials + checkpoint, then flush_to(coverage).
-  void checkpoint();
+  // Write newly-complete tiles + partials + checkpoint. Compaction (dropping
+  // already-tiled leaves from memory) happens only if compact_on_checkpoint.
+  Stats checkpoint();
+
+  // Drop from memory the leaves already covered by a full tile (opt-in);
+  // proofs for dropped leaves remain available from the tiles.
+  uint64_t compact();
 
   // Proofs over tiles ∪ resident tree (works for flushed indices).
   std::shared_ptr<Path> inclusion_proof(uint64_t index, uint64_t size);
@@ -562,7 +568,9 @@ Per checkpoint:
 2. `write_up_to(size, leaf_at)` — persist newly-complete **full** tiles at all
    levels (incremental) and the **partial** tiles for `size`.
 3. `write_checkpoint(size, root)`.
-4. `flush_to(covered − retention_margin)` — reclaim memory.
+4. *(optional)* `compact()` → `flush_to(covered − retention_margin)` — reclaim
+   memory, only when `compact_on_checkpoint` is set (or `compact()` is called
+   explicitly). By default nothing is dropped and the tree stays whole.
 
 Given the invariant, every leaf and every perfect subtree is resolvable:
 

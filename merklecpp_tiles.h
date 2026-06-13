@@ -1127,11 +1127,12 @@ namespace merkle
     };
 
     /// @brief A merkle tree backed by tlog-tiles storage.
-    /// @note Appends grow an in-memory tree; checkpoint() durably writes tiles
-    /// and a checkpoint, then compacts memory by flushing the leaves now
-    /// covered by full tiles. Proofs are served from the combination of the
-    /// resident tree and the tiles, so they remain available for flushed
-    /// (compacted) leaves.
+    /// @note Appends grow an in-memory tree; checkpoint() durably writes the
+    /// tiles. Compaction (dropping from memory the leaves already covered by a
+    /// durably-written full tile) is optional: enable it per checkpoint with
+    /// Config::compact_on_checkpoint, or call compact() explicitly. Proofs are
+    /// served from the combination of the resident tree and the tiles, so they
+    /// remain available for compacted (dropped) leaves.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -1152,9 +1153,14 @@ namespace merkle
         /// @brief Root directory for tiles and the checkpoint.
         std::filesystem::path prefix;
 
-        /// @brief Number of most-recent leaves to keep resident across a
-        /// checkpoint (i.e. not flushed).
+        /// @brief Number of most-recent leaves to keep resident when
+        /// compacting (i.e. never dropped from memory).
         uint64_t retention_margin = 0;
+
+        /// @brief If set, checkpoint() compacts after writing tiles, dropping
+        /// from memory the leaves already covered by a full tile. Off by
+        /// default: tiles are written but the tree keeps every leaf resident.
+        bool compact_on_checkpoint = false;
 
         /// @brief Tile writer options.
         typename Writer::Options writer = {};
@@ -1202,7 +1208,8 @@ namespace merkle
         return store;
       }
 
-      /// @brief Writes tiles and a checkpoint, then compacts memory.
+      /// @brief Writes tiles and a checkpoint; compacts only if
+      /// Config::compact_on_checkpoint is set.
       /// @return Counts of the tiles written/removed by this checkpoint
       Stats checkpoint()
       {
@@ -1219,10 +1226,24 @@ namespace merkle
         store.write_checkpoint(n, tree.root());
         tiles_size = n;
 
-        // Compaction: flush to the durable full-tile coverage, keeping the
-        // retention margin resident. The flush target is a multiple of
-        // TILE_WIDTH so the coverage invariant (min_index <= covered) holds.
-        const uint64_t covered = (n / TILE_WIDTH) * TILE_WIDTH;
+        if (config.compact_on_checkpoint)
+        {
+          compact();
+        }
+        return stats;
+      }
+
+      /// @brief Drops from the in-memory tree every leaf already covered by a
+      /// durably-written full tile, keeping retention_margin recent leaves.
+      /// @return The new minimum (smallest still-resident) leaf index
+      /// @note Only leaves whose full tile already exists are dropped, so
+      /// inclusion and consistency proofs remain available (served from the
+      /// tiles). Has no effect until tiling has produced full tiles. The flush
+      /// target is a multiple of TILE_WIDTH, so the coverage invariant
+      /// (min_index <= durable full-tile coverage) always holds.
+      uint64_t compact()
+      {
+        const uint64_t covered = (tiles_size / TILE_WIDTH) * TILE_WIDTH;
         uint64_t target = covered > config.retention_margin ?
           covered - config.retention_margin :
           0;
@@ -1231,7 +1252,7 @@ namespace merkle
         {
           tree.flush_to((size_t)target);
         }
-        return stats;
+        return tree.min_index();
       }
 
       /// @brief Inclusion proof for @p index in a tree of @p proof_size leaves.

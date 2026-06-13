@@ -148,18 +148,35 @@ int main()
     }
     const Hash ref_root = ref.root();
 
+    // Default mode: checkpoint() writes tiles but drops nothing from memory;
+    // an explicit compact() drops only the leaves already covered by a tile.
+    {
+      TiledTree::Config dcfg;
+      dcfg.prefix = base / "tt_default";
+      TiledTree dtt(dcfg);
+      for (uint64_t i = 0; i < n1; i++)
+      {
+        dtt.append(hashes[i]);
+      }
+      dtt.checkpoint();
+      expect(dtt.tree_ref().min_index() == 0, "default: nothing dropped");
+      dtt.compact();
+      expect(dtt.tree_ref().min_index() == 768, "compact() drops to 768");
+    }
+
     TiledTree::Config cfg;
     cfg.prefix = base / "tt";
     cfg.retention_margin = 0;
+    cfg.compact_on_checkpoint = true;
     TiledTree tt(cfg);
 
     for (uint64_t i = 0; i < n1; i++)
     {
       tt.append(hashes[i]);
     }
-    tt.checkpoint(); // tiles_size = 1000; flush to covered = 768
+    tt.checkpoint(); // tiles_size = 1000; compact to covered = 768
     expect(tt.checkpoint_size() == n1, "checkpoint size");
-    expect(tt.tree_ref().min_index() == 768, "flushed to 768");
+    expect(tt.tree_ref().min_index() == 768, "compacted to 768");
 
     for (uint64_t i = n1; i < N; i++)
     {

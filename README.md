@@ -25,9 +25,9 @@ unusual features like flushing, retracting, and tree segment serialisation.
 
 The companion header `merklecpp_tiles.h` adds optional, header-only support for
 persisting a tree as [tlog-tiles](https://c2sp.org/tlog-tiles) tile files
-*progressively* (on compaction) and for retrieving inclusion and consistency
-proofs from those tiles, from the in-memory tree, or from a combination of the
-two. The hashing is unchanged: tiles and tile-derived proofs are templated on
+*progressively* (optionally dropping already-tiled leaves from memory) and for
+retrieving inclusion and consistency proofs from those tiles, from the in-memory
+tree, or from a combination of the two. The hashing is unchanged: tiles and tile-derived proofs are templated on
 the tree's existing hash function, so a tile-derived inclusion proof is
 byte-identical to one from `merkle::Tree::path()` and verifies with the same
 `merkle::Path::verify()`.
@@ -35,14 +35,17 @@ byte-identical to one from `merkle::Tree::path()` and verifies with the same
     #include <merklecpp_tiles.h>
 
     merkle::tiles::TiledTree::Config cfg;
-    cfg.prefix = "/var/log/mylog";   // tile files and checkpoint live here
-    cfg.retention_margin = 1024;     // keep the most recent leaves in memory
+    cfg.prefix = "/var/log/mylog";       // tile files and checkpoint live here
+    cfg.retention_margin = 1024;         // keep the most recent leaves in memory
+    cfg.compact_on_checkpoint = true;    // opt in to dropping already-tiled leaves
 
     merkle::tiles::TiledTree log(cfg);
     for (const auto& leaf_hash : batch)
       log.append(leaf_hash);
 
-    // Write newly-complete tiles and a checkpoint, then compact (flush) memory.
+    // Write newly-complete tiles (and a checkpoint). With compaction enabled
+    // this also drops from memory the leaves already covered by a full tile;
+    // otherwise the tree keeps every leaf and you can call log.compact() later.
     log.checkpoint();
 
     // Proofs are served from tiles + the resident tree, even for flushed leaves.
