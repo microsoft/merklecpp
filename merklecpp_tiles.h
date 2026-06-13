@@ -990,6 +990,198 @@ namespace merkle
       }
     };
 
+    /// @brief Resolves subtree roots from an in-memory merkle::TreeT.
+    /// @note Resolves only complete subtrees that are fully resident (not
+    /// flushed), returning false otherwise so that a builder can fall back to
+    /// another source. Performs no hashing changes (see TreeT::subtree_root).
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class MemoryHashSourceT : public HashSourceT<HASH_SIZE, HASH_FUNCTION>
+    {
+    public:
+      using Hash = HashT<HASH_SIZE>;
+      using Tree = TreeT<HASH_SIZE, HASH_FUNCTION>;
+
+      explicit MemoryHashSourceT(Tree& tree) : tree(tree) {}
+
+      bool subtree_root(uint8_t level, uint64_t index, Hash& out) const override
+      {
+        return tree.subtree_root(level, (size_t)index, out);
+      }
+
+    protected:
+      Tree& tree;
+    };
+
+    /// @brief Resolves subtree roots from a primary source, falling back to a
+    /// secondary source.
+    /// @note Used to combine an in-memory tree (primary: no I/O, serves the
+    /// resident frontier) with tile files (secondary: serve the flushed past).
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class CombinedHashSourceT : public HashSourceT<HASH_SIZE, HASH_FUNCTION>
+    {
+    public:
+      using Hash = HashT<HASH_SIZE>;
+      using Source = HashSourceT<HASH_SIZE, HASH_FUNCTION>;
+
+      CombinedHashSourceT(const Source& primary, const Source& secondary) :
+        primary(primary), secondary(secondary)
+      {}
+
+      bool subtree_root(uint8_t level, uint64_t index, Hash& out) const override
+      {
+        return primary.subtree_root(level, index, out) ||
+          secondary.subtree_root(level, index, out);
+      }
+
+    protected:
+      const Source& primary;
+      const Source& secondary;
+    };
+
+    /// @brief A merkle tree backed by tlog-tiles storage.
+    /// @note Appends grow an in-memory tree; checkpoint() durably writes tiles
+    /// and a checkpoint, then compacts memory by flushing the leaves now
+    /// covered by full tiles. Proofs are served from the combination of the
+    /// resident tree and the tiles, so they remain available for flushed
+    /// (compacted) leaves.
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class TiledTreeT
+    {
+    public:
+      using Hash = HashT<HASH_SIZE>;
+      using Tree = TreeT<HASH_SIZE, HASH_FUNCTION>;
+      using Path = PathT<HASH_SIZE, HASH_FUNCTION>;
+      using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
+      using Writer = TileWriterT<HASH_SIZE, HASH_FUNCTION>;
+      using Stats = typename Writer::Stats;
+
+      /// @brief Configuration for a tiled tree.
+      struct Config
+      {
+        /// @brief Root directory for tiles and the checkpoint.
+        std::filesystem::path prefix;
+
+        /// @brief Number of most-recent leaves to keep resident across a
+        /// checkpoint (i.e. not flushed).
+        uint64_t retention_margin = 0;
+
+        /// @brief Tile writer options.
+        typename Writer::Options writer = {};
+      };
+
+      explicit TiledTreeT(Config config) :
+        config(std::move(config)),
+        store(this->config.prefix),
+        writer(store, this->config.writer)
+      {}
+
+      /// @brief Appends a leaf hash.
+      void append(const Hash& leaf_hash)
+      {
+        tree.insert(leaf_hash);
+      }
+
+      /// @brief The number of leaves (including flushed ones).
+      [[nodiscard]] uint64_t size() const
+      {
+        return tree.num_leaves();
+      }
+
+      /// @brief The current Merkle root.
+      Hash root()
+      {
+        return tree.root();
+      }
+
+      /// @brief The tree size of the last checkpoint (the durable tile size).
+      [[nodiscard]] uint64_t checkpoint_size() const
+      {
+        return tiles_size;
+      }
+
+      /// @brief Access to the underlying tree.
+      Tree& tree_ref()
+      {
+        return tree;
+      }
+
+      /// @brief Access to the underlying tile store.
+      Store& store_ref()
+      {
+        return store;
+      }
+
+      /// @brief Writes tiles and a checkpoint, then compacts memory.
+      /// @return Counts of the tiles written/removed by this checkpoint
+      Stats checkpoint()
+      {
+        Stats stats;
+        const uint64_t n = tree.num_leaves();
+        if (n == 0)
+        {
+          return stats;
+        }
+
+        stats = writer.write_up_to(n, [this](uint64_t i) -> const Hash& {
+          return tree.leaf((size_t)i);
+        });
+        store.write_checkpoint(n, tree.root());
+        tiles_size = n;
+
+        // Compaction: flush to the durable full-tile coverage, keeping the
+        // retention margin resident. The flush target is a multiple of
+        // TILE_WIDTH so the coverage invariant (min_index <= covered) holds.
+        const uint64_t covered = (n / TILE_WIDTH) * TILE_WIDTH;
+        uint64_t target = covered > config.retention_margin ?
+          covered - config.retention_margin :
+          0;
+        target = (target / TILE_WIDTH) * TILE_WIDTH;
+        if (target > tree.min_index())
+        {
+          tree.flush_to((size_t)target);
+        }
+        return stats;
+      }
+
+      /// @brief Inclusion proof for @p index in a tree of @p proof_size leaves.
+      /// @note Served from tiles (flushed past) combined with the resident tree
+      /// (recent frontier); @p proof_size may exceed checkpoint_size().
+      std::shared_ptr<Path> inclusion_proof(uint64_t index, uint64_t proof_size)
+      {
+        MemoryHashSourceT<HASH_SIZE, HASH_FUNCTION> mem(tree);
+        TileHashSourceT<HASH_SIZE, HASH_FUNCTION> tile_src(store, tiles_size);
+        CombinedHashSourceT<HASH_SIZE, HASH_FUNCTION> combined(mem, tile_src);
+        ProofEngineT<HASH_SIZE, HASH_FUNCTION> engine(combined);
+        return engine.inclusion_proof(index, proof_size);
+      }
+
+      /// @brief Consistency proof between tree sizes @p m and @p n.
+      std::vector<Hash> consistency_proof(uint64_t m, uint64_t n)
+      {
+        MemoryHashSourceT<HASH_SIZE, HASH_FUNCTION> mem(tree);
+        TileHashSourceT<HASH_SIZE, HASH_FUNCTION> tile_src(store, tiles_size);
+        CombinedHashSourceT<HASH_SIZE, HASH_FUNCTION> combined(mem, tile_src);
+        ProofEngineT<HASH_SIZE, HASH_FUNCTION> engine(combined);
+        return engine.consistency_proof(m, n);
+      }
+
+    protected:
+      Config config;
+      Store store;
+      Writer writer;
+      Tree tree;
+      uint64_t tiles_size = 0;
+    };
+
     /// @brief Default tile store (SHA256, default hash function).
     using TileStore = TileStoreT<32, sha256_compress>;
 
@@ -1004,6 +1196,15 @@ namespace merkle
 
     /// @brief Default proof engine (SHA256, default hash function).
     using ProofEngine = ProofEngineT<32, sha256_compress>;
+
+    /// @brief Default in-memory hash source (SHA256, default hash function).
+    using MemoryHashSource = MemoryHashSourceT<32, sha256_compress>;
+
+    /// @brief Default combined hash source (SHA256, default hash function).
+    using CombinedHashSource = CombinedHashSourceT<32, sha256_compress>;
+
+    /// @brief Default tiled tree (SHA256, default hash function).
+    using TiledTree = TiledTreeT<32, sha256_compress>;
 
 #ifdef HAVE_OPENSSL
     /// @brief SHA384 tile store.
@@ -1027,6 +1228,16 @@ namespace merkle
     using HashSource512 = HashSourceT<64, sha512_openssl>;
     using TileHashSource512 = TileHashSourceT<64, sha512_openssl>;
     using ProofEngine512 = ProofEngineT<64, sha512_openssl>;
+
+    /// @brief SHA384 memory/combined sources and tiled tree.
+    using MemoryHashSource384 = MemoryHashSourceT<48, sha384_openssl>;
+    using CombinedHashSource384 = CombinedHashSourceT<48, sha384_openssl>;
+    using TiledTree384 = TiledTreeT<48, sha384_openssl>;
+
+    /// @brief SHA512 memory/combined sources and tiled tree.
+    using MemoryHashSource512 = MemoryHashSourceT<64, sha512_openssl>;
+    using CombinedHashSource512 = CombinedHashSourceT<64, sha512_openssl>;
+    using TiledTree512 = TiledTreeT<64, sha512_openssl>;
 #endif
   }
 }
