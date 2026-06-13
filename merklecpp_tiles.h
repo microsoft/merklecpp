@@ -306,8 +306,327 @@ namespace merkle
       }
     };
 
+    /// @brief Computes the Merkle Tree Hash of a perfect (balanced) subtree.
+    /// @param leaves The subtree's leaves; the count MUST be a power of two.
+    /// @return The subtree root, computed with the tree's HASH_FUNCTION.
+    /// @note This is exactly a merkle::TreeT full-node hash, which is why tile
+    /// entries (such roots) are immutable: an unbalanced subtree would still
+    /// change as leaves are added and must therefore never be tiled.
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    inline HashT<HASH_SIZE> perfect_root(
+      const std::vector<HashT<HASH_SIZE>>& leaves)
+    {
+      if (leaves.empty())
+      {
+        throw std::runtime_error("perfect_root requires at least one leaf");
+      }
+      if ((leaves.size() & (leaves.size() - 1)) != 0)
+      {
+        throw std::runtime_error(
+          "perfect_root requires a power-of-two number of leaves");
+      }
+
+      std::vector<HashT<HASH_SIZE>> level = leaves;
+      while (level.size() > 1)
+      {
+        std::vector<HashT<HASH_SIZE>> next;
+        next.reserve(level.size() / 2);
+        for (size_t i = 0; i + 1 < level.size(); i += 2)
+        {
+          HashT<HASH_SIZE> h;
+          HASH_FUNCTION(level[i], level[i + 1], h);
+          next.push_back(h);
+        }
+        level.swap(next);
+      }
+      return level.front();
+    }
+
+    /// @brief Computes and persists tlog-tiles tiles for a growing tree.
+    /// @tparam HASH_SIZE Size of each hash in bytes
+    /// @tparam HASH_FUNCTION The tree's node hash function
+    /// @note Only balanced subtrees are tiled: a level-L entry is the root of a
+    /// complete 2**(8L)-leaf subtree. Full tiles (256 such entries) are
+    /// therefore immutable and written exactly once; the incomplete frontier is
+    /// never tiled, and partial tiles (complete entries, partial count) are the
+    /// only resources that may be re-written (grown) or removed once superseded
+    /// by a full tile.
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class TileWriterT
+    {
+    public:
+      /// @brief The type of hashes stored in tiles.
+      using Hash = HashT<HASH_SIZE>;
+
+      /// @brief The associated tile store type.
+      using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
+
+      /// @brief Supplies the level-0 leaf hash for a given leaf index.
+      using LeafFn = std::function<const Hash&(uint64_t)>;
+
+      /// @brief Write-path options.
+      struct Options
+      {
+        /// @brief Write the partial (rightmost) tiles for the current size.
+        bool write_partial_tiles = true;
+
+        /// @brief Roll up and write tiles at levels >= 1.
+        bool write_higher_levels = true;
+
+        /// @brief Remove partial tiles once superseded by a full tile (or a
+        /// wider partial at the same index).
+        bool remove_superseded_partials = true;
+      };
+
+      /// @brief Counts of work performed by a write_up_to call.
+      struct Stats
+      {
+        /// @brief Number of full tiles written.
+        uint64_t full_written = 0;
+
+        /// @brief Number of partial tiles written.
+        uint64_t partial_written = 0;
+
+        /// @brief Number of superseded partial tiles removed.
+        uint64_t partial_removed = 0;
+      };
+
+      /// @brief Constructs a writer over @p store.
+      explicit TileWriterT(Store& store, Options options = {}) :
+        store(store), options(options)
+      {}
+
+      /// @brief Writes all newly-complete full tiles and the partial tiles for
+      /// a tree of @p size leaves.
+      /// @param size The current tree size
+      /// @param leaf_at Returns the level-0 leaf hash for a leaf index in
+      /// [0, size); only ever queried for leaves of complete subtrees.
+      /// @return Counts of tiles written/removed
+      /// @note Incremental: full tiles already on disk are immutable and are
+      /// never rewritten.
+      Stats write_up_to(uint64_t size, const LeafFn& leaf_at)
+      {
+        Stats stats;
+        const uint8_t max_level = options.write_higher_levels ? 63 : 0;
+
+        for (uint8_t level = 0; level <= max_level; level++)
+        {
+          // Number of complete (balanced) level-L entries available; this
+          // deliberately excludes the incomplete frontier subtree.
+          const uint64_t entries = entries_at_level(size, level);
+          if (entries == 0)
+          {
+            break;
+          }
+          ensure_level(level);
+
+          const uint64_t full_tiles = entries / TILE_WIDTH;
+
+          if (!cursor_inited[level])
+          {
+            next_full[level] = full_prefix_length(level);
+            cursor_inited[level] = true;
+          }
+
+          for (uint64_t n = next_full[level]; n < full_tiles; n++)
+          {
+            if (store.has_full_tile(level, n))
+            {
+              continue; // immutable: never rewrite an existing full tile
+            }
+            store.write_tile(
+              TileRef{level, n, 0},
+              collect(level, n * TILE_WIDTH, TILE_WIDTH, leaf_at));
+            stats.full_written++;
+          }
+          if (full_tiles > next_full[level])
+          {
+            next_full[level] = full_tiles;
+          }
+
+          if (options.write_partial_tiles)
+          {
+            write_partial(
+              level,
+              full_tiles,
+              (uint16_t)(entries % TILE_WIDTH),
+              leaf_at,
+              stats);
+          }
+        }
+
+        return stats;
+      }
+
+    protected:
+      /// @brief The tile store written to.
+      Store& store;
+
+      /// @brief Write-path options.
+      Options options;
+
+      /// @brief Per-level index of the next full tile to write.
+      std::vector<uint64_t> next_full;
+
+      /// @brief Per-level flag indicating next_full has been initialised.
+      std::vector<bool> cursor_inited;
+
+      /// @brief Per-level last partial tile written by this writer.
+      std::vector<TileRef> last_partial;
+
+      /// @brief Per-level flag indicating last_partial is valid.
+      std::vector<bool> has_last_partial;
+
+      /// @brief Number of complete level-@p level entries for a tree of @p
+      /// size.
+      static uint64_t entries_at_level(uint64_t size, uint8_t level)
+      {
+        const unsigned shift = 8u * (unsigned)level;
+        return shift >= 64 ? 0 : (size >> shift);
+      }
+
+      /// @brief Ensures per-level bookkeeping vectors cover @p level.
+      void ensure_level(uint8_t level)
+      {
+        const size_t needed = (size_t)level + 1;
+        if (next_full.size() < needed)
+        {
+          next_full.resize(needed, 0);
+          cursor_inited.resize(needed, false);
+          last_partial.resize(needed, TileRef{});
+          has_last_partial.resize(needed, false);
+        }
+      }
+
+      /// @brief Length of the contiguous prefix of full tiles already on disk.
+      [[nodiscard]] uint64_t full_prefix_length(uint8_t level) const
+      {
+        if (!store.has_full_tile(level, 0))
+        {
+          return 0;
+        }
+        uint64_t lo = 0; // present
+        uint64_t hi = 1;
+        while (store.has_full_tile(level, hi))
+        {
+          lo = hi;
+          hi <<= 1;
+        }
+        while (hi - lo > 1)
+        {
+          const uint64_t mid = lo + (hi - lo) / 2;
+          if (store.has_full_tile(level, mid))
+          {
+            lo = mid;
+          }
+          else
+          {
+            hi = mid;
+          }
+        }
+        return lo + 1;
+      }
+
+      /// @brief Collects @p count consecutive level-@p level entries, each the
+      /// root of a complete (balanced) subtree.
+      std::vector<Hash> collect(
+        uint8_t level,
+        uint64_t first_entry,
+        uint64_t count,
+        const LeafFn& leaf_at)
+      {
+        std::vector<Hash> out;
+        out.reserve(count);
+        for (uint64_t i = 0; i < count; i++)
+        {
+          const uint64_t g = first_entry + i;
+          if (level == 0)
+          {
+            out.push_back(leaf_at(g));
+          }
+          else
+          {
+            // Roll up the complete child full tile (256 complete entries).
+            out.push_back(perfect_root<HASH_SIZE, HASH_FUNCTION>(
+              store.read_tile(TileRef{(uint8_t)(level - 1), g, 0})));
+          }
+        }
+        return out;
+      }
+
+      /// @brief Writes (or removes) the partial tile at the rightmost index.
+      void write_partial(
+        uint8_t level,
+        uint64_t index,
+        uint16_t width,
+        const LeafFn& leaf_at,
+        Stats& stats)
+      {
+        if (width == 0)
+        {
+          // No partial at this size; a previous partial (if any) is now covered
+          // by a full tile and may be removed.
+          if (options.remove_superseded_partials && has_last_partial[level])
+          {
+            remove_partial_dir(level, last_partial[level].index);
+            has_last_partial[level] = false;
+            stats.partial_removed++;
+          }
+          return;
+        }
+
+        const TileRef ref{level, index, width};
+
+        if (
+          has_last_partial[level] && last_partial[level].index == index &&
+          last_partial[level].width == width)
+        {
+          return; // identical partial already written by this writer
+        }
+
+        if (options.remove_superseded_partials && has_last_partial[level])
+        {
+          if (last_partial[level].index != index)
+          {
+            // Previous partial's index is now covered by a full tile.
+            remove_partial_dir(level, last_partial[level].index);
+            stats.partial_removed++;
+          }
+          else
+          {
+            // Same index, narrower width: drop the stale width file(s).
+            remove_partial_dir(level, index);
+          }
+        }
+
+        store.write_tile(
+          ref, collect(level, index * TILE_WIDTH, width, leaf_at));
+        stats.partial_written++;
+        last_partial[level] = ref;
+        has_last_partial[level] = true;
+      }
+
+      /// @brief Removes the partial-tile directory tile/<level>/<index>.p.
+      void remove_partial_dir(uint8_t level, uint64_t index)
+      {
+        const std::filesystem::path dir =
+          store.tile_path(TileRef{level, index, 1}).parent_path();
+        std::error_code ec;
+        std::filesystem::remove_all(dir, ec);
+      }
+    };
+
     /// @brief Default tile store (SHA256, default hash function).
     using TileStore = TileStoreT<32, sha256_compress>;
+
+    /// @brief Default tile writer (SHA256, default hash function).
+    using TileWriter = TileWriterT<32, sha256_compress>;
 
 #ifdef HAVE_OPENSSL
     /// @brief SHA384 tile store.
@@ -315,6 +634,12 @@ namespace merkle
 
     /// @brief SHA512 tile store.
     using TileStore512 = TileStoreT<64, sha512_openssl>;
+
+    /// @brief SHA384 tile writer.
+    using TileWriter384 = TileWriterT<48, sha384_openssl>;
+
+    /// @brief SHA512 tile writer.
+    using TileWriter512 = TileWriterT<64, sha512_openssl>;
 #endif
   }
 }
