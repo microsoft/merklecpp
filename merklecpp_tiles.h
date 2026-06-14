@@ -65,7 +65,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       return r;
     }
 
-    /// @brief Identifies a single tile within a tiled log.
+    /// @brief Identifies a single (full) tile within a tiled log.
+    /// @note Only full, TILE_WIDTH-wide tiles are produced and consumed; the
+    /// incomplete frontier is never tiled (see doc/design/tlog-tiles.md).
     struct TileRef
     {
       /// @brief The level of the tile (0 == leaf hashes).
@@ -73,21 +75,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
       /// @brief The index of the tile within its level.
       uint64_t index = 0;
-
-      /// @brief The width of the tile; 0 denotes a full tile (TILE_WIDTH).
-      uint16_t width = 0;
-
-      /// @brief The number of hashes the tile holds.
-      [[nodiscard]] uint16_t num_hashes() const
-      {
-        return width == 0 ? TILE_WIDTH : width;
-      }
-
-      /// @brief Whether the tile is partial.
-      [[nodiscard]] bool is_partial() const
-      {
-        return width != 0;
-      }
     };
 
     /// @brief Reads and writes tlog-tiles tile files on a local filesystem.
@@ -125,45 +112,29 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief The filesystem path of a tile.
       [[nodiscard]] std::filesystem::path tile_path(const TileRef& ref) const
       {
-        std::string rel = "tile/" + std::to_string((unsigned)ref.level) + "/" +
-          encode_tile_index(ref.index);
-        if (ref.is_partial())
-        {
-          rel += ".p/" + std::to_string((unsigned)ref.width);
-        }
-        return prefix / rel;
+        return prefix /
+          ("tile/" + std::to_string((unsigned)ref.level) + "/" +
+           encode_tile_index(ref.index));
       }
 
       /// @brief The filesystem path of an entry bundle.
-      [[nodiscard]] std::filesystem::path entries_path(
-        uint64_t index, uint16_t width = 0) const
+      [[nodiscard]] std::filesystem::path entries_path(uint64_t index) const
       {
-        std::string rel = "tile/entries/" + encode_tile_index(index);
-        if (width != 0)
-        {
-          rel += ".p/" + std::to_string((unsigned)width);
-        }
-        return prefix / rel;
+        return prefix / ("tile/entries/" + encode_tile_index(index));
       }
 
       /// @brief Whether a full tile exists on disk.
       [[nodiscard]] bool has_full_tile(uint8_t level, uint64_t index) const
       {
-        return std::filesystem::exists(tile_path(TileRef{level, index, 0}));
-      }
-
-      /// @brief Whether a specific tile exists on disk.
-      [[nodiscard]] bool has_tile(const TileRef& ref) const
-      {
-        return std::filesystem::exists(tile_path(ref));
+        return std::filesystem::exists(tile_path(TileRef{level, index}));
       }
 
       /// @brief Writes a tile to disk atomically.
       /// @param ref The tile to write
-      /// @param hashes The tile's hashes (exactly ref.num_hashes() of them)
+      /// @param hashes The tile's hashes (exactly TILE_WIDTH of them)
       void write_tile(const TileRef& ref, const std::vector<Hash>& hashes)
       {
-        if (hashes.size() != ref.num_hashes())
+        if (hashes.size() != TILE_WIDTH)
         {
           throw std::runtime_error("tile width mismatch");
         }
@@ -180,20 +151,20 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
       /// @brief Reads a tile from disk.
       /// @param ref The tile to read
-      /// @return The tile's hashes (ref.num_hashes() of them)
+      /// @return The tile's hashes (TILE_WIDTH of them)
       [[nodiscard]] std::vector<Hash> read_tile(const TileRef& ref) const
       {
         std::vector<uint8_t> bytes = read_file(tile_path(ref));
-        const size_t expected = (size_t)ref.num_hashes() * HASH_SIZE;
+        const size_t expected = (size_t)TILE_WIDTH * HASH_SIZE;
         if (bytes.size() != expected)
         {
           throw std::runtime_error("unexpected tile size");
         }
 
         std::vector<Hash> hashes;
-        hashes.reserve(ref.num_hashes());
+        hashes.reserve(TILE_WIDTH);
         size_t position = 0;
-        for (uint16_t i = 0; i < ref.num_hashes(); i++)
+        for (uint16_t i = 0; i < TILE_WIDTH; i++)
         {
           hashes.emplace_back(bytes, position);
         }
@@ -203,38 +174,31 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Whether a full entry bundle exists on disk.
       [[nodiscard]] bool has_entry_bundle(uint64_t index) const
       {
-        return std::filesystem::exists(entries_path(index, 0));
+        return std::filesystem::exists(entries_path(index));
       }
 
-      /// @brief Writes an entry bundle to disk atomically.
+      /// @brief Writes a full entry bundle to disk atomically.
       /// @param index The bundle index
-      /// @param width The bundle width; 0 denotes a full bundle (TILE_WIDTH)
-      /// @param entries The raw log entries (exactly width, or TILE_WIDTH)
+      /// @param entries The raw log entries (exactly TILE_WIDTH of them)
       /// @note Entries are stored in the tlog-tiles entry-bundle format: a
       /// sequence of big-endian uint16 length-prefixed byte strings.
       void write_entry_bundle(
-        uint64_t index,
-        uint16_t width,
-        const std::vector<std::vector<uint8_t>>& entries)
+        uint64_t index, const std::vector<std::vector<uint8_t>>& entries)
       {
-        const uint16_t expected = width == 0 ? TILE_WIDTH : width;
-        if (entries.size() != expected)
+        if (entries.size() != TILE_WIDTH)
         {
           throw std::runtime_error("entry bundle width mismatch");
         }
-        write_file_atomically(
-          entries_path(index, width), encode_entries(entries));
+        write_file_atomically(entries_path(index), encode_entries(entries));
       }
 
-      /// @brief Reads an entry bundle from disk.
+      /// @brief Reads a full entry bundle from disk.
       /// @param index The bundle index
-      /// @param width The bundle width; 0 denotes a full bundle (TILE_WIDTH)
-      /// @return The raw log entries
+      /// @return The raw log entries (TILE_WIDTH of them)
       [[nodiscard]] std::vector<std::vector<uint8_t>> read_entry_bundle(
-        uint64_t index, uint16_t width = 0) const
+        uint64_t index) const
       {
-        const uint16_t count = width == 0 ? TILE_WIDTH : width;
-        return decode_entries(read_file(entries_path(index, width)), count);
+        return decode_entries(read_file(entries_path(index)), TILE_WIDTH);
       }
 
       /// @brief Encodes log entries into the tlog-tiles entry-bundle format.
@@ -460,7 +424,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
               continue; // immutable: never rewrite an existing full tile
             }
             store.write_tile(
-              TileRef{level, n, 0},
+              TileRef{level, n},
               collect(level, n * TILE_WIDTH, TILE_WIDTH, leaf_at));
             stats.full_written++;
           }
@@ -556,7 +520,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           {
             // Roll up the complete child full tile (256 complete entries).
             out.push_back(perfect_root<HASH_SIZE, HASH_FUNCTION>(
-              store.read_tile(TileRef{(uint8_t)(level - 1), g, 0})));
+              store.read_tile(TileRef{(uint8_t)(level - 1), g})));
           }
         }
         return out;
@@ -659,7 +623,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           const uint64_t span = (uint64_t)1 << level;
           const uint64_t start = index << level;
           const std::vector<Hash> tile =
-            store.read_tile(TileRef{0, start / TILE_WIDTH, 0});
+            store.read_tile(TileRef{0, start / TILE_WIDTH});
           out = roll_up(tile, start % TILE_WIDTH, span);
           return;
         }
@@ -675,7 +639,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         if (n < full_tiles)
         {
           // One full level-L tile holds all 2**r entries of this subtree.
-          const std::vector<Hash> tile = store.read_tile(TileRef{L, n, 0});
+          const std::vector<Hash> tile = store.read_tile(TileRef{L, n});
           out = roll_up(tile, first % TILE_WIDTH, (uint64_t)1 << r);
           return;
         }
@@ -1195,21 +1159,16 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// (recent frontier); @p proof_size may exceed flushed_size().
       std::shared_ptr<Path> inclusion_proof(uint64_t index, uint64_t proof_size)
       {
-        MemoryHashSourceT<HASH_SIZE, HASH_FUNCTION> mem(tree);
-        TileHashSourceT<HASH_SIZE, HASH_FUNCTION> tile_src(store, tiles_size);
-        CombinedHashSourceT<HASH_SIZE, HASH_FUNCTION> combined(mem, tile_src);
-        ProofEngineT<HASH_SIZE, HASH_FUNCTION> engine(combined);
-        return engine.inclusion_proof(index, proof_size);
+        return with_engine([&](const auto& engine) {
+          return engine.inclusion_proof(index, proof_size);
+        });
       }
 
       /// @brief Consistency proof between tree sizes @p m and @p n.
       std::vector<Hash> consistency_proof(uint64_t m, uint64_t n)
       {
-        MemoryHashSourceT<HASH_SIZE, HASH_FUNCTION> mem(tree);
-        TileHashSourceT<HASH_SIZE, HASH_FUNCTION> tile_src(store, tiles_size);
-        CombinedHashSourceT<HASH_SIZE, HASH_FUNCTION> combined(mem, tile_src);
-        ProofEngineT<HASH_SIZE, HASH_FUNCTION> engine(combined);
-        return engine.consistency_proof(m, n);
+        return with_engine(
+          [&](const auto& engine) { return engine.consistency_proof(m, n); });
       }
 
       /// @brief Consistency proof between the trees whose last leaves are at
@@ -1229,6 +1188,21 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       Writer writer;
       Tree tree;
       uint64_t tiles_size = 0;
+
+      /// @brief Builds a proof engine over the combined resident-tree (frontier)
+      /// and full-tile (flushed past) source, and invokes @p fn with it.
+      /// @note The sources and engine are stack-local; @p fn must consume the
+      /// engine before returning (proofs are returned by value, holding hash
+      /// copies, so the result outlives the engine).
+      template <typename Fn>
+      auto with_engine(Fn fn)
+      {
+        MemoryHashSourceT<HASH_SIZE, HASH_FUNCTION> mem(tree);
+        TileHashSourceT<HASH_SIZE, HASH_FUNCTION> tile_src(store, tiles_size);
+        CombinedHashSourceT<HASH_SIZE, HASH_FUNCTION> combined(mem, tile_src);
+        ProofEngineT<HASH_SIZE, HASH_FUNCTION> engine(combined);
+        return fn(engine);
+      }
     };
 
     /// @brief Writes tlog-tiles entry bundles (raw log entries) for a growing
@@ -1236,8 +1210,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// @note Entry bundles are level-0 only and application-owned: merklecpp
     /// stores leaf hashes, while the raw entries (and the leaf-hash derivation
     /// linking each entry to its level-0 tile hash) are the application's
-    /// responsibility. Full bundles are immutable and written once; only the
-    /// rightmost partial bundle may grow or be removed once superseded.
+    /// responsibility. Only full bundles (TILE_WIDTH entries) are written; they
+    /// are immutable and written exactly once. The incomplete tail is never
+    /// bundled (no partial bundles are produced): it stays with the application
+    /// until it grows into a full bundle, mirroring the un-tiled Merkle
+    /// frontier.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -1250,35 +1227,23 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Supplies the raw bytes of the log entry at a given index.
       using EntryFn = std::function<std::vector<uint8_t>(uint64_t)>;
 
-      /// @brief Write-path options.
-      struct Options
-      {
-        /// @brief Write the partial (rightmost) bundle for the current size.
-        bool write_partial = true;
-
-        /// @brief Remove a partial bundle once superseded by a full bundle (or
-        /// a wider partial at the same index).
-        bool remove_superseded_partials = true;
-      };
-
       /// @brief Counts of work performed by a write_up_to call.
       struct Stats
       {
+        /// @brief Number of full bundles written.
         uint64_t full_written = 0;
-        uint64_t partial_written = 0;
-        uint64_t partial_removed = 0;
       };
 
-      explicit EntryBundleWriterT(Store& store, Options options = {}) :
-        store(store), options(options)
-      {}
+      explicit EntryBundleWriterT(Store& store) : store(store) {}
 
-      /// @brief Writes all newly-complete full bundles and the partial bundle
-      /// for a log of @p size entries.
+      /// @brief Writes all newly-complete full bundles for a log of @p size
+      /// entries.
       /// @param size The current number of entries
       /// @param entry_at Returns the raw bytes of the entry at an index in
-      /// [0, size)
-      /// @return Counts of bundles written/removed
+      /// [0, size); only ever queried for entries of complete bundles.
+      /// @return Counts of bundles written
+      /// @note Incremental: full bundles already on disk are immutable and are
+      /// never rewritten. The incomplete tail is never bundled.
       Stats write_up_to(uint64_t size, const EntryFn& entry_at)
       {
         Stats stats;
@@ -1297,17 +1262,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
             continue; // immutable: never rewrite an existing full bundle
           }
           store.write_entry_bundle(
-            n, 0, collect(n * TILE_WIDTH, TILE_WIDTH, entry_at));
+            n, collect(n * TILE_WIDTH, TILE_WIDTH, entry_at));
           stats.full_written++;
         }
         if (full > next_full)
         {
           next_full = full;
-        }
-
-        if (options.write_partial)
-        {
-          write_partial(full, (uint16_t)(size % TILE_WIDTH), entry_at, stats);
         }
         return stats;
       }
@@ -1315,12 +1275,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     protected:
       // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
       Store& store;
-      Options options;
       uint64_t next_full = 0;
       bool cursor_inited = false;
-      uint64_t last_partial_index = 0;
-      uint16_t last_partial_width = 0;
-      bool has_last_partial = false;
 
       std::vector<std::vector<uint8_t>> collect(
         uint64_t first, uint64_t count, const EntryFn& entry_at)
@@ -1360,56 +1316,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           }
         }
         return lo + 1;
-      }
-
-      void write_partial(
-        uint64_t index, uint16_t width, const EntryFn& entry_at, Stats& stats)
-      {
-        if (width == 0)
-        {
-          if (options.remove_superseded_partials && has_last_partial)
-          {
-            remove_partial(last_partial_index);
-            has_last_partial = false;
-            stats.partial_removed++;
-          }
-          return;
-        }
-
-        if (
-          has_last_partial && last_partial_index == index &&
-          last_partial_width == width)
-        {
-          return;
-        }
-
-        if (options.remove_superseded_partials && has_last_partial)
-        {
-          if (last_partial_index != index)
-          {
-            remove_partial(last_partial_index);
-            stats.partial_removed++;
-          }
-          else
-          {
-            remove_partial(index);
-          }
-        }
-
-        store.write_entry_bundle(
-          index, width, collect(index * TILE_WIDTH, width, entry_at));
-        stats.partial_written++;
-        last_partial_index = index;
-        last_partial_width = width;
-        has_last_partial = true;
-      }
-
-      void remove_partial(uint64_t index)
-      {
-        const std::filesystem::path dir =
-          store.entries_path(index, 1).parent_path();
-        std::error_code ec;
-        std::filesystem::remove_all(dir, ec);
       }
     };
 

@@ -66,31 +66,23 @@ int main()
 
     merkle::tiles::TileStore store(dir);
 
-    // 2. Resource path layout.
+    // 2. Resource path layout (full tiles and bundles only).
     expect_eq(
-      rel(store, store.tile_path(TileRef{0, 0, 0})),
+      rel(store, store.tile_path(TileRef{0, 0})),
       "tile/0/000",
-      "tile_path L0 N0 full");
+      "tile_path L0 N0");
     expect_eq(
-      rel(store, store.tile_path(TileRef{0, 273, 112})),
-      "tile/0/273.p/112",
-      "tile_path L0 N273 partial");
-    expect_eq(
-      rel(store, store.tile_path(TileRef{1, 1234067, 0})),
+      rel(store, store.tile_path(TileRef{1, 1234067})),
       "tile/1/x001/x234/067",
       "tile_path L1 big index");
     expect_eq(
       rel(store, store.entries_path(5)), "tile/entries/005", "entries full");
-    expect_eq(
-      rel(store, store.entries_path(5, 3)),
-      "tile/entries/005.p/3",
-      "entries partial");
 
     const size_t hsz = Hash().size();
 
     // 3a. Full tile byte round-trip.
     const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
-    const TileRef full_ref{0, 0, 0};
+    const TileRef full_ref{0, 0};
     store.write_tile(full_ref, full);
     expect(store.has_full_tile(0, 0), "has_full_tile after write");
     expect(!store.has_full_tile(0, 5), "missing full tile");
@@ -105,25 +97,12 @@ int main()
       expect(full_rt[i] == full[i], "full tile hash round-trip");
     }
 
-    // 3b. Partial tile byte round-trip.
-    const std::vector<Hash> partial(full.begin(), full.begin() + 3);
-    const TileRef partial_ref{0, 1, 3};
-    store.write_tile(partial_ref, partial);
-    expect(
-      fs::file_size(store.tile_path(partial_ref)) == (uintmax_t)3 * hsz,
-      "partial tile file size");
-    const auto partial_rt = store.read_tile(partial_ref);
-    expect(partial_rt.size() == 3, "partial tile width round-trip");
-    for (size_t i = 0; i < partial.size(); i++)
-    {
-      expect(partial_rt[i] == partial[i], "partial tile hash round-trip");
-    }
-
-    // 3c. Width mismatches are rejected.
+    // 3b. Wrong-width writes are rejected (only 256-wide tiles are valid).
+    const std::vector<Hash> three(full.begin(), full.begin() + 3);
     bool threw = false;
     try
     {
-      store.write_tile(TileRef{0, 2, 0}, partial); // 3 hashes for a full tile
+      store.write_tile(TileRef{0, 2}, three); // 3 hashes for a full tile
     }
     catch (const std::exception&)
     {

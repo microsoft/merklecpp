@@ -82,14 +82,14 @@ int main()
 
       expect(store.has_full_tile(0, 0), "A L0 full tile");
       expect(
-        fs::file_size(store.tile_path(TileRef{0, 0, 0})) ==
+        fs::file_size(store.tile_path(TileRef{0, 0})) ==
           256U * Hash().size(),
         "A L0 full tile size");
       expect(!store.has_full_tile(1, 0), "A no L1 full tile");
       expect(!any_partial_dirs(store), "A no partial tiles");
 
       // Level-0 tile is the leaf hashes verbatim.
-      const auto l0 = store.read_tile(TileRef{0, 0, 0});
+      const auto l0 = store.read_tile(TileRef{0, 0});
       for (size_t i = 0; i < hashes.size(); i++)
       {
         expect(l0[i] == hashes[i], "A L0 entry == leaf");
@@ -130,11 +130,11 @@ int main()
       expect(!any_partial_dirs(store), "B no partial tiles");
 
       // Higher-level entries are roll-ups of the complete child tiles.
-      const auto l1 = store.read_tile(TileRef{1, 0, 0});
+      const auto l1 = store.read_tile(TileRef{1, 0});
       expect(l1.size() == 256, "B L1 full width");
-      expect(l1[0] == rollup(store.read_tile(TileRef{0, 0, 0})), "B L1[0]");
+      expect(l1[0] == rollup(store.read_tile(TileRef{0, 0})), "B L1[0]");
       expect(
-        l1[255] == rollup(store.read_tile(TileRef{0, 255, 0})), "B L1[255]");
+        l1[255] == rollup(store.read_tile(TileRef{0, 255})), "B L1[255]");
 
       std::cout << "B (size 70000): OK" << '\n';
     }
@@ -193,8 +193,8 @@ int main()
       expect(!store.has_full_tile(2, 0), "D no L2 tile");
       expect(!any_partial_dirs(store), "D no partial tiles");
 
-      const auto l1 = store.read_tile(TileRef{1, 0, 0});
-      expect(l1[0] == rollup(store.read_tile(TileRef{0, 0, 0})), "D L1[0]");
+      const auto l1 = store.read_tile(TileRef{1, 0});
+      expect(l1[0] == rollup(store.read_tile(TileRef{0, 0})), "D L1[0]");
 
       // Re-running writes nothing (everything already full and immutable).
       const auto s3 = writer.write_up_to(65536, leaf_at);

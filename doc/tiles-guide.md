@@ -233,14 +233,15 @@ into a `ProofEngine` for you.
 If you also want to store the raw log entries (tlog-tiles "entry bundles"), use
 `EntryBundleWriter`. Bundles are level-0 only and application-owned — merklecpp
 stores leaf hashes; you supply the raw bytes and decide how an entry maps to its
-leaf hash.
+leaf hash. Only full bundles (256 entries) are written; the incomplete tail
+stays with your application until it completes a bundle.
 
 ```cpp
 merkle::tiles::EntryBundleWriter bundles(store);
 bundles.write_up_to(num_entries,
   [&](uint64_t i) -> std::vector<uint8_t> { return raw_entry_bytes(i); });
 
-// Read them back (full bundle = 256 entries; pass the width for a partial one).
+// Read a full bundle back (256 entries).
 std::vector<std::vector<uint8_t>> e = store.read_entry_bundle(/*index=*/0);
 ```
 

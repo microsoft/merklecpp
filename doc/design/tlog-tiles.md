@@ -81,10 +81,11 @@ A tiled log exposes the Merkle tree as a set of static resources:
   > **merklecpp deviation.** This implementation never writes or reads partial
   > *tiles*. The incomplete frontier (everything past the last full tile) is held
   > in the in-memory tree, not on disk, so the on-disk tile set is the full-tile
-  > prefix only. Entry bundles (below) are a separate, application-owned resource
-  > and may still be partial.
-- **Entry bundles** at `<prefix>/tile/entries/<N>[.p/<W>]`: big-endian `uint16`
-  length-prefixed raw entries. (See [§6.8](#68-entry-bundles-optional).)
+  > prefix only. Entry bundles (below) follow the same rule: only full bundles
+  > are written, and the incomplete tail stays with the application.
+- **Entry bundles** at `<prefix>/tile/entries/<N>`: big-endian `uint16`
+  length-prefixed raw entries, 256 per full bundle (full bundles only — see the
+  deviation above). (See [§6.8](#68-entry-bundles-optional).)
 - **Pruning**: a log keeps a *minimum index*; tiles/bundles whose end index is
   `≤ minimum index` may be denied. This maps cleanly onto merklecpp's
   `flush_to()` / `min_index()`.
@@ -203,9 +204,8 @@ Rooted at a configurable `prefix` directory on local disk:
     1/                            # level 1 (roll-ups of level-0 full tiles)
       000 ...
     .../
-    entries/                      # optional raw entry bundles
+    entries/                      # optional raw entry bundles (full only)
       000  001 ...
-      <N>.p/<W>
 ```
 
 ### Index encoding (`encode_tile_index`)
@@ -227,9 +227,9 @@ Resource paths:
   implementation writes)
 - Partial tile (tlog-tiles format; **not produced or read here**):
   `tile/<L>/<encode_tile_index(N)>.p/<W>`
-- Entry bundle: `tile/entries/<encode_tile_index(N)>[.p/<W>]`
+- Entry bundle: `tile/entries/<encode_tile_index(N)>` (full bundles only)
 
-Tile byte format: the `W` entries concatenated, each `HASH_SIZE` raw bytes
+Tile byte format: the 256 entries concatenated, each `HASH_SIZE` raw bytes
 (`HashT::bytes`); a full tile is `256 * HASH_SIZE` bytes.
 
 ---
@@ -334,7 +334,7 @@ recommended; both options keep hashing untouched.
 ### 6.3 `TileStoreT` — disk I/O
 
 ```cpp
-struct TileRef { uint8_t level; uint64_t index; uint16_t width; }; // width 0 ⇒ full
+struct TileRef { uint8_t level; uint64_t index; }; // full tiles only
 
 class TileStoreT {
 public:
@@ -343,15 +343,12 @@ public:
   // Path helpers (pure)
   static std::string encode_index(uint64_t n);
   std::filesystem::path tile_path(const TileRef&) const;
-  std::filesystem::path entries_path(uint64_t n, uint16_t width = 0) const;
+  std::filesystem::path entries_path(uint64_t n) const;
 
   // Tiles
   bool has_full_tile(uint8_t level, uint64_t index) const;
-  std::vector<Hash> read_tile(const TileRef&) const;           // width entries
+  std::vector<Hash> read_tile(const TileRef&) const;           // 256 entries
   void write_tile(const TileRef&, const std::vector<Hash>&);   // atomic (tmp+rename)
-
-  // Single entry convenience (used heavily by TileHashSource)
-  bool read_entry(uint8_t level, uint64_t global_entry, Hash& out, uint64_t size) const;
 };
 ```
 
@@ -388,13 +385,13 @@ for L = 0, 1, 2, ... while entries_L = size >> (8*L) is > 0:
     full_L = entries_L / 256
     for N in [first_unwritten_full(L) .. full_L):          # new full tiles only
         entries = [ entry(L, N*256 + i) for i in 0..255 ]
-        store.write_tile({L, N, width=0}, entries)
+        store.write_tile({L, N}, entries)
     # the rightmost, incomplete (partial) entries are NOT written; they stay in
     # the in-memory tree until they complete a full tile
 
 entry(L, g):
    if L == 0: return leaf_at(g)
-   else:      return perfect_root( store.read_tile({L-1, g, width=0}) )  # 256→1
+   else:      return perfect_root( store.read_tile({L-1, g}) )  # 256→1
 ```
 
 - Level 0 reads leaf hashes via the supplied `leaf_at` (e.g. `Tree::leaf(i)`),
@@ -544,12 +541,13 @@ Stateless alternative for callers with their own storage: free functions
 merklecpp never sees raw entries (callers insert pre-computed leaf hashes), so
 entry bundles are an **application-owned** add-on, included for completeness:
 
-- `tile/entries/<N>[.p/<W>]` stores big-endian `uint16` length-prefixed entries,
-  256 per full bundle.
+- `tile/entries/<N>` stores big-endian `uint16` length-prefixed entries,
+  256 per full bundle (full bundles only).
 - The application is responsible for the leaf-hash derivation it uses (e.g.
   `leaf_hash = H(entry)`); merklecpp stores whatever leaf hash is inserted.
-- A `BundleWriter` mirrors `TileWriterT` (write full bundles on 256 boundaries,
-  partial bundle for the current size). Marked optional/secondary.
+- An `EntryBundleWriterT` mirrors `TileWriterT`: it writes full bundles on
+  256-entry boundaries only; the incomplete tail stays with the application.
+  Marked optional/secondary.
 
 ---
 

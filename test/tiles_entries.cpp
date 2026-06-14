@@ -57,15 +57,14 @@ int main()
       return hashes[i]; // HashT -> vector<uint8_t>
     };
 
-    // 2. size 256: a single full bundle, no partial.
+    // 2. size 256: a single full bundle, no tail.
     {
       TileStore store(base / "e256");
       EntryBundleWriter writer(store);
       const auto s = writer.write_up_to(256, entry_at);
-      expect(s.full_written == 1 && s.partial_written == 0, "256 counts");
+      expect(s.full_written == 1, "256 counts");
       expect(store.has_entry_bundle(0), "256 full bundle");
-      expect(
-        !fs::exists(store.entries_path(1, 1).parent_path()), "256 no partial");
+      expect(!store.has_entry_bundle(1), "256 no second bundle");
 
       const auto b0 = store.read_entry_bundle(0);
       expect(b0.size() == 256, "256 bundle width");
@@ -75,30 +74,23 @@ int main()
       }
     }
 
-    // 3. size 70000: 273 full bundles + a width-112 partial, plus tile linkage.
+    // 3. size 70000: 273 full bundles (the 112-entry tail is not bundled),
+    // plus tile linkage.
     {
       TileStore store(base / "e70k");
       EntryBundleWriter writer(store);
       const auto s = writer.write_up_to(70000, entry_at);
-      expect(s.full_written == 273 && s.partial_written == 1, "70000 counts");
+      expect(s.full_written == 273, "70000 counts");
       expect(store.has_entry_bundle(0), "70000 bundle 0");
       expect(store.has_entry_bundle(272), "70000 bundle 272");
       expect(!store.has_entry_bundle(273), "70000 no bundle 273");
-      expect(fs::exists(store.entries_path(273, 112)), "70000 partial 112");
-
-      const auto bp = store.read_entry_bundle(273, 112);
-      expect(bp.size() == 112, "70000 partial width");
-      for (size_t i = 0; i < 112; i++)
-      {
-        expect(Hash(bp[i]) == hashes[69888 + i], "70000 partial round-trip");
-      }
 
       // Level-0 tile entries (leaf hashes) correspond to the bundle entries
       // under the identity leaf-hash used here.
       TileWriter tw(store);
       const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
       tw.write_up_to(70000, leaf_at);
-      const auto tile0 = store.read_tile(TileRef{0, 0, 0});
+      const auto tile0 = store.read_tile(TileRef{0, 0});
       const auto bundle0 = store.read_entry_bundle(0);
       for (size_t i = 0; i < 256; i++)
       {
@@ -106,33 +98,18 @@ int main()
       }
     }
 
-    // 4. Incremental writes: full bundles immutable, partial grows.
+    // 4. Incremental writes: full bundles are immutable, the tail is not
+    // bundled.
     {
       TileStore store(base / "einc");
       EntryBundleWriter writer(store);
       expect(writer.write_up_to(256, entry_at).full_written == 1, "inc s1");
       const auto s2 = writer.write_up_to(256, entry_at);
-      expect(
-        s2.full_written == 0 && s2.partial_written == 0, "inc immutable rerun");
+      expect(s2.full_written == 0, "inc immutable rerun");
       const auto s3 = writer.write_up_to(600, entry_at);
       expect(s3.full_written == 1, "inc s3 full");
       expect(store.has_entry_bundle(1), "inc bundle 1");
-      expect(fs::exists(store.entries_path(2, 88)), "inc partial 88");
-    }
-
-    // 5. Supersession: a partial whose index becomes a full bundle is removed.
-    {
-      TileStore store(base / "esup");
-      EntryBundleWriter writer(store);
-      writer.write_up_to(300, entry_at);
-      expect(fs::exists(store.entries_path(1, 44)), "sup partial 44 before");
-      const auto s = writer.write_up_to(512, entry_at);
-      expect(s.partial_removed == 1, "sup one removed");
-      expect(store.has_entry_bundle(1), "sup full bundle 1");
-      expect(!fs::exists(store.entries_path(1, 44)), "sup partial 44 gone");
-      expect(
-        !fs::exists(store.entries_path(1, 1).parent_path()),
-        "sup partial dir gone");
+      expect(!store.has_entry_bundle(2), "inc no tail bundle");
     }
 
     std::cout << "tiles_entries: OK" << '\n';
