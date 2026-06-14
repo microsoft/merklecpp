@@ -15,7 +15,7 @@ page is a practical how-to.
 
 - [Requirements and a note on hashing](#requirements-and-a-note-on-hashing)
 - [Quick start: `TiledTree`](#quick-start-tiledtree)
-- [Checkpoints and compaction](#checkpoints-and-compaction)
+- [Flushing and compaction](#flushing-and-compaction)
 - [Rollback](#rollback)
 - [Proofs](#proofs)
 - [Lower-level building blocks](#lower-level-building-blocks)
@@ -45,14 +45,14 @@ page is a practical how-to.
 
 ## Quick start: `TiledTree`
 
-`TiledTree` is the high-level wrapper: append leaf hashes, take checkpoints
-(which write tiles), and ask for proofs.
+`TiledTree` is the high-level wrapper: append leaf hashes, flush them to disk
+(which writes tiles), and ask for proofs.
 
 ```cpp
 #include <merklecpp_tiles.h>
 
 merkle::tiles::TiledTree::Config cfg;
-cfg.prefix = "/var/log/mylog";   // directory for tile files + checkpoint
+cfg.prefix = "/var/log/mylog";   // directory for tile files
 
 merkle::tiles::TiledTree log(cfg);
 
@@ -60,8 +60,8 @@ merkle::tiles::TiledTree log(cfg);
 for (const merkle::Hash& leaf : batch)
   log.append(leaf);
 
-// Persist newly-complete tiles (and a small checkpoint file) to disk.
-log.checkpoint();
+// Persist newly-complete tiles to disk.
+log.flush();
 
 merkle::Hash root = log.root();          // current Merkle root
 uint64_t      n    = log.size();         // number of leaves
@@ -74,26 +74,26 @@ assert(inclusion->verify(root));
 auto consistency = log.consistency_proof(/*m=*/100, /*n=*/n);
 ```
 
-`checkpoint()` is incremental: each call writes only the tiles that became
+`flush()` is incremental: each call writes only the tiles that became
 complete since the previous call, plus the partial tiles for the current size.
 Full tiles are immutable — written once and never rewritten.
 
-## Checkpoints and compaction
+## Flushing and compaction
 
-By default `checkpoint()` only *writes* tiles; it keeps every leaf resident in
+By default `flush()` only *writes* tiles; it keeps every leaf resident in
 memory. Dropping already-tiled leaves from memory ("compaction") is **opt-in**,
 because once you drop them you can only prove them from the tiles.
 
 ```cpp
 merkle::tiles::TiledTree::Config cfg;
-cfg.prefix               = "/var/log/mylog";
-cfg.compact_on_checkpoint = true;   // drop tiled leaves after each checkpoint
-cfg.retention_margin      = 4096;   // ...but keep the most recent 4096 resident
+cfg.prefix           = "/var/log/mylog";
+cfg.compact_on_flush = true;   // drop tiled leaves after each flush
+cfg.retention_margin = 4096;   // ...but keep the most recent 4096 resident
 
 merkle::tiles::TiledTree log(cfg);
 ```
 
-- `compact_on_checkpoint` (default `false`): when set, `checkpoint()` calls
+- `compact_on_flush` (default `false`): when set, `flush()` calls
   `compact()` for you.
 - `compact()` can also be called explicitly at any time. It drops from memory
   only the leaves already covered by a **durably written full tile**, keeping
@@ -110,14 +110,14 @@ uint64_t resident_from = log.tree_ref().min_index();
 ## Rollback
 
 Tiles are immutable, so you may only roll back entries that have **not yet been
-committed to tiles** (i.e. appended since the last checkpoint). `retract_to`
+committed to tiles** (i.e. appended since the last flush). `retract_to`
 enforces this:
 
 ```cpp
 log.retract_to(index);   // keep leaves [0, index], drop the rest
 ```
 
-- Allowed when the resulting size is `>= checkpoint_size()` (only the un-tiled
+- Allowed when the resulting size is `>= flushed_size()` (only the un-tiled
   frontier is removed).
 - Throws otherwise (rolling back committed entries would leave stale tiles).
 - `retract_to` mirrors `merkle::Tree::retract_to`: `index` is the new *last*
@@ -148,10 +148,10 @@ bool ok = p->verify(root_at_size);
 - `size == log.size()` ⇒ equivalent to `merkle::Tree::path(index)`; verify
   against `log.root()`.
 - a past `size` ⇒ equivalent to `merkle::Tree::past_path(index, size - 1)`;
-  verify against the root at that size (e.g. the root from the checkpoint you are
+  verify against the root at that size (e.g. a past root you are
   auditing).
 
-`size` may even exceed `checkpoint_size()`: the recent, not-yet-tiled frontier is
+`size` may even exceed `flushed_size()`: the recent, not-yet-tiled frontier is
 taken from the resident tree while the older part comes from tiles.
 
 ### Consistency proofs
@@ -243,7 +243,6 @@ Under the configured `prefix`:
 
 ```
 <prefix>/
-  checkpoint                 # latest <size, root>
   tile/0/000, tile/0/001 …   # level-0 tiles (leaf hashes), 256 hashes each
   tile/0/<N>.p/<W>           # partial tile of width W
   tile/1/…                   # higher levels (roll-ups of full tiles below)

@@ -85,8 +85,6 @@ int main()
       rel(store, store.entries_path(5, 3)),
       "tile/entries/005.p/3",
       "entries partial");
-    expect_eq(
-      rel(store, store.checkpoint_path()), "checkpoint", "checkpoint path");
 
     const size_t hsz = Hash().size();
 
@@ -132,28 +130,6 @@ int main()
       threw = true;
     }
     expect(threw, "width mismatch rejected");
-
-    // 4. Checkpoint round-trip against a real tree root.
-    merkle::Tree tree;
-    for (const auto& h : full)
-    {
-      tree.insert(h);
-    }
-    const Hash root = tree.root();
-    store.write_checkpoint(tree.num_leaves(), root);
-
-    uint64_t rd_size = 0;
-    Hash rd_root;
-    expect(store.read_checkpoint(rd_size, rd_root), "checkpoint present");
-    expect(rd_size == tree.num_leaves(), "checkpoint size round-trip");
-    expect(rd_root == root, "checkpoint root round-trip");
-
-    // Missing checkpoint reports absence rather than throwing.
-    const merkle::tiles::TileStore empty_store(dir / "does_not_exist");
-    uint64_t s2 = 0;
-    Hash r2;
-    expect(
-      !empty_store.read_checkpoint(s2, r2), "missing checkpoint returns false");
 
     std::cout << "tiles_store: OK" << '\n';
 

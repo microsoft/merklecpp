@@ -35,18 +35,18 @@ byte-identical to one from `merkle::Tree::path()` and verifies with the same
     #include <merklecpp_tiles.h>
 
     merkle::tiles::TiledTree::Config cfg;
-    cfg.prefix = "/var/log/mylog";       // tile files and checkpoint live here
+    cfg.prefix = "/var/log/mylog";       // tile files live here
     cfg.retention_margin = 1024;         // keep the most recent leaves in memory
-    cfg.compact_on_checkpoint = true;    // opt in to dropping already-tiled leaves
+    cfg.compact_on_flush = true;         // opt in to dropping already-tiled leaves
 
     merkle::tiles::TiledTree log(cfg);
     for (const auto& leaf_hash : batch)
       log.append(leaf_hash);
 
-    // Write newly-complete tiles (and a checkpoint). With compaction enabled
+    // Write newly-complete tiles. With compaction enabled
     // this also drops from memory the leaves already covered by a full tile;
     // otherwise the tree keeps every leaf and you can call log.compact() later.
-    log.checkpoint();
+    log.flush();
 
     // Proofs are served from tiles + the resident tree, even for flushed leaves.
     auto inclusion = log.inclusion_proof(/*index=*/0, log.size());
@@ -55,7 +55,7 @@ byte-identical to one from `merkle::Tree::path()` and verifies with the same
     auto consistency = log.consistency_proof(/*m=*/100, /*n=*/log.size());
 
 See the [tiled storage guide](doc/tiles-guide.md) for a how-to covering
-checkpoints, compaction, rollback, proofs, and the lower-level building blocks,
+flushing, compaction, rollback, proofs, and the lower-level building blocks,
 and [doc/design/tlog-tiles.md](doc/design/tlog-tiles.md) for the full design,
 file/directory layout, and the proof algorithms.
 

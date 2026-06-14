@@ -90,8 +90,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       }
     };
 
-    /// @brief Reads and writes tlog-tiles tile and checkpoint files on a local
-    /// filesystem.
+    /// @brief Reads and writes tlog-tiles tile files on a local filesystem.
     /// @tparam HASH_SIZE Size of each hash in bytes
     /// @tparam HASH_FUNCTION The tree's node hash function (carried for use by
     /// later components; tile I/O itself does not hash).
@@ -106,7 +105,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       using Hash = HashT<HASH_SIZE>;
 
       /// @brief Constructs a tile store rooted at @p prefix.
-      /// @param prefix The directory under which tiles and the checkpoint live.
+      /// @param prefix The directory under which the tiles live.
       explicit TileStoreT(std::filesystem::path prefix) :
         prefix(std::move(prefix))
       {}
@@ -145,12 +144,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           rel += ".p/" + std::to_string((unsigned)width);
         }
         return prefix / rel;
-      }
-
-      /// @brief The filesystem path of the checkpoint.
-      [[nodiscard]] std::filesystem::path checkpoint_path() const
-      {
-        return prefix / "checkpoint";
       }
 
       /// @brief Whether a full tile exists on disk.
@@ -205,39 +198,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           hashes.emplace_back(bytes, position);
         }
         return hashes;
-      }
-
-      /// @brief Writes the (unsigned) checkpoint: tree size and root hash.
-      void write_checkpoint(uint64_t size, const Hash& root_hash)
-      {
-        std::string text =
-          std::to_string(size) + "\n" + root_hash.to_string() + "\n";
-        const std::vector<uint8_t> bytes(text.begin(), text.end());
-        write_file_atomically(checkpoint_path(), bytes);
-      }
-
-      /// @brief Reads the checkpoint, if present.
-      /// @param size Set to the checkpoint tree size on success
-      /// @param root_hash Set to the checkpoint root hash on success
-      /// @return Whether a checkpoint was read
-      [[nodiscard]] bool read_checkpoint(uint64_t& size, Hash& root_hash) const
-      {
-        std::ifstream f(checkpoint_path(), std::ios::binary);
-        if (!f.good())
-        {
-          return false;
-        }
-        std::string size_line;
-        std::string root_line;
-        if (!std::getline(f, size_line) || !std::getline(f, root_line))
-        {
-          throw std::runtime_error("malformed checkpoint");
-        }
-        trim(size_line);
-        trim(root_line);
-        size = std::stoull(size_line);
-        root_hash = Hash(root_line);
-        return true;
       }
 
       /// @brief Whether a full entry bundle exists on disk.
@@ -327,17 +287,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     protected:
       /// @brief The root directory of the store.
       std::filesystem::path prefix;
-
-      /// @brief Removes trailing carriage-return/whitespace from a line.
-      static void trim(std::string& s)
-      {
-        while (!s.empty() &&
-               (s.back() == '\r' || s.back() == '\n' || s.back() == ' ' ||
-                s.back() == '\t'))
-        {
-          s.pop_back();
-        }
-      }
 
       /// @brief Reads an entire file into a byte vector.
       static std::vector<uint8_t> read_file(const std::filesystem::path& path)
@@ -1150,10 +1099,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     };
 
     /// @brief A merkle tree backed by tlog-tiles storage.
-    /// @note Appends grow an in-memory tree; checkpoint() durably writes the
+    /// @note Appends grow an in-memory tree; flush() durably writes the
     /// tiles. Compaction (dropping from memory the leaves already covered by a
-    /// durably-written full tile) is optional: enable it per checkpoint with
-    /// Config::compact_on_checkpoint, or call compact() explicitly. Proofs are
+    /// durably-written full tile) is optional: enable it per flush with
+    /// Config::compact_on_flush, or call compact() explicitly. Proofs are
     /// served from the combination of the resident tree and the tiles, so they
     /// remain available for compacted (dropped) leaves.
     template <
@@ -1173,17 +1122,17 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Configuration for a tiled tree.
       struct Config
       {
-        /// @brief Root directory for tiles and the checkpoint.
+        /// @brief Root directory for the tiles.
         std::filesystem::path prefix;
 
         /// @brief Number of most-recent leaves to keep resident when
         /// compacting (i.e. never dropped from memory).
         uint64_t retention_margin = 0;
 
-        /// @brief If set, checkpoint() compacts after writing tiles, dropping
+        /// @brief If set, flush() compacts after writing tiles, dropping
         /// from memory the leaves already covered by a full tile. Off by
         /// default: tiles are written but the tree keeps every leaf resident.
-        bool compact_on_checkpoint = false;
+        bool compact_on_flush = false;
 
         /// @brief Tile writer options.
         typename Writer::Options writer = {};
@@ -1213,8 +1162,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         return tree.root();
       }
 
-      /// @brief The tree size of the last checkpoint (the durable tile size).
-      [[nodiscard]] uint64_t checkpoint_size() const
+      /// @brief The number of leaves durably written to tiles.
+      [[nodiscard]] uint64_t flushed_size() const
       {
         return tiles_size;
       }
@@ -1231,10 +1180,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         return store;
       }
 
-      /// @brief Writes tiles and a checkpoint; compacts only if
-      /// Config::compact_on_checkpoint is set.
-      /// @return Counts of the tiles written/removed by this checkpoint
-      Stats checkpoint()
+      /// @brief Writes newly-complete tiles to disk; compacts only if
+      /// Config::compact_on_flush is set.
+      /// @return Counts of the tiles written/removed by this flush
+      Stats flush()
       {
         Stats stats;
         const uint64_t n = tree.num_leaves();
@@ -1246,10 +1195,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         stats = writer.write_up_to(n, [this](uint64_t i) -> const Hash& {
           return tree.leaf((size_t)i);
         });
-        store.write_checkpoint(n, tree.root());
         tiles_size = n;
 
-        if (config.compact_on_checkpoint)
+        if (config.compact_on_flush)
         {
           compact();
         }
@@ -1282,7 +1230,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// removing all leaves after it (same semantics as TreeT::retract_to).
       /// @note Tiles are immutable, so entries already committed to tiles
       /// cannot be rolled back: this throws if the resulting size would be
-      /// smaller than checkpoint_size(). Only un-checkpointed (not-yet-tiled)
+      /// smaller than flushed_size(). Only un-flushed (not-yet-tiled)
       /// entries may be rolled back. (Retracting the underlying tree directly
       /// via tree_ref() bypasses this guard and can leave stale tiles -- do not
       /// do that.)
@@ -1292,14 +1240,14 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         {
           throw std::runtime_error(
             "TiledTree::retract_to: cannot roll back entries already committed "
-            "to immutable tiles (resulting size < checkpoint size)");
+            "to immutable tiles (resulting size < flushed size)");
         }
         tree.retract_to(index);
       }
 
       /// @brief Inclusion proof for @p index in a tree of @p proof_size leaves.
       /// @note Served from tiles (flushed past) combined with the resident tree
-      /// (recent frontier); @p proof_size may exceed checkpoint_size().
+      /// (recent frontier); @p proof_size may exceed flushed_size().
       std::shared_ptr<Path> inclusion_proof(uint64_t index, uint64_t proof_size)
       {
         MemoryHashSourceT<HASH_SIZE, HASH_FUNCTION> mem(tree);

@@ -136,8 +136,8 @@ int main()
     }
     std::cout << "memory source: OK" << '\n';
 
-    // ---- Part 2: TiledTree checkpoint + flush, proofs over tiles + memory.
-    const uint64_t n1 = 1000; // first checkpoint size
+    // ---- Part 2: TiledTree flush, proofs over tiles + memory.
+    const uint64_t n1 = 1000; // first flush size
     const uint64_t N = 1500; // final size
 
     // Reference: a plain (never flushed) tree with the same leaves.
@@ -148,7 +148,7 @@ int main()
     }
     const Hash ref_root = ref.root();
 
-    // Default mode: checkpoint() writes tiles but drops nothing from memory;
+    // Default mode: flush() writes tiles but drops nothing from memory;
     // an explicit compact() drops only the leaves already covered by a tile.
     {
       TiledTree::Config dcfg;
@@ -158,7 +158,7 @@ int main()
       {
         dtt.append(hashes[i]);
       }
-      dtt.checkpoint();
+      dtt.flush();
       expect(dtt.tree_ref().min_index() == 0, "default: nothing dropped");
       dtt.compact();
       expect(dtt.tree_ref().min_index() == 768, "compact() drops to 768");
@@ -167,15 +167,15 @@ int main()
     TiledTree::Config cfg;
     cfg.prefix = base / "tt";
     cfg.retention_margin = 0;
-    cfg.compact_on_checkpoint = true;
+    cfg.compact_on_flush = true;
     TiledTree tt(cfg);
 
     for (uint64_t i = 0; i < n1; i++)
     {
       tt.append(hashes[i]);
     }
-    tt.checkpoint(); // tiles_size = 1000; compact to covered = 768
-    expect(tt.checkpoint_size() == n1, "checkpoint size");
+    tt.flush(); // tiles_size = 1000; compact to covered = 768
+    expect(tt.flushed_size() == n1, "flushed size");
     expect(tt.tree_ref().min_index() == 768, "compacted to 768");
 
     for (uint64_t i = n1; i < N; i++)
@@ -185,8 +185,8 @@ int main()
     expect(tt.size() == N, "size after appends");
     expect(tt.root() == ref_root, "tiled root == reference root");
 
-    // Indices that are: flushed (tiles only), in the checkpointed-but-resident
-    // overlap, and on the un-checkpointed resident frontier.
+    // Indices that are: flushed (tiles only), in the flushed-but-resident
+    // overlap, and on the un-flushed resident frontier.
     for (const uint64_t i :
          {(uint64_t)0,
           (uint64_t)767,
@@ -215,7 +215,7 @@ int main()
     }
     expect(threw, "memory-only path throws for flushed index");
 
-    // Consistency across the flush boundary: checkpoint size -> current size,
+    // Consistency across the flush boundary: flushed size -> current size,
     // and a flushed-era size -> current size.
     {
       const auto cp = tt.consistency_proof(n1, N);
@@ -241,10 +241,10 @@ int main()
         "consistency index variant verifies");
     }
 
-    // A second checkpoint flushes further; proofs for now-flushed indices still
+    // A second flush writes further tiles; proofs for now-flushed indices still
     // work (this also confirms the writer never reads a flushed leaf).
-    tt.checkpoint(); // tiles_size = 1500; flush to covered = 1280
-    expect(tt.checkpoint_size() == N, "second checkpoint size");
+    tt.flush(); // tiles_size = 1500; flush to covered = 1280
+    expect(tt.flushed_size() == N, "second flushed size");
     expect(tt.tree_ref().min_index() == 1280, "flushed to 1280");
 
     for (const uint64_t i :
@@ -265,9 +265,9 @@ int main()
     std::cout << "tiled tree (flush + combination): OK" << '\n';
 
     // ---- Part 3: rollback. Tiles are immutable, so only un-tiled
-    //      (post-checkpoint) entries may be rolled back.
+    //      (post-flush) entries may be rolled back.
     {
-      // 3a. Before any checkpoint nothing is tiled, so rollback is
+      // 3a. Before any flush nothing is tiled, so rollback is
       // unrestricted.
       {
         TiledTree::Config cfg;
@@ -278,10 +278,10 @@ int main()
           rb.append(hashes[i]);
         }
         rb.retract_to(29); // tiles_size == 0 -> allowed
-        expect(rb.size() == 30, "rb pre-checkpoint retract allowed");
+        expect(rb.size() == 30, "rb pre-flush retract allowed");
       }
 
-      // 3b. After a checkpoint, the un-tiled frontier can be rolled back and
+      // 3b. After a flush, the un-tiled frontier can be rolled back and
       // the
       //     tiled region stays consistent and provable; committed entries
       //     can't.
@@ -293,7 +293,7 @@ int main()
         {
           rb.append(hashes[i]);
         }
-        rb.checkpoint(); // tiles_size = 300
+        rb.flush(); // tiles_size = 300
         for (uint64_t i = 300; i < 400; i++)
         {
           rb.append(hashes[i]);
@@ -304,7 +304,7 @@ int main()
         {
           rb.append(hashes[1000 + i]); // re-append DIFFERENT leaves
         }
-        rb.checkpoint(); // tiles_size = 400
+        rb.flush(); // tiles_size = 400
 
         // Reference tree of the exact post-rollback state.
         merkle::Tree exp_tree;
@@ -367,13 +367,13 @@ int main()
       {
         TiledTree::Config cfg;
         cfg.prefix = base / "rb_compact";
-        cfg.compact_on_checkpoint = true;
+        cfg.compact_on_flush = true;
         TiledTree rb(cfg);
         for (uint64_t i = 0; i < 1000; i++)
         {
           rb.append(hashes[i]);
         }
-        rb.checkpoint(); // tiles_size = 1000; flush to 768
+        rb.flush(); // tiles_size = 1000; flush to 768
         expect(rb.tree_ref().min_index() == 768, "rb compact flushed to 768");
         for (uint64_t i = 1000; i < 1200; i++)
         {

@@ -17,7 +17,7 @@ tiles, from the in-memory tree, or from a combination of the two.
    the [tlog-tiles](https://c2sp.org/tlog-tiles) file/directory layout and tile
    geometry (256-wide tiles, 8 tree levels per tile, partial-tile rules, path
    encoding).
-2. Produce tiles **progressively**: each batch/checkpoint writes only the newly
+2. Produce tiles **progressively**: each batch/flush writes only the newly
    completed tiles, and the write integrates with the existing `flush_to()`
    "compaction" so that flushed (evicted) subtrees are durably persisted before
    their nodes are freed from memory.
@@ -45,8 +45,6 @@ tiles, from the in-memory tree, or from a combination of the two.
   clients. See [§2.3](#23-compatibility-statement): such interop is only
   possible if the consumer instantiates `TreeT` with an RFC 6962 combiner, which
   is **out of scope** here and not required by this design.
-- Checkpoint **signing** (signed notes / Ed25519). We define a minimal,
-  unsigned checkpoint artifact and leave signing to the application.
 - An HTTP server. We define the on-disk layout and the read/write/proof APIs;
   serving the static files is an application concern.
 
@@ -79,7 +77,6 @@ A tiled log exposes the Merkle tree as a set of static resources:
   only the *count* is partial.
 - **Entry bundles** at `<prefix>/tile/entries/<N>[.p/<W>]`: big-endian `uint16`
   length-prefixed raw entries. (See [§6.8](#68-entry-bundles-optional).)
-- A **checkpoint** (signed tree head) at `<prefix>/checkpoint`.
 - **Pruning**: a log keeps a *minimum index*; tiles/bundles whose end index is
   `≤ minimum index` may be denied. This maps cleanly onto merklecpp's
   `flush_to()` / `min_index()`.
@@ -186,7 +183,6 @@ Rooted at a configurable `prefix` directory on local disk:
 
 ```
 <prefix>/
-  checkpoint                      # mutable: latest <size, root> (unsigned)
   tile/
     0/                            # level 0 (leaf hashes)
       000  001 ... 255            # full tiles (8192 B each for HASH_SIZE=32)
@@ -228,7 +224,7 @@ Tile byte format: the `W` entries concatenated, each `HASH_SIZE` raw bytes
 ## 5. Architecture overview
 
 ```
-            append(leaf hash)            checkpoint()/flush
+            append(leaf hash)            flush()
    caller ───────────────▶  TiledTreeT ───────────────▶  TileStoreT (disk I/O)
                               │  owns Tree                   ▲
                               │                              │ read tiles
@@ -247,11 +243,11 @@ with default aliases mirroring the bottom of `merklecpp.h`:
 | Component            | Responsibility                                                        |
 |----------------------|-----------------------------------------------------------------------|
 | `TileCoord`          | pure index math + path encoding (no I/O)                              |
-| `TileStoreT`         | read/write tile & checkpoint files on a local filesystem             |
+| `TileStoreT`         | read/write tile files on a local filesystem                          |
 | `TileWriterT`        | compute & persist newly-complete full/partial tiles (write path)     |
 | `HashSource` impls   | resolve `subtree_root` from tiles, memory, or both                   |
 | `ProofEngineT`       | `mth_range`, `inclusion_proof`, `consistency_proof`, verifiers       |
-| `TiledTreeT`         | convenience wrapper: `append` / `checkpoint` / `prove*` / compaction |
+| `TiledTreeT`         | convenience wrapper: `append` / `flush` / `prove*` / compaction      |
 
 The **only** (optional) change to the core header is a small, read-only,
 **non-hashing** accessor (`subtree_root`) used by `MemoryHashSource`; see
@@ -343,10 +339,6 @@ public:
 
   // Single entry convenience (used heavily by TileHashSource)
   bool read_entry(uint8_t level, uint64_t global_entry, Hash& out, uint64_t size) const;
-
-  // Checkpoint (unsigned: size + root)
-  void write_checkpoint(uint64_t size, const Hash& root);
-  bool read_checkpoint(uint64_t& size, Hash& root) const;
 };
 ```
 
@@ -364,8 +356,8 @@ public:
 class TileWriterT {
 public:
   struct Options {
-    bool write_partial_tiles = true;   // required for checkpoint sizes
-    bool write_higher_levels = true;   // roll up L>=1 each checkpoint
+    bool write_partial_tiles = true;   // required for arbitrary sizes
+    bool write_higher_levels = true;   // roll up L>=1 each flush
     bool remove_superseded_partials = true;
   };
 
@@ -403,14 +395,13 @@ entry(L, g):
   which exist **before** flushing. Higher levels roll up from the level-0 tiles
   just written — independent of tree internals and robust to prior flushes.
 - `first_unwritten_full(L)` is tracked in the store (probe `has_full_tile`, or a
-  small persisted cursor) to keep each checkpoint O(new tiles).
+  small persisted cursor) to keep each flush O(new tiles).
 
 Compaction integration (the "on compaction" story):
 
 ```cpp
-// In TiledTreeT::checkpoint(): write durable tiles, THEN free memory.
+// In TiledTreeT::flush(): write durable tiles, THEN free memory.
 writer.write_up_to(size, [&](uint64_t i) -> const Hash& { return tree.leaf(i); });
-store.write_checkpoint(size, tree.root());
 uint64_t covered = (size / TILE_WIDTH) * TILE_WIDTH;       // full level-0 coverage
 tree.flush_to(covered - retention_margin);                 // never past `covered`
 ```
@@ -510,7 +501,7 @@ public:
   struct Config {
     std::filesystem::path prefix;
     uint64_t retention_margin = 0;       // keep this many recent leaves resident
-    bool compact_on_checkpoint = false;  // opt in to dropping tiled leaves
+    bool compact_on_flush = false;       // opt in to dropping tiled leaves
     TileWriterT::Options writer = {};
   };
   explicit TiledTreeT(Config);
@@ -519,9 +510,9 @@ public:
   uint64_t size() const;                              // tree.num_leaves
   Hash root();                                        // tree.root
 
-  // Write newly-complete tiles + partials + checkpoint. Compaction (dropping
-  // already-tiled leaves from memory) happens only if compact_on_checkpoint.
-  Stats checkpoint();
+  // Write newly-complete tiles + partials. Compaction (dropping already-tiled
+  // leaves from memory) happens only if compact_on_flush.
+  Stats flush();
 
   // Drop from memory the leaves already covered by a full tile (opt-in);
   // proofs for dropped leaves remain available from the tiles.
@@ -549,7 +540,7 @@ entry bundles are an **application-owned** add-on, included for completeness:
 - The application is responsible for the leaf-hash derivation it uses (e.g.
   `leaf_hash = H(entry)`); merklecpp stores whatever leaf hash is inserted.
 - A `BundleWriter` mirrors `TileWriterT` (write full bundles on 256 boundaries,
-  partial bundle for the checkpoint size). Marked optional/secondary.
+  partial bundle for the current size). Marked optional/secondary.
 
 ---
 
@@ -562,14 +553,13 @@ invariant:
 > coverage: `min_index() ≤ covered`, where
 > `covered = floor(size / 256) * 256` after `write_up_to(size, …)`.
 
-Per checkpoint:
+Per flush:
 
 1. `append(...)` new leaf hashes; compute `root()`.
 2. `write_up_to(size, leaf_at)` — persist newly-complete **full** tiles at all
    levels (incremental) and the **partial** tiles for `size`.
-3. `write_checkpoint(size, root)`.
-4. *(optional)* `compact()` → `flush_to(covered − retention_margin)` — reclaim
-   memory, only when `compact_on_checkpoint` is set (or `compact()` is called
+3. *(optional)* `compact()` → `flush_to(covered − retention_margin)` — reclaim
+   memory, only when `compact_on_flush` is set (or `compact()` is called
    explicitly). By default nothing is dropped and the tree stays whole.
 
 Given the invariant, every leaf and every perfect subtree is resolvable:
@@ -584,7 +574,7 @@ Hence inclusion and consistency proofs are always producible after compaction,
 from tiles alone, from memory alone (when nothing relevant was flushed), or from
 the combination — satisfying the request.
 
-Cost per checkpoint is `O(new full tiles + partial tiles)`; higher-level tiles
+Cost per flush is `O(new full tiles + partial tiles)`; higher-level tiles
 are cheap roll-ups of 256 child hashes. Proof generation is
 `O(log(size))` `mth_range` calls, each at most one tile read plus a `≤ 256`-leaf
 roll-up, served from cache in the common case.
@@ -630,8 +620,8 @@ Each phase is independently testable; phases 1–4 require **no** core changes.
 group in `test/CMakeLists.txt` following `add_merklecpp_test`.
 
 **Phase 1 — Coordinates & store.** `TileCoord`/`encode_index`, `TileRef`,
-`TileStoreT` (path building, atomic `write_tile`, `read_tile`, checkpoint
-read/write). *Tests:* index-encoding vectors; tile byte round-trip.
+`TileStoreT` (path building, atomic `write_tile`, `read_tile`). *Tests:*
+index-encoding vectors; tile byte round-trip.
 
 **Phase 2 — Write path.** `TileWriterT::write_up_to` (level-0 from `leaf_at`,
 roll-ups, partials, incremental cursor; superseded-partial removal). *Tests:*
@@ -646,8 +636,8 @@ equals `tree.past_path(i, m-1)`; consistency proof reconciles
 `tree.past_root(m-1)`/`tree.past_root(n-1)`.
 
 **Phase 4 — Combination & wrapper.** Optional core `subtree_root` accessor;
-`MemoryHashSource`, `CombinedHashSource`, `TiledTreeT` (append/checkpoint/prove
-with `flush_to`). *Tests:* build N leaves, checkpoint+flush, then prove
+`MemoryHashSource`, `CombinedHashSource`, `TiledTreeT` (append/flush/prove
+with `flush_to`). *Tests:* build N leaves, flush, then prove
 inclusion for a **flushed** index and a **resident** index against a non-flushed
 reference tree's root; consistency across a flush boundary.
 
@@ -695,21 +685,18 @@ compatible":
   reader; atomic rename + "fetch full tile as fallback" (spec-sanctioned)
   mitigate this.
 - **`flush_to` alignment.** Must flush only to a 256-multiple (minus retention)
-  to uphold the coverage invariant; enforced inside `TiledTreeT::checkpoint`.
+  to uphold the coverage invariant; enforced inside `TiledTreeT::flush`.
 - **Rollback vs. immutable tiles.** Tiles are write-once, so rolling the tree
   back (`retract_to`) over already-tiled entries would leave stale, never-
   rewritten tiles and is forbidden: `TiledTreeT::retract_to` throws if the
-  resulting size is below `checkpoint_size()`, permitting only rollback of the
-  un-tiled (post-checkpoint) frontier. Retracting the underlying tree directly
+  resulting size is below `flushed_size()`, permitting only rollback of the
+  un-tiled (post-flush) frontier. Retracting the underlying tree directly
   via `tree_ref()` bypasses this guard and must be avoided.
 - **Very large indices.** Index math uses `uint64_t`; encoding handles
   multi-group indices. Level bound `≤ 63` per spec (8 suffices for `2^64`).
 - **Open question — `subtree_root` in core vs. `past_path`-derived memory
   source.** Recommend the tiny non-hashing accessor; falls back to zero-core-
   change if maintainers prefer. Either keeps hashing untouched.
-- **Open question — checkpoint format.** We store unsigned `size + root`.
-  Aligning the text format with `tlog-checkpoint`/`signed-note` (origin line,
-  base64 root, signatures) can be layered on without affecting tiles or proofs.
 
 ---
 
