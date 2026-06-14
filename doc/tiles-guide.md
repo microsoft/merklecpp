@@ -74,9 +74,10 @@ assert(inclusion->verify(root));
 auto consistency = log.consistency_proof(/*m=*/100, /*n=*/n);
 ```
 
-`flush()` is incremental: each call writes only the tiles that became
-complete since the previous call, plus the partial tiles for the current size.
-Full tiles are immutable — written once and never rewritten.
+`flush()` is incremental: each call writes only the full tiles that became
+complete since the previous call. Full tiles are immutable — written once and
+never rewritten — and the incomplete frontier is never tiled (it stays in
+memory until it grows into a full tile).
 
 ## Flushing and compaction
 
@@ -117,8 +118,10 @@ enforces this:
 log.retract_to(index);   // keep leaves [0, index], drop the rest
 ```
 
-- Allowed when the resulting size is `>= flushed_size()` (only the un-tiled
-  frontier is removed).
+- Allowed when the resulting size is `>= flushed_size()` — i.e. only the
+  un-tiled frontier is removed. `flushed_size()` is the full-tile-covered prefix
+  (a multiple of 256), so everything appended since the last full tile can be
+  rolled back.
 - Throws otherwise (rolling back committed entries would leave stale tiles).
 - `retract_to` mirrors `merkle::Tree::retract_to`: `index` is the new *last*
   leaf, so the resulting size is `index + 1`.
@@ -191,18 +194,19 @@ for (auto& leaf : batch) tree.insert(leaf);
 merkle::tiles::TileStore  store("/var/log/mylog");
 merkle::tiles::TileWriter writer(store);
 
-// Write all newly-complete full tiles and the partial tiles for this size.
+// Write all newly-complete full tiles (the incomplete frontier is not tiled).
 auto stats = writer.write_up_to(
   tree.num_leaves(),
   [&](uint64_t i) -> const merkle::Hash& { return tree.leaf(i); });
-// stats.full_written / stats.partial_written / stats.partial_removed
+// stats.full_written
 ```
 
 ### Reading tiles and computing proofs
 
 A `HashSource` resolves the root of a complete subtree; pick where it reads from:
 
-- `TileHashSource(store, available_size)` — from tile files.
+- `TileHashSource(store, available_size)` — from full tile files; resolves the
+  full-tile-covered prefix only (the frontier needs a memory source).
 - `MemoryHashSource(tree)` — from a resident `merkle::Tree`.
 - `CombinedHashSource(primary, secondary)` — try `primary` first, then
   `secondary` (e.g. memory then tiles).
@@ -215,6 +219,11 @@ merkle::Hash root = engine.root(size);
 auto inclusion    = engine.inclusion_proof(index, size);
 auto consistency  = engine.consistency_proof(m, n);
 ```
+
+A tile-only source can resolve proofs whose subtrees all lie within the
+full-tile-covered prefix (`available_size` is rounded down to a whole number of
+tiles). For the live frontier, combine it with a `MemoryHashSource` — which is
+exactly what `TiledTree` does for you.
 
 `TiledTree` simply wires a `CombinedHashSource(MemoryHashSource, TileHashSource)`
 into a `ProofEngine` for you.
@@ -244,13 +253,13 @@ Under the configured `prefix`:
 ```
 <prefix>/
   tile/0/000, tile/0/001 …   # level-0 tiles (leaf hashes), 256 hashes each
-  tile/0/<N>.p/<W>           # partial tile of width W
   tile/1/…                   # higher levels (roll-ups of full tiles below)
   tile/entries/…             # optional raw entry bundles
 ```
 
 Tile indices use the tlog-tiles path encoding: zero-padded 3-digit groups with
-all but the last prefixed by `x` (e.g. index `1234067` → `x001/x234/067`). Full
-tiles are immutable; partial tiles grow and may be removed once superseded. See
+all but the last prefixed by `x` (e.g. index `1234067` → `x001/x234/067`). All
+tiles are full (256-wide) and immutable; the incomplete frontier is never tiled.
+See
 [`design/tlog-tiles.md`](design/tlog-tiles.md) for the full specification of the
 geometry and proof algorithms.

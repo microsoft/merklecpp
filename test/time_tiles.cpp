@@ -81,14 +81,13 @@ int main()
               << append_s << " sec ("
               << (uint64_t)((double)num_leaves / append_s) << " leaves/sec)\n";
 
-    // 2. Flush: write newly-complete tiles to disk.
+    // 2. Flush: write newly-complete full tiles to disk.
     t = std::chrono::high_resolution_clock::now();
     const auto stats = log.flush();
     const double flush_s = secs_since(t);
-    const uint64_t tiles = stats.full_written + stats.partial_written;
-    std::cout << "flush (to disk)    : " << stats.full_written << " full + "
-              << stats.partial_written << " partial tiles in " << flush_s
-              << " sec (" << (uint64_t)((double)tiles / flush_s)
+    std::cout << "flush (to disk)    : " << stats.full_written
+              << " full tiles in " << flush_s << " sec ("
+              << (uint64_t)((double)stats.full_written / flush_s)
               << " tiles/sec)\n";
 
     const uint64_t n = log.size();

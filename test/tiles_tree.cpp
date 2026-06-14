@@ -174,8 +174,8 @@ int main()
     {
       tt.append(hashes[i]);
     }
-    tt.flush(); // tiles_size = 1000; compact to covered = 768
-    expect(tt.flushed_size() == n1, "flushed size");
+    tt.flush(); // flushes full tiles; flushed_size = covered = 768
+    expect(tt.flushed_size() == 768, "flushed size");
     expect(tt.tree_ref().min_index() == 768, "compacted to 768");
 
     for (uint64_t i = n1; i < N; i++)
@@ -243,8 +243,8 @@ int main()
 
     // A second flush writes further tiles; proofs for now-flushed indices still
     // work (this also confirms the writer never reads a flushed leaf).
-    tt.flush(); // tiles_size = 1500; flush to covered = 1280
-    expect(tt.flushed_size() == N, "second flushed size");
+    tt.flush(); // flushes full tiles; flushed_size = covered = 1280
+    expect(tt.flushed_size() == 1280, "second flushed size");
     expect(tt.tree_ref().min_index() == 1280, "flushed to 1280");
 
     for (const uint64_t i :
@@ -263,6 +263,38 @@ int main()
     }
 
     std::cout << "tiled tree (flush + combination): OK" << '\n';
+
+    // ---- Part 2b: compaction when the size is an exact multiple of TILE_WIDTH
+    //      (here 512). flush_to cannot drain the whole tree, so compact() keeps
+    //      one resident leaf rather than throwing; proofs still resolve.
+    {
+      TiledTree::Config mcfg;
+      mcfg.prefix = base / "tt_multiple";
+      mcfg.compact_on_flush = true;
+      TiledTree mtt(mcfg);
+      for (uint64_t i = 0; i < 512; i++)
+      {
+        mtt.append(hashes[i]);
+      }
+      mtt.flush(); // covered == size == 512; compaction must not throw
+      expect(mtt.flushed_size() == 512, "multiple: flushed size 512");
+      expect(mtt.tree_ref().min_index() == 511, "multiple: one leaf retained");
+
+      merkle::Tree mref;
+      for (uint64_t i = 0; i < 512; i++)
+      {
+        mref.insert(hashes[i]);
+      }
+      const Hash mroot = mref.root();
+      expect(mtt.root() == mroot, "multiple: root matches reference");
+      for (const uint64_t i : {(uint64_t)0, (uint64_t)256, (uint64_t)511})
+      {
+        const auto p = mtt.inclusion_proof(i, 512);
+        expect(*p == *mref.path(i), "multiple: inclusion==ref");
+        expect(p->verify(mroot), "multiple: inclusion verify");
+      }
+      std::cout << "tiled tree (exact-multiple compaction): OK" << '\n';
+    }
 
     // ---- Part 3: rollback. Tiles are immutable, so only un-tiled
     //      (post-flush) entries may be rolled back.
@@ -293,7 +325,7 @@ int main()
         {
           rb.append(hashes[i]);
         }
-        rb.flush(); // tiles_size = 300
+        rb.flush(); // flushed_size = covered = 256
         for (uint64_t i = 300; i < 400; i++)
         {
           rb.append(hashes[i]);
@@ -304,7 +336,8 @@ int main()
         {
           rb.append(hashes[1000 + i]); // re-append DIFFERENT leaves
         }
-        rb.flush(); // tiles_size = 400
+        rb.flush(); // flushed_size = covered = 256 (tile [0,256) already
+                    // written)
 
         // Reference tree of the exact post-rollback state.
         merkle::Tree exp_tree;
@@ -335,31 +368,33 @@ int main()
             300, 400, *exp_tree.past_root(299), exp_root, cp),
           "rb consistency 300->400");
 
-        // Rolling back committed entries is refused (below and at the
-        // boundary); rolling back to exactly the tiled size removes nothing and
-        // is allowed.
+        // Only the immutable full-tile prefix [0,256) is protected: rolling
+        // back into it is refused, while rolling back within the un-tiled
+        // frontier (>= flushed_size()) is allowed.
+        expect(rb.flushed_size() == 256, "rb flushed to full-tile prefix");
+
         bool threw = false;
         try
         {
-          rb.retract_to(100);
+          rb.retract_to(100); // size 101 < 256
         }
         catch (const std::exception&)
         {
           threw = true;
         }
-        expect(threw, "rb retract below tiled size throws");
+        expect(threw, "rb retract below tiled prefix throws");
         threw = false;
         try
         {
-          rb.retract_to(398);
+          rb.retract_to(254); // size 255 < 256
         }
         catch (const std::exception&)
         {
           threw = true;
         }
-        expect(threw, "rb retract to size 399 throws");
-        rb.retract_to(399);
-        expect(rb.size() == 400, "rb retract to tiled size is a no-op");
+        expect(threw, "rb retract just below tiled prefix throws");
+        rb.retract_to(255); // size 256 == flushed_size(): drops only frontier
+        expect(rb.size() == 256, "rb retract to tiled prefix allowed");
       }
 
       // 3c. Rollback interacts correctly with compaction (flushed + tiled
@@ -373,13 +408,13 @@ int main()
         {
           rb.append(hashes[i]);
         }
-        rb.flush(); // tiles_size = 1000; flush to 768
+        rb.flush(); // flushed_size = covered = 768; compact to 768
         expect(rb.tree_ref().min_index() == 768, "rb compact flushed to 768");
         for (uint64_t i = 1000; i < 1200; i++)
         {
           rb.append(hashes[i]);
         }
-        rb.retract_to(1099); // frontier rollback (>= tiles_size) is allowed
+        rb.retract_to(1099); // frontier rollback (>= flushed_size()) is allowed
         expect(rb.size() == 1100, "rb compact frontier retract ok");
 
         merkle::Tree exp_tree;

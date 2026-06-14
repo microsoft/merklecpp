@@ -17,6 +17,8 @@
 
 namespace fs = std::filesystem;
 using merkle::Hash;
+using merkle::tiles::CombinedHashSource;
+using merkle::tiles::MemoryHashSource;
 using merkle::tiles::ProofEngine;
 using merkle::tiles::TileHashSource;
 using merkle::tiles::TileStore;
@@ -31,7 +33,9 @@ static void expect(bool cond, const std::string& what)
 }
 
 // Exercises tile-derived proofs for a tree of `n` leaves against the existing
-// library (which acts as the oracle: proofs must be byte-identical).
+// library (which acts as the oracle: proofs must be byte-identical). Full tiles
+// serve the covered prefix and an in-memory tree serves the un-tiled frontier,
+// exactly as TiledTree combines them.
 static void check_size(
   const fs::path& dir, uint64_t n, const std::vector<Hash>& hashes)
 {
@@ -42,6 +46,7 @@ static void check_size(
   const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
   writer.write_up_to(n, leaf_at);
 
+  // Oracle: a full, never-flushed tree with the same leaves.
   merkle::Tree tree;
   for (uint64_t i = 0; i < n; i++)
   {
@@ -49,7 +54,28 @@ static void check_size(
   }
   const Hash root = tree.root();
 
-  const TileHashSource source(store, n);
+  // Production-shaped source: full tiles serve the covered prefix, an in-memory
+  // tree serves the un-tiled frontier. Drop the tiled past from the frontier
+  // tree so proofs over it are genuinely served from the tiles. merklecpp keeps
+  // at least one resident leaf, so never flush the whole tree.
+  const uint64_t covered = (n / 256) * 256; // 256 == TILE_WIDTH
+  merkle::Tree frontier;
+  for (uint64_t i = 0; i < n; i++)
+  {
+    frontier.insert(hashes[i]);
+  }
+  uint64_t drop_to = covered;
+  if (n > 0 && drop_to >= n)
+  {
+    drop_to = n - 1;
+  }
+  if (drop_to > 0)
+  {
+    frontier.flush_to((size_t)drop_to);
+  }
+  const MemoryHashSource mem(frontier);
+  const TileHashSource tiles(store, covered);
+  const CombinedHashSource source(mem, tiles);
   const ProofEngine engine(source);
 
   // Root recomputed from tiles equals the library root.
@@ -192,7 +218,7 @@ int main()
     }
     std::cout << "small/medium sizes: OK" << '\n';
 
-    // Large tree: exercises full L1 tiles and an L2 partial.
+    // Large tree: exercises full L1 tiles and the in-memory frontier.
     check_size(base / "big", 70000, hashes);
     std::cout << "size 70000: OK" << '\n';
 

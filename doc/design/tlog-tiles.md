@@ -15,18 +15,20 @@ tiles, from the in-memory tree, or from a combination of the two.
 
 1. Write the tree to disk as a set of immutable, cacheable **tile files** using
    the [tlog-tiles](https://c2sp.org/tlog-tiles) file/directory layout and tile
-   geometry (256-wide tiles, 8 tree levels per tile, partial-tile rules, path
-   encoding).
+   geometry (256-wide tiles, 8 tree levels per tile, path encoding). Only
+   **full, balanced** tiles are produced: the incomplete frontier is **never
+   tiled** (no partial tiles are written or read) and is instead kept in the
+   in-memory tree until it grows into a full tile.
 2. Produce tiles **progressively**: each batch/flush writes only the newly
    completed tiles, and the write integrates with the existing `flush_to()`
    "compaction" so that flushed (evicted) subtrees are durably persisted before
    their nodes are freed from memory.
 3. Provide an API to retrieve, **after compaction**, an **inclusion path** and a
    **consistency path**:
-   - purely from tiles,
-   - purely from the in-memory tree (existing behaviour), or
-   - from a combination of tiles (old, flushed part) and the in-memory tree
-     (recent frontier).
+   - from the in-memory tree alone (existing behaviour),
+   - from full tiles alone, for the tiled (full-tile-covered) prefix, or
+   - from a combination of full tiles (old, flushed part) and the in-memory
+     tree (recent frontier) — the normal case.
 4. Keep everything **header-only** and templated, matching the existing
    `TreeT<HASH_SIZE, HASH_FUNCTION>` style.
 
@@ -75,6 +77,12 @@ A tiled log exposes the Merkle tree as a set of static resources:
   size `s` has `floor(s / 256^l) mod 256` entries. **Empty tiles MUST NOT be
   served.** Partial-tile entries are still complete `256^l`-leaf subtree roots;
   only the *count* is partial.
+
+  > **merklecpp deviation.** This implementation never writes or reads partial
+  > *tiles*. The incomplete frontier (everything past the last full tile) is held
+  > in the in-memory tree, not on disk, so the on-disk tile set is the full-tile
+  > prefix only. Entry bundles (below) are a separate, application-owned resource
+  > and may still be partial.
 - **Entry bundles** at `<prefix>/tile/entries/<N>[.p/<W>]`: big-endian `uint16`
   length-prefixed raw entries. (See [§6.8](#68-entry-bundles-optional).)
 - **Pruning**: a log keeps a *minimum index*; tiles/bundles whose end index is
@@ -105,8 +113,9 @@ A tiled log exposes the Merkle tree as a set of static resources:
 
 ### 2.3 Compatibility statement
 
-The tile geometry, path encoding, partial-tile rules, and the inclusion /
-consistency proof **algorithms** are exactly those of tlog-tiles / RFC 6962.
+The tile geometry, path encoding, and the inclusion / consistency proof
+**algorithms** are exactly those of tlog-tiles / RFC 6962 (we emit only the
+full tiles, never the partial tiles).
 The **hash values stored in tiles** are produced by the tree's existing
 `HASH_FUNCTION`. Because
 
@@ -145,20 +154,23 @@ tree's `HASH_FUNCTION`; `MTH` denotes the Merkle Tree Hash computed with it.
   aligned entries is `perfect_root` of that run. Hence any RFC 6962 subtree root
   at tree level `k = 8L + r` is obtained from **one** level-`L` tile by hashing
   `2^r` consecutive entries (a single entry when `r = 0`).
-- **Partial tiles.** Number of complete entries available at level `L` for size
-  `s` is `entries_L = floor(s / 256^L)`. Tile `N` holds entries
-  `[N·256, (N+1)·256)` clamped to `entries_L`. Width of tile `N`:
-  `clamp(entries_L − N·256, 0, 256)`. The partial (rightmost) width is
-  `entries_L mod 256`; width 0 ⇒ not served.
+- **Full-tile prefix (no partials).** Only complete level-`L` tiles are written:
+  `full_tiles_L = floor( floor(s / 256^L) / 256 )`, together covering the leaf
+  prefix `covered = floor(s / 256) * 256`. The incomplete frontier `[covered, s)`
+  is not tiled; it is served from the in-memory tree. A subtree that falls in
+  what would have been a partial tile is resolved by **descending to the highest
+  available full tile and rolling up** (ultimately from full level-0 tiles).
 
 This yields a single read primitive that both proof types are built on:
 
 ```
-subtree_root(level k, index j) = MTH(D[j·2^k : (j+1)·2^k])
+subtree_root(level k, index j) = MTH(D[j·2^k : (j+1)·2^k])   # within `covered`
    L = k / 8 ; r = k % 8
-   first = j << r                       // first level-L entry covered
-   N = first / 256 ; off = first % 256  // tile and offset within tile
-   return perfect_root( tile(L, N)[off : off + 2^r] )   // single entry if r==0
+   first = j << r ; n = first / 256 ; off = first % 256
+   if a full level-L tile n exists (first + 2^r within full_tiles_L · 256):
+       return perfect_root( tile(L, n)[off : off + 2^r] )     # single entry if r==0
+   else:                                       # would-be partial: split & descend
+       return HASH_FUNCTION( subtree_root(k-1, 2j), subtree_root(k-1, 2j+1) )
 ```
 
 and a range primitive for non-perfect (right-frontier) subtrees:
@@ -184,11 +196,10 @@ Rooted at a configurable `prefix` directory on local disk:
 ```
 <prefix>/
   tile/
-    0/                            # level 0 (leaf hashes)
+    0/                            # level 0 (leaf hashes), full tiles only
       000  001 ... 255            # full tiles (8192 B each for HASH_SIZE=32)
       x001/
         000 ... 255
-      <N>.p/<W>                   # partial tile, e.g. 273.p/112
     1/                            # level 1 (roll-ups of level-0 full tiles)
       000 ...
     .../
@@ -212,8 +223,10 @@ Examples: `5 → "005"`, `255 → "255"`, `1000 → "x001/000"`,
 
 Resource paths:
 
-- Full tile: `tile/<L>/<encode_tile_index(N)>`
-- Partial tile: `tile/<L>/<encode_tile_index(N)>.p/<W>`
+- Full tile: `tile/<L>/<encode_tile_index(N)>` (the only tiles this
+  implementation writes)
+- Partial tile (tlog-tiles format; **not produced or read here**):
+  `tile/<L>/<encode_tile_index(N)>.p/<W>`
 - Entry bundle: `tile/entries/<encode_tile_index(N)>[.p/<W>]`
 
 Tile byte format: the `W` entries concatenated, each `HASH_SIZE` raw bytes
@@ -244,7 +257,7 @@ with default aliases mirroring the bottom of `merklecpp.h`:
 |----------------------|-----------------------------------------------------------------------|
 | `TileCoord`          | pure index math + path encoding (no I/O)                              |
 | `TileStoreT`         | read/write tile files on a local filesystem                          |
-| `TileWriterT`        | compute & persist newly-complete full/partial tiles (write path)     |
+| `TileWriterT`        | compute & persist newly-complete full tiles (write path)             |
 | `HashSource` impls   | resolve `subtree_root` from tiles, memory, or both                   |
 | `ProofEngineT`       | `mth_range`, `inclusion_proof`, `consistency_proof`, verifiers       |
 | `TiledTreeT`         | convenience wrapper: `append` / `flush` / `prove*` / compaction      |
@@ -344,9 +357,8 @@ public:
 
 - Writes are **atomic** (write to a temp file, `rename`) so a crash never leaves
   a half-written immutable tile.
-- Full tiles are written once and never rewritten (immutability). Partial tiles
-  are overwritten as the frontier advances and removed once the covering full
-  tile exists (spec-permitted; configurable).
+- Full tiles are written once and never rewritten (immutability). No partial
+  tiles are produced, so every file under `tile/<L>/` is write-once.
 - An in-process LRU cache of recently read tiles avoids repeated I/O during
   proof generation.
 
@@ -356,15 +368,13 @@ public:
 class TileWriterT {
 public:
   struct Options {
-    bool write_partial_tiles = true;   // required for arbitrary sizes
     bool write_higher_levels = true;   // roll up L>=1 each flush
-    bool remove_superseded_partials = true;
   };
 
   TileWriterT(TileStoreT& store, Options = {});
 
-  // Persist all newly-complete full tiles (all levels) and, for `size`,
-  // the partial tiles. Incremental: only writes tiles not already present.
+  // Persist all newly-complete full tiles (all levels). No partial tiles are
+  // written. Incremental: only writes tiles not already present.
   // `leaf_at` supplies level-0 leaf hashes for [0, size) (e.g. Tree::leaf).
   void write_up_to(uint64_t size,
                    const std::function<const Hash&(uint64_t)>& leaf_at);
@@ -379,12 +389,8 @@ for L = 0, 1, 2, ... while entries_L = size >> (8*L) is > 0:
     for N in [first_unwritten_full(L) .. full_L):          # new full tiles only
         entries = [ entry(L, N*256 + i) for i in 0..255 ]
         store.write_tile({L, N, width=0}, entries)
-    if write_partial_tiles:
-        w = entries_L % 256
-        if w > 0:
-            entries = [ entry(L, full_L*256 + i) for i in 0..w-1 ]
-            store.write_tile({L, full_L, width=w}, entries)
-            if remove_superseded_partials: remove stale partials < full_L
+    # the rightmost, incomplete (partial) entries are NOT written; they stay in
+    # the in-memory tree until they complete a full tile
 
 entry(L, g):
    if L == 0: return leaf_at(g)
@@ -400,10 +406,11 @@ entry(L, g):
 Compaction integration (the "on compaction" story):
 
 ```cpp
-// In TiledTreeT::flush(): write durable tiles, THEN free memory.
+// In TiledTreeT::flush(): write durable full tiles, THEN free memory.
 writer.write_up_to(size, [&](uint64_t i) -> const Hash& { return tree.leaf(i); });
 uint64_t covered = (size / TILE_WIDTH) * TILE_WIDTH;       // full level-0 coverage
-tree.flush_to(covered - retention_margin);                 // never past `covered`
+flushed_size = covered;                                    // only full tiles durable
+// compact() drops only [min_index, covered); the frontier [covered, size) stays.
 ```
 
 ### 6.5 `HashSource` — tiles, memory, or both
@@ -417,9 +424,10 @@ struct HashSource {                       // concept (duck-typed or virtual)
 };
 ```
 
-- `TileHashSource{store, size}` — resolves from tiles using the
-  `subtree_root` formula in [§3](#3-tile--merklecpp-mapping-the-math); returns
-  `false` when the requested subtree extends beyond what tiles cover for `size`.
+- `TileHashSource{store, size}` — resolves from **full tiles** using the
+  `subtree_root` formula in [§3](#3-tile--merklecpp-mapping-the-math) (`size` is
+  rounded down to a whole number of full tiles); returns `false` when the
+  requested subtree reaches into the un-tiled frontier.
 - `MemoryHashSource{tree}` — `tree.subtree_root(level,index,out)` (or the
   `past_path`-derived fallback); resolves only resident, full subtrees
   (`≥ min_index`).
@@ -510,12 +518,13 @@ public:
   uint64_t size() const;                              // tree.num_leaves
   Hash root();                                        // tree.root
 
-  // Write newly-complete tiles + partials. Compaction (dropping already-tiled
+  // Write newly-complete full tiles. Compaction (dropping already-tiled
   // leaves from memory) happens only if compact_on_flush.
   Stats flush();
 
-  // Drop from memory the leaves already covered by a full tile (opt-in);
-  // proofs for dropped leaves remain available from the tiles.
+  // Drop from memory the leaves already covered by a full tile (opt-in); the
+  // un-tiled frontier is always retained, and proofs for dropped leaves remain
+  // available from the tiles.
   uint64_t compact();
 
   // Proofs over tiles ∪ resident tree (works for flushed indices).
@@ -557,27 +566,34 @@ Per flush:
 
 1. `append(...)` new leaf hashes; compute `root()`.
 2. `write_up_to(size, leaf_at)` — persist newly-complete **full** tiles at all
-   levels (incremental) and the **partial** tiles for `size`.
+   levels (incremental). The incomplete frontier is **not** tiled, so
+   `flushed_size = covered = floor(size / 256) * 256`.
 3. *(optional)* `compact()` → `flush_to(covered − retention_margin)` — reclaim
    memory, only when `compact_on_flush` is set (or `compact()` is called
-   explicitly). By default nothing is dropped and the tree stays whole.
+   explicitly). It drops only the full-tile-covered prefix, so the un-tiled
+   frontier always stays resident. By default nothing is dropped and the tree
+   stays whole.
 
 Given the invariant, every leaf and every perfect subtree is resolvable:
 
 - leaf `i < covered` ⇒ in a full level-0 tile; leaf `i ≥ min_index` ⇒ resident.
-  Since `min_index ≤ covered`, **every** leaf is in tiles ∪ memory.
+  Since `min_index ≤ covered`, **every** leaf is in tiles ∪ memory. The frontier
+  `[covered, size)` is always resident, because `compact()` never flushes past
+  `covered`.
 - `mth_range` resolves a perfect subtree directly when it lies wholly in tiles
   (`end ≤ covered`) or wholly in memory (`start ≥ min_index`); otherwise it
-  splits and recurses, terminating at resolvable pieces (leaves at worst).
+  splits and recurses, terminating at resolvable pieces (leaves at worst). A
+  subtree within `covered` whose level has no full tile (it would have been the
+  partial) is resolved by descending to the highest available full tile.
 
 Hence inclusion and consistency proofs are always producible after compaction,
-from tiles alone, from memory alone (when nothing relevant was flushed), or from
-the combination — satisfying the request.
+from full tiles alone (for the tiled prefix), from memory alone (when nothing
+relevant was flushed), or from the combination — satisfying the request.
 
-Cost per flush is `O(new full tiles + partial tiles)`; higher-level tiles
-are cheap roll-ups of 256 child hashes. Proof generation is
-`O(log(size))` `mth_range` calls, each at most one tile read plus a `≤ 256`-leaf
-roll-up, served from cache in the common case.
+Cost per flush is `O(new full tiles)`; higher-level tiles are cheap roll-ups of
+256 child hashes. Proof generation is `O(log(size))` `mth_range` calls, each at
+most a few tile reads plus a `≤ 256`-leaf roll-up, served from cache in the
+common case.
 
 ---
 
@@ -598,14 +614,14 @@ to the application, exactly as the spec leaves it to log ecosystems.
 
 ## 9. Worked examples (used as test vectors)
 
-**Size 256:** one full level-0 tile (`tile/0/000`) and one partial level-1 tile
-of width 1 (`tile/1/000.p/1`). No partial level-0 tile (width `256 mod 256 = 0`,
-not served).
+**Size 256:** exactly one full level-0 tile (`tile/0/000`). No level-1 tile (its
+single entry is the un-tiled frontier root, kept in memory) and no partials.
 
-**Size 70 000:** 273 full level-0 tiles + one partial level-0 of width 112
-(`70000 mod 256`); one full level-1 tile + one partial level-1 of width 17
-(`273 mod 256`); one partial level-2 of width 1 (`floor(70000/65536) = 1`). These
-exact counts are asserted in tests.
+**Size 70 000:** 273 full level-0 tiles (`covered = 69 888`) + one full level-1
+tile (`tile/1/000`, rolling up level-0 tiles 0..255) = **274 full tiles**. The
+incomplete frontier at every level (the would-be partials) is not written; the
+remaining 112 leaves and the higher-level roll-ups stay in the in-memory tree.
+These exact counts are asserted in tests.
 
 **Index encoding:** `1234067 → x001/x234/067`; `1000 → x001/000`; `255 → 255`.
 
@@ -624,9 +640,9 @@ group in `test/CMakeLists.txt` following `add_merklecpp_test`.
 index-encoding vectors; tile byte round-trip.
 
 **Phase 2 — Write path.** `TileWriterT::write_up_to` (level-0 from `leaf_at`,
-roll-ups, partials, incremental cursor; superseded-partial removal). *Tests:*
-size 256 & 70 000 produce exactly the expected tile set/widths; full-tile
-immutability (re-running writes nothing new).
+roll-ups, incremental cursor; full tiles only — the frontier is never tiled).
+*Tests:* sizes 256 & 70 000 produce exactly the expected full-tile set with no
+partial directories; full-tile immutability (re-running writes nothing new).
 
 **Phase 3 — Hash sources & proof engine.** `TileHashSource`, `mth_range`,
 `ProofEngineT::root/inclusion_proof/consistency_proof/verify_consistency`.
@@ -659,8 +675,8 @@ compatible":
   `past_path`. This is stronger than `verify()` and pins byte-compatibility.
 - **Root agreement.** `ProofEngineT::root(size)` == `tree.root()` /
   `tree.past_root(size-1)` for many random sizes.
-- **Spec vectors.** Exact tile counts/widths for sizes 256 and 70 000; the empty
-  partial-tile rule; index-encoding strings (incl. `x001/x234/067`).
+- **Spec vectors.** Exact full-tile counts for sizes 256 and 70 000; the absence
+  of any partial-tile directory; index-encoding strings (incl. `x001/x234/067`).
 - **Flush/compaction.** Cross-check proofs for flushed indices against a twin
   tree that was never flushed (same inserts) — roots must match and proofs must
   verify.
@@ -681,11 +697,14 @@ compatible":
   the consumer's choice and out of scope.
 - **Filesystem dependency.** Tile I/O needs `<filesystem>`/`<fstream>`; isolated
   in the companion header so the core stays dependency-free.
-- **Partial-tile lifecycle.** Overwriting/removing partials must never race a
-  reader; atomic rename + "fetch full tile as fallback" (spec-sanctioned)
-  mitigate this.
-- **`flush_to` alignment.** Must flush only to a 256-multiple (minus retention)
-  to uphold the coverage invariant; enforced inside `TiledTreeT::flush`.
+- **No partial tiles.** The incomplete frontier is never tiled, so there are no
+  partial-tile rewrites to race a reader; every tile is write-once and immutable.
+  The cost is that a stand-alone tile reader cannot serve the frontier — that is
+  the in-memory tree's job (or the application must keep it elsewhere).
+- **`flush_to` alignment.** Compaction flushes only to a 256-multiple (minus
+  retention) to uphold the coverage invariant; it also keeps at least one
+  resident leaf, since `flush_to` cannot drain the whole tree. Enforced inside
+  `TiledTreeT::compact`.
 - **Rollback vs. immutable tiles.** Tiles are write-once, so rolling the tree
   back (`retract_to`) over already-tiled entries would leave stale, never-
   rewritten tiles and is forbidden: `TiledTreeT::retract_to` throws if the

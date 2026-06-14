@@ -381,11 +381,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// @tparam HASH_SIZE Size of each hash in bytes
     /// @tparam HASH_FUNCTION The tree's node hash function
     /// @note Only balanced subtrees are tiled: a level-L entry is the root of a
-    /// complete 2**(8L)-leaf subtree. Full tiles (256 such entries) are
-    /// therefore immutable and written exactly once; the incomplete frontier is
-    /// never tiled, and partial tiles (complete entries, partial count) are the
-    /// only resources that may be re-written (grown) or removed once superseded
-    /// by a full tile.
+    /// complete 2**(8L)-leaf subtree. Only full tiles (256 such entries) are
+    /// written; they are therefore immutable and written exactly once. The
+    /// incomplete frontier is deliberately never tiled (no partial tiles are
+    /// produced): it is retained in memory by the owning tree until it grows
+    /// into a full tile.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -405,15 +405,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Write-path options.
       struct Options
       {
-        /// @brief Write the partial (rightmost) tiles for the current size.
-        bool write_partial_tiles = true;
-
         /// @brief Roll up and write tiles at levels >= 1.
         bool write_higher_levels = true;
-
-        /// @brief Remove partial tiles once superseded by a full tile (or a
-        /// wider partial at the same index).
-        bool remove_superseded_partials = true;
       };
 
       /// @brief Counts of work performed by a write_up_to call.
@@ -421,12 +414,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       {
         /// @brief Number of full tiles written.
         uint64_t full_written = 0;
-
-        /// @brief Number of partial tiles written.
-        uint64_t partial_written = 0;
-
-        /// @brief Number of superseded partial tiles removed.
-        uint64_t partial_removed = 0;
       };
 
       /// @brief Constructs a writer over @p store.
@@ -434,14 +421,14 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         store(store), options(options)
       {}
 
-      /// @brief Writes all newly-complete full tiles and the partial tiles for
-      /// a tree of @p size leaves.
+      /// @brief Writes all newly-complete full tiles for a tree of @p size
+      /// leaves.
       /// @param size The current tree size
       /// @param leaf_at Returns the level-0 leaf hash for a leaf index in
       /// [0, size); only ever queried for leaves of complete subtrees.
-      /// @return Counts of tiles written/removed
+      /// @return Counts of tiles written
       /// @note Incremental: full tiles already on disk are immutable and are
-      /// never rewritten.
+      /// never rewritten. The incomplete frontier is never tiled.
       Stats write_up_to(uint64_t size, const LeafFn& leaf_at)
       {
         Stats stats;
@@ -481,16 +468,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           {
             next_full[level] = full_tiles;
           }
-
-          if (options.write_partial_tiles)
-          {
-            write_partial(
-              level,
-              full_tiles,
-              (uint16_t)(entries % TILE_WIDTH),
-              leaf_at,
-              stats);
-          }
         }
 
         return stats;
@@ -510,12 +487,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Per-level flag indicating next_full has been initialised.
       std::vector<bool> cursor_inited;
 
-      /// @brief Per-level last partial tile written by this writer.
-      std::vector<TileRef> last_partial;
-
-      /// @brief Per-level flag indicating last_partial is valid.
-      std::vector<bool> has_last_partial;
-
       /// @brief Number of complete level-@p level entries for a tree of @p
       /// size.
       static uint64_t entries_at_level(uint64_t size, uint8_t level)
@@ -532,8 +503,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         {
           next_full.resize(needed, 0);
           cursor_inited.resize(needed, false);
-          last_partial.resize(needed, TileRef{});
-          has_last_partial.resize(needed, false);
         }
       }
 
@@ -592,67 +561,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         }
         return out;
       }
-
-      /// @brief Writes (or removes) the partial tile at the rightmost index.
-      void write_partial(
-        uint8_t level,
-        uint64_t index,
-        uint16_t width,
-        const LeafFn& leaf_at,
-        Stats& stats)
-      {
-        if (width == 0)
-        {
-          // No partial at this size; a previous partial (if any) is now covered
-          // by a full tile and may be removed.
-          if (options.remove_superseded_partials && has_last_partial[level])
-          {
-            remove_partial_dir(level, last_partial[level].index);
-            has_last_partial[level] = false;
-            stats.partial_removed++;
-          }
-          return;
-        }
-
-        const TileRef ref{level, index, width};
-
-        if (
-          has_last_partial[level] && last_partial[level].index == index &&
-          last_partial[level].width == width)
-        {
-          return; // identical partial already written by this writer
-        }
-
-        if (options.remove_superseded_partials && has_last_partial[level])
-        {
-          if (last_partial[level].index != index)
-          {
-            // Previous partial's index is now covered by a full tile.
-            remove_partial_dir(level, last_partial[level].index);
-            stats.partial_removed++;
-          }
-          else
-          {
-            // Same index, narrower width: drop the stale width file(s).
-            remove_partial_dir(level, index);
-          }
-        }
-
-        store.write_tile(
-          ref, collect(level, index * TILE_WIDTH, width, leaf_at));
-        stats.partial_written++;
-        last_partial[level] = ref;
-        has_last_partial[level] = true;
-      }
-
-      /// @brief Removes the partial-tile directory tile/<level>/<index>.p.
-      void remove_partial_dir(uint8_t level, uint64_t index)
-      {
-        const std::filesystem::path dir =
-          store.tile_path(TileRef{level, index, 1}).parent_path();
-        std::error_code ec;
-        std::filesystem::remove_all(dir, ec);
-      }
     };
 
     /// @brief Abstract source of Merkle subtree roots for proof generation.
@@ -685,10 +593,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     };
 
     /// @brief Resolves subtree roots from tlog-tiles tile files.
-    /// @note @p available_size is the largest tree size whose tiles are durably
-    /// written; any complete subtree within it is resolvable. A missing tile
-    /// (e.g. a frontier partial that was not written) yields false so that a
-    /// proof builder can fall back to another source.
+    /// @note @p available_size is rounded down to a whole number of full tiles:
+    /// only complete, durably-written full tiles are read (no partial tiles).
+    /// A complete subtree within that full-tile prefix is resolvable; anything
+    /// reaching into the incomplete frontier yields false so that a proof
+    /// builder can fall back to another source (e.g. an in-memory tree).
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -700,59 +609,83 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
 
       /// @brief Constructs a source over @p store for trees up to
-      /// @p available_size leaves.
+      /// @p available_size leaves. @p available_size is rounded down to a whole
+      /// number of full tiles, since only full tiles are durable.
       TileHashSourceT(const Store& store, uint64_t available_size) :
-        store(store), available_size(available_size)
+        store(store), available_size((available_size / TILE_WIDTH) * TILE_WIDTH)
       {}
 
       bool subtree_root(uint8_t level, uint64_t index, Hash& out) const override
       {
-        const uint8_t L = level / TILE_HEIGHT;
-        const uint8_t r = level % TILE_HEIGHT;
-        const uint64_t span = (uint64_t)1 << r; // entries spanned in level L
-        const uint64_t first = index << r; // first level-L entry index
-
-        const uint64_t entries = entries_at_level(available_size, L);
-        if (first + span > entries)
-        {
-          return false; // extends into the incomplete frontier
-        }
-
-        const uint64_t n = first / TILE_WIDTH;
-        const uint64_t off = first % TILE_WIDTH;
-
-        // Choose the full or current partial tile holding these entries.
-        TileRef ref{L, n, 0};
-        if ((n + 1) * TILE_WIDTH > entries)
-        {
-          ref.width = (uint16_t)(entries - n * TILE_WIDTH);
-        }
-        if (!store.has_tile(ref))
+        // The subtree covers leaves [index << level, (index + 1) << level). It
+        // is resolvable only when it lies entirely within the full-tile-covered
+        // prefix; the incomplete frontier is served from another source.
+        if (level >= 64 || index >= (available_size >> level))
         {
           return false;
         }
-
-        const std::vector<Hash> tile = store.read_tile(ref);
-        if (span == 1)
-        {
-          out = tile.at(off);
-          return true;
-        }
-        const std::vector<Hash> sub(
-          tile.begin() + off, tile.begin() + off + span);
-        out = perfect_root<HASH_SIZE, HASH_FUNCTION>(sub);
+        resolve(level, index, out);
         return true;
       }
 
     protected:
       // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
       const Store& store;
-      uint64_t available_size;
+      uint64_t available_size; // full-tile prefix length (a multiple of WIDTH)
 
-      static uint64_t entries_at_level(uint64_t size, uint8_t level)
+      /// @brief Combines the @p span entries at @p off of @p tile into a root.
+      static Hash roll_up(
+        const std::vector<Hash>& tile, uint64_t off, uint64_t span)
       {
-        const unsigned shift = 8U * (unsigned)level;
-        return shift >= 64 ? 0 : (size >> shift);
+        if (span == 1)
+        {
+          return tile.at(off);
+        }
+        return perfect_root<HASH_SIZE, HASH_FUNCTION>(std::vector<Hash>(
+          tile.begin() + (std::ptrdiff_t)off,
+          tile.begin() + (std::ptrdiff_t)(off + span)));
+      }
+
+      /// @brief Resolves a complete subtree known to lie within the full-tile
+      /// prefix, reading the highest-level full tile that holds it (and rolling
+      /// up); descends to lower full tiles where a higher-level tile is not
+      /// full (it would otherwise have been the unwritten partial). Terminates
+      /// because full level-0 tiles always cover the prefix.
+      void resolve(uint8_t level, uint64_t index, Hash& out) const
+      {
+        if (level <= TILE_HEIGHT)
+        {
+          // Spans 2**level <= TILE_WIDTH leaves: held by one level-0 tile.
+          const uint64_t span = (uint64_t)1 << level;
+          const uint64_t start = index << level;
+          const std::vector<Hash> tile =
+            store.read_tile(TileRef{0, start / TILE_WIDTH, 0});
+          out = roll_up(tile, start % TILE_WIDTH, span);
+          return;
+        }
+
+        const uint8_t L = level / TILE_HEIGHT;
+        const uint8_t r = level % TILE_HEIGHT;
+        const uint64_t first = index << r; // first level-L entry
+        const uint64_t n = first / TILE_WIDTH; // level-L tile index
+        const unsigned full_shift = 8U * ((unsigned)L + 1U);
+        const uint64_t full_tiles =
+          full_shift >= 64 ? 0 : (available_size >> full_shift);
+
+        if (n < full_tiles)
+        {
+          // One full level-L tile holds all 2**r entries of this subtree.
+          const std::vector<Hash> tile = store.read_tile(TileRef{L, n, 0});
+          out = roll_up(tile, first % TILE_WIDTH, (uint64_t)1 << r);
+          return;
+        }
+
+        // No full level-L tile here: split into two level-(level-1) subtrees.
+        Hash lo;
+        Hash hi;
+        resolve((uint8_t)(level - 1), index * 2, lo);
+        resolve((uint8_t)(level - 1), index * 2 + 1, hi);
+        HASH_FUNCTION(lo, hi, out);
       }
     };
 
@@ -1099,12 +1032,13 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     };
 
     /// @brief A merkle tree backed by tlog-tiles storage.
-    /// @note Appends grow an in-memory tree; flush() durably writes the
-    /// tiles. Compaction (dropping from memory the leaves already covered by a
-    /// durably-written full tile) is optional: enable it per flush with
-    /// Config::compact_on_flush, or call compact() explicitly. Proofs are
-    /// served from the combination of the resident tree and the tiles, so they
-    /// remain available for compacted (dropped) leaves.
+    /// @note Appends grow an in-memory tree; flush() durably writes only full
+    /// (balanced) tiles, so the incomplete frontier is never tiled and stays
+    /// resident in memory. Compaction (dropping from memory the leaves already
+    /// covered by a full tile) is optional: enable it per flush with
+    /// Config::compact_on_flush, or call compact() explicitly; it never drops
+    /// the un-tiled frontier. Proofs are served from the combination of the
+    /// resident tree (frontier) and the full tiles (compacted past).
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -1162,7 +1096,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         return tree.root();
       }
 
-      /// @brief The number of leaves durably written to tiles.
+      /// @brief The number of leaves durably written to full tiles (always a
+      /// multiple of TILE_WIDTH; the incomplete frontier is not tiled).
       [[nodiscard]] uint64_t flushed_size() const
       {
         return tiles_size;
@@ -1180,9 +1115,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         return store;
       }
 
-      /// @brief Writes newly-complete tiles to disk; compacts only if
+      /// @brief Writes newly-complete full tiles to disk; compacts only if
       /// Config::compact_on_flush is set.
-      /// @return Counts of the tiles written/removed by this flush
+      /// @return Counts of the full tiles written by this flush
+      /// @note Only full (balanced) tiles are written, so flushed_size()
+      /// advances to the largest multiple of TILE_WIDTH <= size(); the
+      /// incomplete frontier stays resident in memory.
       Stats flush()
       {
         Stats stats;
@@ -1195,7 +1133,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         stats = writer.write_up_to(n, [this](uint64_t i) -> const Hash& {
           return tree.leaf((size_t)i);
         });
-        tiles_size = n;
+        tiles_size = (n / TILE_WIDTH) * TILE_WIDTH;
 
         if (config.compact_on_flush)
         {
@@ -1207,18 +1145,26 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Drops from the in-memory tree every leaf already covered by a
       /// durably-written full tile, keeping retention_margin recent leaves.
       /// @return The new minimum (smallest still-resident) leaf index
-      /// @note Only leaves whose full tile already exists are dropped, so
-      /// inclusion and consistency proofs remain available (served from the
-      /// tiles). Has no effect until tiling has produced full tiles. The flush
-      /// target is a multiple of TILE_WIDTH, so the coverage invariant
-      /// (min_index <= durable full-tile coverage) always holds.
+      /// @note Only leaves covered by a full tile are dropped, so the un-tiled
+      /// frontier is always retained in memory and inclusion/consistency proofs
+      /// remain available (the past from tiles, the frontier from memory). Has
+      /// no effect until tiling has produced full tiles.
       uint64_t compact()
       {
+        const uint64_t n = tree.num_leaves();
         const uint64_t covered = (tiles_size / TILE_WIDTH) * TILE_WIDTH;
         uint64_t target = covered > config.retention_margin ?
           covered - config.retention_margin :
           0;
         target = (target / TILE_WIDTH) * TILE_WIDTH;
+        // merklecpp's flush_to keeps at least one resident leaf, so never flush
+        // the whole tree (this can only arise when the size is an exact
+        // multiple of TILE_WIDTH and nothing is retained); the extra resident
+        // leaf is harmless (it is also covered by a full tile).
+        if (n > 0 && target >= n)
+        {
+          target = n - 1;
+        }
         if (target > tree.min_index())
         {
           tree.flush_to((size_t)target);
@@ -1228,12 +1174,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
       /// @brief Rolls the tree back so that @p index becomes the last leaf,
       /// removing all leaves after it (same semantics as TreeT::retract_to).
-      /// @note Tiles are immutable, so entries already committed to tiles
-      /// cannot be rolled back: this throws if the resulting size would be
-      /// smaller than flushed_size(). Only un-flushed (not-yet-tiled)
-      /// entries may be rolled back. (Retracting the underlying tree directly
-      /// via tree_ref() bypasses this guard and can leave stale tiles -- do not
-      /// do that.)
+      /// @note Only full tiles are immutable: this throws if the resulting size
+      /// would be smaller than flushed_size() (the full-tile prefix). The
+      /// un-tiled frontier (>= flushed_size()) may be freely rolled back.
+      /// (Retracting the underlying tree directly via tree_ref() bypasses this
+      /// guard and can leave stale tiles -- do not do that.)
       void retract_to(size_t index)
       {
         if ((uint64_t)index + 1 < tiles_size)
