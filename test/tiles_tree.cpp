@@ -119,6 +119,29 @@ int main()
   {
     const auto hashes = make_hashes(1500);
 
+    // ---- Part 0: the empty tree. flush()/compact() are no-ops and there is no
+    //      root.
+    {
+      TiledTree::Config ecfg;
+      ecfg.prefix = base / "tt_empty";
+      TiledTree ett(ecfg);
+      expect(ett.size() == 0, "empty: size 0");
+      expect(ett.flush().full_written == 0, "empty: flush writes nothing");
+      expect(ett.flushed_size() == 0, "empty: flushed size 0");
+      expect(ett.compact() == 0, "empty: compact no-op");
+      bool ethrew = false;
+      try
+      {
+        (void)ett.root();
+      }
+      catch (const std::exception&)
+      {
+        ethrew = true;
+      }
+      expect(ethrew, "empty: root throws");
+      std::cout << "empty tree: OK" << '\n';
+    }
+
     // ---- Part 1: memory-source proofs (exercises TreeT::subtree_root).
     for (const uint64_t n :
          {(uint64_t)1,
@@ -294,6 +317,64 @@ int main()
         expect(p->verify(mroot), "multiple: inclusion verify");
       }
       std::cout << "tiled tree (exact-multiple compaction): OK" << '\n';
+    }
+
+    // ---- Part 2c: compaction with a non-zero retention_margin keeps the most
+    //      recent leaves resident while flushed indices are still served from
+    //      tiles. The immutable prefix remains the full-tile prefix, regardless
+    //      of the margin.
+    {
+      TiledTree::Config rcfg;
+      rcfg.prefix = base / "tt_margin";
+      rcfg.retention_margin = 300;
+      rcfg.compact_on_flush = true;
+      TiledTree rtt(rcfg);
+      for (uint64_t i = 0; i < n1; i++) // n1 == 1000
+      {
+        rtt.append(hashes[i]);
+      }
+      rtt.flush(); // covered = 768; target = floor((768 - 300) / 256) * 256 = 256
+      expect(rtt.flushed_size() == 768, "margin: flushed size 768");
+      expect(
+        rtt.tree_ref().min_index() == 256,
+        "margin: retained >= 300 recent leaves");
+
+      for (uint64_t i = n1; i < N; i++)
+      {
+        rtt.append(hashes[i]);
+      }
+      expect(rtt.root() == ref_root, "margin: root matches reference");
+
+      // Flushed-only (0, 255), flushed-but-resident overlap (256, 767), and the
+      // un-flushed frontier (1000, 1499).
+      for (const uint64_t i :
+           {(uint64_t)0,
+            (uint64_t)255,
+            (uint64_t)256,
+            (uint64_t)767,
+            (uint64_t)1000,
+            (uint64_t)1499})
+      {
+        const auto p = rtt.inclusion_proof(i, N);
+        expect(
+          *p == *ref.path(i), "margin inclusion==ref i=" + std::to_string(i));
+        expect(
+          p->verify(ref_root),
+          "margin inclusion verify i=" + std::to_string(i));
+      }
+
+      bool threw = false;
+      try
+      {
+        rtt.retract_to(700); // size 701 < flushed_size 768
+      }
+      catch (const std::exception&)
+      {
+        threw = true;
+      }
+      expect(threw, "margin: retract below flushed prefix throws");
+
+      std::cout << "tiled tree (retention margin): OK" << '\n';
     }
 
     // ---- Part 3: rollback. Tiles are immutable, so only un-tiled

@@ -203,6 +203,54 @@ int main()
       std::cout << "D (full L1 tile): OK" << '\n';
     }
 
+    // ---- E. resume: a fresh writer over an existing store rebuilds its cursor
+    //         from disk via full_prefix_length, never rewriting full tiles and
+    //         writing only the newly-complete ones.
+    {
+      const auto hashes = make_hashes(70000);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
+
+      const fs::path dir = base / "e";
+      {
+        TileStore store(dir);
+        TileWriter writer(store);
+        expect(
+          writer.write_up_to(600, leaf_at).full_written == 2,
+          "E first writer 2 L0 tiles"); // 600 / 256 == 2 full L0 tiles
+      }
+
+      // A brand-new store + writer over the same directory: its cursor must
+      // resume from what is already on disk.
+      TileStore store(dir);
+      TileWriter writer(store);
+      expect(
+        writer.write_up_to(600, leaf_at).full_written == 0,
+        "E resume rewrites nothing");
+
+      // Extending to 70000 writes only the missing tiles: 273 - 2 == 271 new L0
+      // plus 1 new L1 (which rolls up the L0 tiles the first writer wrote).
+      expect(
+        writer.write_up_to(70000, leaf_at).full_written == 272,
+        "E resume writes only new tiles");
+      expect(store.has_full_tile(0, 0), "E L0 tile 0 still present");
+      expect(store.has_full_tile(0, 272), "E L0 tile 272");
+      expect(store.has_full_tile(1, 0), "E L1 tile 0");
+      expect(
+        store.read_tile(TileRef{1, 0})[0] ==
+          rollup(store.read_tile(TileRef{0, 0})),
+        "E L1[0] rolled up from resumed L0");
+      expect(!any_partial_dirs(store), "E no partial tiles");
+
+      // A third fresh writer confirms full idempotence after a resume.
+      TileStore store3(dir);
+      TileWriter writer3(store3);
+      expect(
+        writer3.write_up_to(70000, leaf_at).full_written == 0,
+        "E second resume idempotent");
+
+      std::cout << "E (writer resume): OK" << '\n';
+    }
+
     std::cout << "tiles_writer: OK" << '\n';
 
     std::error_code ec;

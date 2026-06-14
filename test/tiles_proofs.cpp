@@ -197,7 +197,7 @@ int main()
 
   try
   {
-    const auto hashes = make_hashes(70000);
+    const auto hashes = make_hashes(300000);
 
     for (const uint64_t n :
          {(uint64_t)1,
@@ -218,9 +218,17 @@ int main()
     }
     std::cout << "small/medium sizes: OK" << '\n';
 
-    // Large tree: exercises full L1 tiles and the in-memory frontier.
-    check_size(base / "big", 70000, hashes);
-    std::cout << "size 70000: OK" << '\n';
+    // Large trees. 65536 == 256 full L0 tiles == one full L1 tile (exact L1
+    // boundary); 65537 is one past it; 70000 exercises a full L1 tile plus an
+    // in-memory frontier; 300000 forces proofs over height->=16 subtrees, so
+    // TileHashSource::resolve descends through level-2 logic (full_shift = 24)
+    // before reaching the level-1 tiles -- the only coverage of the L>=2 path.
+    for (const uint64_t n :
+         {(uint64_t)65536, (uint64_t)65537, (uint64_t)70000, (uint64_t)300000})
+    {
+      check_size(base / ("big" + std::to_string(n)), n, hashes);
+      std::cout << "size " << n << ": OK" << '\n';
+    }
 
     std::cout << "tiles_proofs: OK" << '\n';
 

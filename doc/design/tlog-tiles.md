@@ -364,14 +364,11 @@ public:
 ```cpp
 class TileWriterT {
 public:
-  struct Options {
-    bool write_higher_levels = true;   // roll up L>=1 each flush
-  };
+  explicit TileWriterT(TileStoreT& store);
 
-  TileWriterT(TileStoreT& store, Options = {});
-
-  // Persist all newly-complete full tiles (all levels). No partial tiles are
-  // written. Incremental: only writes tiles not already present.
+  // Persist all newly-complete full tiles (all levels 0..63). No partial tiles
+  // are written. Incremental: only writes tiles not already present. Higher
+  // levels are always rolled up, since proof generation relies on them.
   // `leaf_at` supplies level-0 leaf hashes for [0, size) (e.g. Tree::leaf).
   void write_up_to(uint64_t size,
                    const std::function<const Hash&(uint64_t)>& leaf_at);
@@ -507,7 +504,6 @@ public:
     std::filesystem::path prefix;
     uint64_t retention_margin = 0;       // keep this many recent leaves resident
     bool compact_on_flush = false;       // opt in to dropping tiled leaves
-    TileWriterT::Options writer = {};
   };
   explicit TiledTreeT(Config);
 

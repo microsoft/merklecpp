@@ -366,13 +366,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Supplies the level-0 leaf hash for a given leaf index.
       using LeafFn = std::function<const Hash&(uint64_t)>;
 
-      /// @brief Write-path options.
-      struct Options
-      {
-        /// @brief Roll up and write tiles at levels >= 1.
-        bool write_higher_levels = true;
-      };
-
       /// @brief Counts of work performed by a write_up_to call.
       struct Stats
       {
@@ -381,9 +374,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       };
 
       /// @brief Constructs a writer over @p store.
-      explicit TileWriterT(Store& store, Options options = {}) :
-        store(store), options(options)
-      {}
+      explicit TileWriterT(Store& store) : store(store) {}
 
       /// @brief Writes all newly-complete full tiles for a tree of @p size
       /// leaves.
@@ -392,13 +383,16 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// [0, size); only ever queried for leaves of complete subtrees.
       /// @return Counts of tiles written
       /// @note Incremental: full tiles already on disk are immutable and are
-      /// never rewritten. The incomplete frontier is never tiled.
+      /// never rewritten. The incomplete frontier is never tiled. Tiles are
+      /// always rolled up at every level (0..63), so the on-disk set always
+      /// contains the higher-level roll-ups that proof generation relies on.
       Stats write_up_to(uint64_t size, const LeafFn& leaf_at)
       {
         Stats stats;
-        const uint8_t max_level = options.write_higher_levels ? 63 : 0;
 
-        for (uint8_t level = 0; level <= max_level; level++)
+        // tlog-tiles defines levels 0..63; the loop stops early once a level
+        // has no complete entries (see the entries == 0 break below).
+        for (uint8_t level = 0; level <= 63; level++)
         {
           // Number of complete (balanced) level-L entries available; this
           // deliberately excludes the incomplete frontier subtree.
@@ -441,9 +435,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief The tile store written to.
       // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
       Store& store;
-
-      /// @brief Write-path options.
-      Options options;
 
       /// @brief Per-level index of the next full tile to write.
       std::vector<uint64_t> next_full;
@@ -1031,15 +1022,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         /// from memory the leaves already covered by a full tile. Off by
         /// default: tiles are written but the tree keeps every leaf resident.
         bool compact_on_flush = false;
-
-        /// @brief Tile writer options.
-        typename Writer::Options writer = {};
       };
 
       explicit TiledTreeT(Config config) :
-        config(std::move(config)),
-        store(this->config.prefix),
-        writer(store, this->config.writer)
+        config(std::move(config)), store(this->config.prefix), writer(store)
       {}
 
       /// @brief Appends a leaf hash.

@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
+#include <functional>
 #include <iostream>
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
@@ -38,6 +40,15 @@ static void expect_eq(
 static std::string rel(const merkle::tiles::TileStore& store, const fs::path& p)
 {
   return p.lexically_relative(store.root()).generic_string();
+}
+
+// Overwrites a file with exactly the given bytes (to simulate corruption).
+static void overwrite_file(const fs::path& p, const std::vector<uint8_t>& bytes)
+{
+  std::ofstream f(p, std::ios::binary | std::ios::trunc);
+  f.write(
+    reinterpret_cast<const char*>(bytes.data()),
+    (std::streamsize)bytes.size());
 }
 
 int main()
@@ -109,6 +120,59 @@ int main()
       threw = true;
     }
     expect(threw, "width mismatch rejected");
+
+    // 3c. Corrupt / truncated files are rejected on read (integrity check), so
+    // a torn write can never be served as a valid tile or bundle.
+    {
+      const auto expect_throws =
+        [](const std::function<void()>& fn, const std::string& what) {
+          bool t = false;
+          try
+          {
+            fn();
+          }
+          catch (const std::exception&)
+          {
+            t = true;
+          }
+          expect(t, what);
+        };
+
+      // Truncated tile: fewer bytes than a full tile.
+      overwrite_file(store.tile_path(full_ref), std::vector<uint8_t>(hsz, 0));
+      expect_throws(
+        [&] { (void)store.read_tile(full_ref); }, "truncated tile rejected");
+
+      // Oversized tile: more bytes than a full tile.
+      overwrite_file(
+        store.tile_path(full_ref),
+        std::vector<uint8_t>((merkle::tiles::TILE_WIDTH + 1) * hsz, 0));
+      expect_throws(
+        [&] { (void)store.read_tile(full_ref); }, "oversized tile rejected");
+
+      // A valid full entry bundle whose file is then cut short.
+      std::vector<std::vector<uint8_t>> entries(merkle::tiles::TILE_WIDTH);
+      for (size_t i = 0; i < entries.size(); i++)
+      {
+        entries[i] = {(uint8_t)i, 0x7F};
+      }
+      store.write_entry_bundle(0, entries);
+      expect(
+        store.read_entry_bundle(0).size() == merkle::tiles::TILE_WIDTH,
+        "bundle valid before truncation");
+      // Claims a 5-byte entry but supplies only one trailing byte.
+      overwrite_file(store.entries_path(0), {0x00, 0x05, 0x01});
+      expect_throws(
+        [&] { (void)store.read_entry_bundle(0); },
+        "truncated entry bundle rejected");
+
+      // decode_entries directly: a length prefix that overruns the buffer.
+      expect_throws(
+        [] {
+          (void)merkle::tiles::TileStore::decode_entries({0xFF, 0xFF, 0x00}, 1);
+        },
+        "decode_entries oversized length rejected");
+    }
 
     std::cout << "tiles_store: OK" << '\n';
 
