@@ -1,14 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#include "util.h"
+
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
-
 #include <merklecpp.h>
-
-#include "util.h"
 
 constexpr size_t PSZ = 3;
 
@@ -58,8 +57,10 @@ int main()
     bool is_timed_out = false;
     for (size_t l = 0; l < num_trees && !is_timed_out; l++)
     {
-      const auto num_leaves = static_cast<size_t>(1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
-      const auto num_paths = static_cast<size_t>(1 + (std::rand() / (double)RAND_MAX) * max_num_paths);
+      const auto num_leaves = static_cast<size_t>(
+        1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
+      const auto num_paths = static_cast<size_t>(
+        1 + (std::rand() / (double)RAND_MAX) * max_num_paths);
 
       total_leaves += num_leaves;
       total_paths += num_paths;
@@ -118,12 +119,9 @@ int main()
         auto pp_root = past_path->root();
 
 #ifdef MERKLECPP_TRACE_ENABLED
-        MERKLECPP_TOUT << "Past root: " << past_root->to_string(PSZ)
-                       << '\n';
-        MERKLECPP_TOUT << "Past path: " << past_path->to_string(PSZ)
-                       << '\n';
-        MERKLECPP_TOUT << "Computed root: " << pp_root->to_string(PSZ)
-                       << '\n';
+        MERKLECPP_TOUT << "Past root: " << past_root->to_string(PSZ) << '\n';
+        MERKLECPP_TOUT << "Past path: " << past_path->to_string(PSZ) << '\n';
+        MERKLECPP_TOUT << "Computed root: " << pp_root->to_string(PSZ) << '\n';
 #endif
 
         if (*past_path_spec != *past_path)

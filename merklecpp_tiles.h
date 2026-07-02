@@ -5,15 +5,32 @@
 
 #include "merklecpp.h"
 
+#include <algorithm>
+#include <atomic>
+#include <cerrno>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
+
+#ifdef _WIN32
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#else
+#  include <fcntl.h>
+#  include <unistd.h>
+#endif
 
 // Tiled storage for merklecpp trees, following the C2SP tlog-tiles layout
 // (https://c2sp.org/tlog-tiles). The tile geometry, path encoding and partial
@@ -126,7 +143,15 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Whether a full tile exists on disk.
       [[nodiscard]] bool has_full_tile(uint8_t level, uint64_t index) const
       {
-        return std::filesystem::exists(tile_path(TileRef{level, index}));
+        std::error_code ec;
+        const auto path = tile_path(TileRef{level, index});
+        if (!std::filesystem::is_regular_file(path, ec) || ec)
+        {
+          return false;
+        }
+        return std::filesystem::file_size(path, ec) ==
+          (uintmax_t)TILE_WIDTH * HASH_SIZE &&
+          !ec;
       }
 
       /// @brief Writes a tile to disk atomically.
@@ -264,8 +289,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
       }
 
-      /// @brief Writes a file atomically via a temporary file and rename.
-      /// @note Immutable tiles are never left half-written after a crash.
+      /// @brief Writes a file atomically via a synced temporary file.
+      /// @note Uses unique temp names, cleans them up on errors, and syncs the
+      /// file before publishing it with an atomic replace. POSIX builds also
+      /// sync the parent directory after rename.
       static void write_file_atomically(
         const std::filesystem::path& path, const std::vector<uint8_t>& bytes)
       {
@@ -278,27 +305,237 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
             ec.message());
         }
 
-        std::filesystem::path tmp = path;
-        tmp += ".tmp";
+        const std::filesystem::path tmp = temp_path(path);
+        TempFileGuard guard(tmp);
+        write_and_sync_file(tmp, bytes);
+        replace_file(tmp, path);
+        sync_directory(path.parent_path());
+        guard.dismiss();
+      }
+
+      class TempFileGuard
+      {
+      public:
+        explicit TempFileGuard(std::filesystem::path path) :
+          path(std::move(path))
+        {}
+
+        ~TempFileGuard()
         {
-          std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-          if (!f.good())
+          if (active)
           {
-            throw std::runtime_error("cannot open file: " + tmp.string());
-          }
-          if (!bytes.empty())
-          {
-            f.write(
-              reinterpret_cast<const char*>(bytes.data()),
-              (std::streamsize)bytes.size());
-          }
-          f.flush();
-          if (!f.good())
-          {
-            throw std::runtime_error("error writing file: " + tmp.string());
+            std::error_code ec;
+            std::filesystem::remove(path, ec);
           }
         }
-        std::filesystem::rename(tmp, path);
+
+        void dismiss()
+        {
+          active = false;
+        }
+
+      private:
+        std::filesystem::path path;
+        bool active = true;
+      };
+
+      static std::filesystem::path temp_path(const std::filesystem::path& path)
+      {
+        static std::atomic<uint64_t> counter{0};
+        const auto stamp =
+          std::chrono::steady_clock::now().time_since_epoch().count();
+        std::filesystem::path tmp = path;
+        tmp += ".tmp." + std::to_string(process_id()) + "." +
+          std::to_string((uint64_t)stamp) + "." +
+          std::to_string(counter.fetch_add(1, std::memory_order_relaxed));
+        return tmp;
+      }
+
+      static uint64_t process_id()
+      {
+#ifdef _WIN32
+        return (uint64_t)GetCurrentProcessId();
+#else
+        return (uint64_t)::getpid();
+#endif
+      }
+
+      static std::string system_error_message(const std::string& what)
+      {
+#ifdef _WIN32
+        return what + ": error " + std::to_string(GetLastError());
+#else
+        return what + ": " + std::strerror(errno);
+#endif
+      }
+
+      static void write_and_sync_file(
+        const std::filesystem::path& path, const std::vector<uint8_t>& bytes)
+      {
+#ifdef _WIN32
+        HANDLE handle = CreateFileW(
+          path.wstring().c_str(),
+          GENERIC_WRITE,
+          0,
+          nullptr,
+          CREATE_ALWAYS,
+          FILE_ATTRIBUTE_NORMAL,
+          nullptr);
+        if (handle == INVALID_HANDLE_VALUE)
+        {
+          throw std::runtime_error("cannot open file: " + path.string());
+        }
+        bool close_handle = true;
+        try
+        {
+          size_t written = 0;
+          while (written < bytes.size())
+          {
+            const auto remaining = bytes.size() - written;
+            const auto chunk = (DWORD)std::min<size_t>(
+              remaining, (size_t)std::numeric_limits<DWORD>::max());
+            DWORD done = 0;
+            if (!WriteFile(
+                  handle, bytes.data() + written, chunk, &done, nullptr))
+            {
+              throw std::runtime_error(
+                system_error_message("error writing file " + path.string()));
+            }
+            written += done;
+          }
+          if (!FlushFileBuffers(handle))
+          {
+            throw std::runtime_error(
+              system_error_message("error syncing file " + path.string()));
+          }
+          close_handle = false;
+          if (!CloseHandle(handle))
+          {
+            throw std::runtime_error(
+              system_error_message("error closing file " + path.string()));
+          }
+        }
+        catch (...)
+        {
+          if (close_handle)
+          {
+            CloseHandle(handle);
+          }
+          throw;
+        }
+#else
+        int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#  ifdef O_CLOEXEC
+        flags |= O_CLOEXEC;
+#  endif
+        int fd = ::open(path.c_str(), flags, 0666);
+        if (fd < 0)
+        {
+          throw std::runtime_error(
+            system_error_message("cannot open file " + path.string()));
+        }
+        try
+        {
+          size_t written = 0;
+          while (written < bytes.size())
+          {
+            const ssize_t done =
+              ::write(fd, bytes.data() + written, bytes.size() - written);
+            if (done < 0)
+            {
+              if (errno == EINTR)
+              {
+                continue;
+              }
+              throw std::runtime_error(
+                system_error_message("error writing file " + path.string()));
+            }
+            if (done == 0)
+            {
+              throw std::runtime_error("short write: " + path.string());
+            }
+            written += (size_t)done;
+          }
+          if (::fsync(fd) != 0)
+          {
+            throw std::runtime_error(
+              system_error_message("error syncing file " + path.string()));
+          }
+          if (::close(fd) != 0)
+          {
+            fd = -1;
+            throw std::runtime_error(
+              system_error_message("error closing file " + path.string()));
+          }
+          fd = -1;
+        }
+        catch (...)
+        {
+          if (fd >= 0)
+          {
+            ::close(fd);
+          }
+          throw;
+        }
+#endif
+      }
+
+      static void replace_file(
+        const std::filesystem::path& tmp, const std::filesystem::path& path)
+      {
+#ifdef _WIN32
+        if (!MoveFileExW(
+              tmp.wstring().c_str(),
+              path.wstring().c_str(),
+              MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+        {
+          throw std::runtime_error(system_error_message(
+            "cannot rename temp file " + tmp.string() + " to " +
+            path.string()));
+        }
+#else
+        std::error_code ec;
+        std::filesystem::rename(tmp, path, ec);
+        if (ec)
+        {
+          throw std::runtime_error(
+            "cannot rename temp file " + tmp.string() + " to " + path.string() +
+            ": " + ec.message());
+        }
+#endif
+      }
+
+      static void sync_directory(const std::filesystem::path& path)
+      {
+#ifndef _WIN32
+        int flags = O_RDONLY;
+#  ifdef O_DIRECTORY
+        flags |= O_DIRECTORY;
+#  endif
+#  ifdef O_CLOEXEC
+        flags |= O_CLOEXEC;
+#  endif
+        int fd = ::open(path.c_str(), flags);
+        if (fd < 0)
+        {
+          throw std::runtime_error(
+            system_error_message("cannot open directory " + path.string()));
+        }
+        if (::fsync(fd) != 0)
+        {
+          const std::string message =
+            system_error_message("error syncing directory " + path.string());
+          ::close(fd);
+          throw std::runtime_error(message);
+        }
+        if (::close(fd) != 0)
+        {
+          throw std::runtime_error(
+            system_error_message("error closing directory " + path.string()));
+        }
+#else
+        (void)path;
+#endif
       }
     };
 
@@ -568,7 +805,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// number of full tiles, since only full tiles are durable.
       TileHashSourceT(const Store& store, uint64_t available_size) :
         store(store), available_size((available_size / TILE_WIDTH) * TILE_WIDTH)
-      {}
+      {
+        tile_cache.reserve(TILE_CACHE_SIZE);
+      }
 
       bool subtree_root(uint8_t level, uint64_t index, Hash& out) const override
       {
@@ -614,7 +853,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           const uint64_t span = (uint64_t)1 << level;
           const uint64_t start = index << level;
           const std::vector<Hash> tile =
-            store.read_tile(TileRef{0, start / TILE_WIDTH});
+            read_tile(TileRef{0, start / TILE_WIDTH});
           out = roll_up(tile, start % TILE_WIDTH, span);
           return;
         }
@@ -630,7 +869,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         if (n < full_tiles)
         {
           // One full level-L tile holds all 2**r entries of this subtree.
-          const std::vector<Hash> tile = store.read_tile(TileRef{L, n});
+          const std::vector<Hash> tile = read_tile(TileRef{L, n});
           out = roll_up(tile, first % TILE_WIDTH, (uint64_t)1 << r);
           return;
         }
@@ -641,6 +880,37 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         resolve((uint8_t)(level - 1), index * 2, lo);
         resolve((uint8_t)(level - 1), index * 2 + 1, hi);
         HASH_FUNCTION(lo, hi, out);
+      }
+
+      struct TileCacheEntry
+      {
+        TileRef ref;
+        std::vector<Hash> hashes;
+      };
+
+      static constexpr size_t TILE_CACHE_SIZE = 64;
+      mutable std::vector<TileCacheEntry> tile_cache;
+
+      std::vector<Hash> read_tile(const TileRef& ref) const
+      {
+        for (auto it = tile_cache.begin(); it != tile_cache.end(); it++)
+        {
+          if (it->ref.level == ref.level && it->ref.index == ref.index)
+          {
+            TileCacheEntry entry = std::move(*it);
+            tile_cache.erase(it);
+            std::vector<Hash> hashes = entry.hashes;
+            tile_cache.push_back(std::move(entry));
+            return hashes;
+          }
+        }
+
+        if (tile_cache.size() >= TILE_CACHE_SIZE)
+        {
+          tile_cache.erase(tile_cache.begin());
+        }
+        tile_cache.push_back(TileCacheEntry{ref, store.read_tile(ref)});
+        return tile_cache.back().hashes;
       }
     };
 
@@ -837,7 +1107,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       static uint64_t largest_pow2_lt(uint64_t n)
       {
         uint64_t k = 1;
-        while ((k << 1) < n)
+        while (k <= (n - 1) / 2)
         {
           k <<= 1;
         }
@@ -1175,8 +1445,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       Tree tree;
       uint64_t tiles_size = 0;
 
-      /// @brief Builds a proof engine over the combined resident-tree (frontier)
-      /// and full-tile (flushed past) source, and invokes @p fn with it.
+      /// @brief Builds a proof engine over the combined resident-tree
+      /// (frontier) and full-tile (flushed past) source, and invokes @p fn with
+      /// it.
       /// @note The sources and engine are stack-local; @p fn must consume the
       /// engine before returning (proofs are returned by value, holding hash
       /// copies, so the result outlives the engine).

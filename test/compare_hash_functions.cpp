@@ -125,7 +125,6 @@ void compare_compression_hashes()
 #ifdef HAVE_EVERCRYPT
     compare_roots(mt, mte, "EverCrypt");
 #endif
-
   }
 
   std::cout << num_trees << " trees, " << total_inserts << " inserts, "
@@ -182,7 +181,6 @@ void compare_full_hashes()
 #  ifdef HAVE_EVERCRYPT
     compare_roots(mto, mte, "OpenSSL");
 #  endif
-
   }
 
   std::cout << num_trees << " trees, " << total_inserts << " inserts, "
@@ -210,7 +208,9 @@ void bench(
   mt.root();
   auto stop = std::chrono::high_resolution_clock::now();
   const double seconds =
-    static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) /
+    static_cast<double>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
+        .count()) /
     1e9;
   std::cout << std::left << std::setw(10) << name << ": "
             << mt.statistics.num_insert << " insertions, "
@@ -238,7 +238,9 @@ void benchT(
   mt.root();
   auto stop = std::chrono::high_resolution_clock::now();
   const double seconds =
-    static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count()) /
+    static_cast<double>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
+        .count()) /
     1e9;
   std::cout << std::left << std::setw(10) << name << ": "
             << mt.statistics.num_insert << " insertions, "

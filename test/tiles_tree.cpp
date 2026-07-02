@@ -8,6 +8,7 @@
 #include <ctime>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
 #include <string>
@@ -19,6 +20,12 @@ using merkle::Hash;
 using merkle::tiles::MemoryHashSource;
 using merkle::tiles::ProofEngine;
 using merkle::tiles::TiledTree;
+
+class ProofEngineProbe : public ProofEngine
+{
+public:
+  using ProofEngine::largest_pow2_lt;
+};
 
 static void expect(bool cond, const std::string& what)
 {
@@ -158,6 +165,34 @@ int main()
       check_memory_source(n, hashes);
     }
     std::cout << "memory source: OK" << '\n';
+
+    // ---- Part 1b: hostile arithmetic inputs are rejected without UB or
+    //      overflow loops.
+    {
+      merkle::Tree tree;
+      tree.insert(hashes[0]);
+      Hash out;
+      expect(!tree.subtree_root(64, 0, out), "subtree_root rejects level 64");
+      expect(!tree.subtree_root(100, 0, out), "subtree_root rejects level 100");
+      expect(
+        !tree.subtree_root(1, std::numeric_limits<size_t>::max(), out),
+        "subtree_root rejects overflowing index");
+
+      expect(ProofEngineProbe::largest_pow2_lt(2) == 1, "pow2_lt 2");
+      expect(
+        ProofEngineProbe::largest_pow2_lt((uint64_t)1 << 63) ==
+          ((uint64_t)1 << 62),
+        "pow2_lt 2^63");
+      expect(
+        ProofEngineProbe::largest_pow2_lt(((uint64_t)1 << 63) + 1) ==
+          ((uint64_t)1 << 63),
+        "pow2_lt 2^63+1");
+      expect(
+        ProofEngineProbe::largest_pow2_lt(
+          std::numeric_limits<uint64_t>::max()) == ((uint64_t)1 << 63),
+        "pow2_lt uint64 max");
+      std::cout << "hostile arithmetic inputs: OK" << '\n';
+    }
 
     // ---- Part 2: TiledTree flush, proofs over tiles + memory.
     const uint64_t n1 = 1000; // first flush size
@@ -333,7 +368,8 @@ int main()
       {
         rtt.append(hashes[i]);
       }
-      rtt.flush(); // covered = 768; target = floor((768 - 300) / 256) * 256 = 256
+      rtt.flush(); // covered = 768; target = floor((768 - 300) / 256) * 256 =
+                   // 256
       expect(rtt.flushed_size() == 768, "margin: flushed size 768");
       expect(
         rtt.tree_ref().min_index() == 256,

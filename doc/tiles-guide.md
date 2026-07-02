@@ -24,7 +24,8 @@ page is a practical how-to.
 
 ## Requirements and a note on hashing
 
-- C++17 (the header uses `<filesystem>` and `<fstream>`).
+- C++17 (the header uses `<filesystem>` and small platform-specific file-sync
+  calls for durable tile writes).
 - Include the companion header; it pulls in `merklecpp.h` for you:
 
   ```cpp
@@ -78,6 +79,12 @@ auto consistency = log.consistency_proof(/*m=*/100, /*n=*/n);
 complete since the previous call. Full tiles are immutable — written once and
 never rewritten — and the incomplete frontier is never tiled (it stays in
 memory until it grows into a full tile).
+
+Tile files are written through unique temporary files, synced, then published
+with an atomic replace. On POSIX systems the parent directory is also synced
+after the rename. A wrong-size tile file is not considered durable by the
+writer, so a later flush rewrites it instead of treating mere file existence as
+success.
 
 ## Flushing and compaction
 

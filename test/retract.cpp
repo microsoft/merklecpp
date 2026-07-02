@@ -1,14 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#include "util.h"
+
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
-
 #include <merklecpp.h>
-
-#include "util.h"
 
 constexpr size_t PRINT_HASH_SIZE = 3;
 
@@ -37,7 +36,8 @@ int main()
     for (size_t k = 0; k < num_trees && !timed_out(timeout, test_start_time);
          k++)
     {
-      const auto num_leaves = static_cast<size_t>(1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
+      const auto num_leaves = static_cast<size_t>(
+        1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
       total_leaves += num_leaves;
 
       auto hashes = make_hashes(num_leaves);
@@ -55,7 +55,8 @@ int main()
           mt.retract_to(mt.max_index());
           if (mt.max_index() != max_before)
           {
-            throw std::runtime_error("retract_to(max_index()) changed max_index");
+            throw std::runtime_error(
+              "retract_to(max_index()) changed max_index");
           }
         }
 

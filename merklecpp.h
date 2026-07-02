@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <list>
 #include <memory>
 #include <sstream>
@@ -142,8 +143,9 @@ namespace merkle
       {
         uint8_t high = 0;
         uint8_t low = 0;
-        if (!decode_hex_digit(s[2 * i], high) ||
-            !decode_hex_digit(s[2 * i + 1], low))
+        if (
+          !decode_hex_digit(s[2 * i], high) ||
+          !decode_hex_digit(s[2 * i + 1], low))
         {
           throw std::runtime_error("invalid hash string");
         }
@@ -454,14 +456,13 @@ namespace merkle
     /// @brief The size of the serialised path in number of bytes
     [[nodiscard]] size_t serialised_size() const
     {
-      return sizeof(_leaf) +
-      sizeof(uint64_t) + // leaf index
-      sizeof(uint64_t) + // max index
-      sizeof(uint64_t) + // number of elements
-      elements.size() * (
-        sizeof(Element::hash) + // hash
-        sizeof(uint8_t) // direction
-      );
+      return sizeof(_leaf) + sizeof(uint64_t) + // leaf index
+        sizeof(uint64_t) + // max index
+        sizeof(uint64_t) + // number of elements
+        elements.size() *
+        (sizeof(Element::hash) + // hash
+         sizeof(uint8_t) // direction
+        );
     }
 
     /// @brief Index of the leaf of the path
@@ -1330,10 +1331,20 @@ namespace merkle
     /// [index << level, (index + 1) << level).
     bool subtree_root(uint8_t level, size_t index, Hash& out)
     {
+      const size_t leaves = num_leaves();
+      if (leaves == 0 || level >= std::numeric_limits<size_t>::digits)
+      {
+        return false;
+      }
+      if (index > (std::numeric_limits<size_t>::max() >> level))
+      {
+        return false;
+      }
+
       const size_t lo = index << level;
       const size_t count = (size_t)1 << level;
 
-      if (num_leaves() == 0 || lo < min_index() || lo + count > num_leaves())
+      if (lo < min_index() || count > leaves || lo > leaves - count)
       {
         return false;
       }
@@ -1775,8 +1786,7 @@ namespace merkle
   protected:
     void validate_partial_range(size_t from, size_t to) const
     {
-      if (
-        empty() || !(min_index() <= from && from <= to && to <= max_index()))
+      if (empty() || !(min_index() <= from && from <= to && to <= max_index()))
       {
         throw std::runtime_error("invalid leaf indices");
       }

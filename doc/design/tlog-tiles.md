@@ -348,15 +348,18 @@ public:
   // Tiles
   bool has_full_tile(uint8_t level, uint64_t index) const;
   std::vector<Hash> read_tile(const TileRef&) const;           // 256 entries
-  void write_tile(const TileRef&, const std::vector<Hash>&);   // atomic (tmp+rename)
+  void write_tile(const TileRef&, const std::vector<Hash>&);   // synced atomic replace
 };
 ```
 
-- Writes are **atomic** (write to a temp file, `rename`) so a crash never leaves
-  a half-written immutable tile.
+- Writes use a unique temporary file, sync the file contents, publish with an
+  atomic replace, and on POSIX sync the parent directory after the rename. A
+  crash should leave either the old tile or the new complete tile visible; a
+  wrong-size tile is not treated as a durable full tile and is rewritten by the
+  writer.
 - Full tiles are written once and never rewritten (immutability). No partial
   tiles are produced, so every file under `tile/<L>/` is write-once.
-- An in-process LRU cache of recently read tiles avoids repeated I/O during
+- A small in-process cache of recently read tiles avoids repeated I/O during
   proof generation.
 
 ### 6.4 Write path — `TileWriterT` (progressive, on compaction)
@@ -586,8 +589,8 @@ relevant was flushed), or from the combination — satisfying the request.
 
 Cost per flush is `O(new full tiles)`; higher-level tiles are cheap roll-ups of
 256 child hashes. Proof generation is `O(log(size))` `mth_range` calls, each at
-most a few tile reads plus a `≤ 256`-leaf roll-up, served from cache in the
-common case.
+most a few tile reads plus a `≤ 256`-leaf roll-up, with repeated tile reads
+served from the per-source cache in the common case.
 
 ---
 

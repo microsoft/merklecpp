@@ -29,8 +29,13 @@ and (c) several **robustness / hostile-input / test / doc** gaps.
 > plus level-2 `resolve` descend coverage in the `tiles_proofs` oracle sweep
 > (sizes 65536/65537/300000), writer reopen/resume (`tiles_writer` §E),
 > non-zero `retention_margin` compaction (`tiles_tree` Part 2c), and the empty
-> tree (`tiles_tree` Part 0). Still open for a future change: **C2/D2** (fsync
-> durability), **C3/C4/C5** (robustness hardening), **P1/D1** (tile cache).
+> tree (`tiles_tree` Part 0).
+>
+> **Update (hardening commit).** The remaining implementation findings are now
+> addressed: **C2/D2** by synced unique-temp writes, parent-directory sync on
+> POSIX, and size-validated tile presence; **C3/C4** by overflow-safe public
+> arithmetic guards; **C5** by unique temp names and cleanup; and **P1/D1** by a
+> per-source tile read cache plus corrected docs.
 
 ---
 
@@ -38,20 +43,20 @@ and (c) several **robustness / hostile-input / test / doc** gaps.
 
 | # | Severity | Area | Summary |
 |---|----------|------|---------|
-| C1 | Medium | Correctness (config) | `resolve` reads a higher-level tile by arithmetic, not existence → `write_higher_levels=false` throws `cannot open file` during proofs |
-| C2 | Medium | Durability | `write_file_atomically` never `fsync`s → docs' crash-safety claim is false; a post-crash truncated tile permanently wedges the store |
-| C3 | Low | Robustness (public API) | `TreeT::subtree_root` does not validate `level`/`index` → shift-UB at `level≥64`; silent wrong `true` on `lo+count` overflow |
-| C4 | Low | Robustness (hostile input) | `largest_pow2_lt` infinite-loops for `size > 2^63`, hanging the public proof entry points |
-| C5 | Low | Concurrency / cleanup | Fixed `*.tmp` name: concurrent-writer collision and temp-file leak on error |
-| P1 | Low–Med | Performance | No tile read cache: `resolve`/roll-ups re-open & re-deserialize the same 8 KB tiles repeatedly (and the docs claim a cache that does not exist) |
-| T1 | Medium | Tests | No corrupt/truncated-file read tests |
-| T2 | Medium | Tests | No coverage of level-≥2 tiles (needs > 65,536 leaves) |
-| T3 | Medium | Tests | No test with `write_higher_levels=false` (would have caught C1) |
-| T4 | Low–Med | Tests | No reopen/resume test (the `full_prefix_length` cursor-resume path) |
-| T5 | Low | Tests | No `compact()` with non-zero `retention_margin`; no retract-below-flush-after-margin |
-| T6 | Low | Tests | Boundary sizes `0` and `65537` untested |
-| D1 | Medium | Docs | Design doc describes an "in-process LRU cache" that does not exist |
-| D2 | Low | Docs | Durability wording ("a crash never leaves a half-written tile") is false (see C2) |
+| C1 | Medium | Correctness (config) | **Fixed:** the `write_higher_levels` option was removed, so required roll-up tiles are always written |
+| C2 | Medium | Durability | **Fixed:** `write_file_atomically` syncs unique temp files, atomically replaces, syncs POSIX parent dirs, and bad-size tiles are rewritten |
+| C3 | Low | Robustness (public API) | **Fixed:** `TreeT::subtree_root` validates `level`/`index` before shifting and uses overflow-safe range checks |
+| C4 | Low | Robustness (hostile input) | **Fixed:** `largest_pow2_lt` uses an overflow-safe loop condition for `size > 2^63` |
+| C5 | Low | Concurrency / cleanup | **Fixed:** temp file names are unique per process/time/counter and cleaned up on error |
+| P1 | Low–Med | Performance | **Fixed:** `TileHashSource` keeps a small decoded tile cache for proof generation |
+| T1 | Medium | Tests | **Fixed:** corrupt/truncated tile and entry-bundle read tests added |
+| T2 | Medium | Tests | **Fixed:** level-2 coverage added via `tiles_level2` and large proof sweeps |
+| T3 | Medium | Tests | **Obsolete:** the `write_higher_levels` flag was removed with C1 |
+| T4 | Low–Med | Tests | **Fixed:** reopen/resume coverage added for `full_prefix_length` cursor recovery |
+| T5 | Low | Tests | **Fixed:** non-zero `retention_margin` compaction and guarded rollback are covered |
+| T6 | Low | Tests | **Fixed:** empty tree and `65537` boundary coverage added |
+| D1 | Medium | Docs | **Fixed:** design doc now matches the per-source tile cache |
+| D2 | Low | Docs | **Fixed:** durability wording now describes synced temp-file atomic replace and bad-size tile rewrite |
 | D3 | Low | Docs | Partial-tile / spec material retained as background; correct but worth a sharper "not implemented" caveat |
 
 ---
@@ -61,6 +66,10 @@ and (c) several **robustness / hostile-input / test / doc** gaps.
 ### C1 — `TileHashSourceT::resolve` assumes higher-level tiles exist (Medium)
 
 `merklecpp_tiles.h:636–642`.
+
+> **Status:** Fixed by removing the public `write_higher_levels` option. Higher
+> level roll-up tiles are now always written, so the arithmetic existence
+> invariant used by `resolve` is maintained.
 
 ```cpp
 const uint64_t full_tiles = full_shift >= 64 ? 0 : (available_size >> full_shift);
@@ -99,34 +108,24 @@ remove/guard the option or document the incompatibility.
 
 ### C2 — `write_file_atomically` is atomic but not durable; the store can wedge after a crash (Medium)
 
-`merklecpp_tiles.h:269–302` (`flush()` + `rename`, **no `fsync`** anywhere in the
-file).
+> **Status:** Fixed by the hardening commit. `write_file_atomically` now writes a
+> unique temp file, syncs it, publishes it with atomic replace, syncs the POSIX
+> parent directory, and removes the temp file on error. `has_full_tile` also
+> requires the exact full-tile byte size, so a truncated/oversized tile is
+> rewritten instead of treated as durable.
 
-`std::ofstream::flush()` only moves bytes into the OS page cache. With no `fsync`
-of the temp file before `rename` and no `fsync` of the parent directory after,
-a power-loss can persist the rename's directory entry while the file's data blocks
-are lost, leaving a tile **present at its final path but zero-length / truncated**.
-(ext4's flush-on-rename heuristic does not apply to write-once renames over a
-non-existent target and is not portable to XFS/btrfs/NFS.)
-
-This contradicts the comment at `merklecpp_tiles.h:268` and
-`doc/design/tlog-tiles.md:355–356`.
-
-*Why it bites (reproduced):* the store uses **file existence** as its idempotence
-signal — `flush()` skips any tile where `has_full_tile()` is true
-(`merklecpp_tiles.h:422`) and `full_prefix_length()` seeds its cursor from
-existence (`:476–499`). A present-but-truncated tile is therefore treated as
-durably written and **never rewritten**, yet `read_tile`'s exact-size check rejects
-it on every read — so every later roll-up or proof over that tile throws
-indefinitely until the file is deleted by hand. (Integrity is preserved — no wrong
-proof is ever produced — but availability/self-healing is not.)
-
-**Fix.** `fsync` the temp fd before `rename`, then `fsync` the parent directory
-(`FlushFileBuffers` on Windows). And/or treat a wrong-size tile as **absent** on
-read so it is rewritten (self-heal). Soften the docs to an atomicity-only claim
-(see D2).
+The original implementation used stream flush plus rename and treated file
+existence as the idempotence signal. A crash could therefore leave a present but
+wrong-size tile that future writes skipped and future reads rejected. The current
+implementation syncs the temp file before publishing, syncs POSIX parent
+directories after publishing, and makes `has_full_tile` require the exact full
+tile size so wrong-size tiles are rewritten.
 
 ### C3 — `TreeT::subtree_root` does not validate its arguments (Low)
+
+> **Status:** Fixed by the hardening commit. The method now rejects unsupported
+> levels and overflowing indices before shifting, and uses an overflow-safe
+> `lo/count/leaves` containment check.
 
 `merklecpp.h:1333–1336`.
 
@@ -165,6 +164,10 @@ if (num_leaves() == 0 || index > (num_leaves() >> level)) return false; // overf
 
 ### C4 — `largest_pow2_lt` hangs for `size > 2^63` (Low)
 
+> **Status:** Fixed by the hardening commit. The loop condition is now based on
+> `(n - 1) / 2`, so it cannot shift past `2^63` while searching for the largest
+> power of two below `n`.
+
 `merklecpp_tiles.h:846–854`.
 
 ```cpp
@@ -181,6 +184,10 @@ hostile/buggy size only.
 **Fix.** `while (k <= (n - 1) / 2) k <<= 1;` (or stop at `k == (1ull << 63)`).
 
 ### C5 — fixed `*.tmp` name: concurrent collision + leak on error (Low)
+
+> **Status:** Fixed by the hardening commit. Temp names now include process,
+> timestamp, and an atomic counter, and a guard removes the temp path unless the
+> atomic replace succeeds.
 
 `merklecpp_tiles.h:282` (`tmp += ".tmp"`).
 
@@ -199,15 +206,13 @@ path.
 
 ### P1 — no tile read cache (Low–Medium)
 
-There is no caching anywhere in `merklecpp_tiles.h` (confirmed). `resolve` and the
-writer's `collect` roll-ups call `store.read_tile`, which `open`s, reads and
-deserializes a full 256-hash (8 KB at HASH_SIZE=32) tile **every** call. Near the
-tiled/frontier boundary `resolve` descends and re-reads level-0 tiles, and across
-many proofs the same hot tiles are re-read from scratch. The design doc assumes
-this is mitigated by a cache that does not exist (see D1).
+> **Status:** Fixed for proof generation by the hardening commit. `TileHashSource`
+> now keeps a small decoded tile cache and serves repeated reads from memory.
 
-**Fix.** A small LRU (or per-proof memo) keyed by `{level, index}` over decoded
-tiles; or document that callers should wrap `TileStore` with their own cache.
+The original implementation opened, read, and deserialized a full 256-hash tile
+for every `resolve` call, and the design doc described a cache that had not yet
+been implemented. `TileHashSource` now keeps a small decoded tile cache keyed by
+`{level, index}` and reuses hot tiles during proof generation.
 
 ---
 
@@ -218,33 +223,20 @@ proofs against `TreeT::path/past_path/past_root`, round-trips consistency proofs
 through `verify_consistency`, exercises tamper/wrong-root rejection, and is
 **exhaustive** over `(m,k)` consistency pairs for `n ≤ 16`. The gaps:
 
-* **T1 (Medium)** — No corrupt/truncated tile or entry-bundle read tests. The code
-  *is* defensive (`read_tile` exact-size check; `decode_entries` bounds checks,
-  fuzzed clean under ASan), but the error paths are unverified by the suite. Only
-  wrong-width *writes* are tested (`tiles_store.cpp`).
-* **T2 (Medium)** — No level-≥2 tiles. The largest tree is 70,000 leaves
-  (`tiles_proofs.cpp`, `tiles_writer.cpp`), which reaches level-1 only; level-2
-  needs > 256² = 65,536 (in practice 256³ ≈ 16.7 M for a full level-2 tile).
-* **T3 (Medium)** — No `write_higher_levels=false` test; such a test would have
-  caught C1.
-* **T4 (Low–Med)** — No reopen/resume test: every writer runs once against a fresh
-  temp dir, so the `full_prefix_length` binary-search resume path is unexercised.
-* **T5 (Low)** — `compact()` is only tested with `retention_margin = 0`; no
-  retract-below-flush case after compaction with a non-zero margin.
-* **T6 (Low)** — Boundary sizes `0` and `65537` untested (`1/256/257/65535/65536`
-  are covered).
+The historical gaps listed in the first audit pass are now covered: corrupt and
+wrong-size tile/bundle files, level-2 tiles, reopen/resume, non-zero retention
+margin, guarded rollback below the flushed prefix, empty trees, and `65537` /
+large-boundary proof cases. The `write_higher_levels=false` test became obsolete
+when that option was removed.
 
 ---
 
 ## Documentation
 
-* **D1 (Medium)** — `doc/design/tlog-tiles.md:359–360` ("An in-process LRU cache of
-  recently read tiles avoids repeated I/O") and `:593` ("served from cache")
-  describe a component that does not exist (see P1). Either implement it or remove
-  the claim.
-* **D2 (Low)** — `doc/design/tlog-tiles.md:355–356` and the `:268` code comment
-  claim crashes never leave a half-written tile; false without `fsync` (see C2).
-  Reword to "atomic (no torn writes); durability requires `fsync`".
+* **D1 (Medium)** — Fixed: `doc/design/tlog-tiles.md` now describes the
+  implemented per-source tile cache.
+* **D2 (Low)** — Fixed: `doc/design/tlog-tiles.md` and the code comment now
+  describe synced unique-temp writes, atomic replace, and bad-size tile rewrite.
 * **D3 (Low)** — Partial-tile spec material remains as background (`§2.1`, `§4`).
   It is consistently caveated as the upstream format and "not produced or read
   here", so this is acceptable; a one-line "the implementation has no notion of a
@@ -295,12 +287,7 @@ Recorded so the breadth of the review is auditable:
 
 ## Recommended priority
 
-1. **C2 + D2** — add `fsync` (or self-heal wrong-size tiles) and correct the
-   durability docs. Highest real-world risk.
-2. **C1 (+ T3)** — make `resolve` gate on `has_full_tile`; add a
-   `write_higher_levels=false` proof test.
-3. **C3, C4** — validate inputs to the public `subtree_root` and bound
-   `largest_pow2_lt`. Cheap hardening of public entry points.
-4. **D1 / P1** — implement a tile cache or drop the doc claim.
-5. **T1, T2, T4** — add corruption, level-≥2, and reopen/resume tests.
-6. **C5, T5, T6, D3** — opportunistic cleanup.
+All implementation, test, and documentation findings from this audit have now
+been addressed except **D3**, which remains a low-priority wording polish item:
+the design doc still includes partial-tile spec background, but consistently
+caveats that this implementation does not write or read partial tiles.

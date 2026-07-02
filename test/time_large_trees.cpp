@@ -42,8 +42,9 @@ int main()
     mt.root();
     auto stop = std::chrono::high_resolution_clock::now();
     const double seconds =
-      static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
-        .count()) /
+      static_cast<double>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
+          .count()) /
       1e9;
     std::cout << "NEW: " << mt.statistics.to_string() << " in " << seconds
               << " sec" << '\n';
@@ -66,8 +67,10 @@ int main()
       mt384.root();
       auto stop384 = std::chrono::high_resolution_clock::now();
       const double seconds384 =
-        static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop384 - start384)
-          .count()) /
+        static_cast<double>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(
+            stop384 - start384)
+            .count()) /
         1e9;
       std::cout << "SHA384: " << mt384.statistics.to_string() << " in "
                 << seconds384 << " sec" << '\n';
@@ -90,8 +93,10 @@ int main()
       mt512.root();
       auto stop512 = std::chrono::high_resolution_clock::now();
       const double seconds512 =
-        static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(stop512 - start512)
-          .count()) /
+        static_cast<double>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(
+            stop512 - start512)
+            .count()) /
         1e9;
       std::cout << "SHA512: " << mt512.statistics.to_string() << " in "
                 << seconds512 << " sec" << '\n';
@@ -121,8 +126,9 @@ int main()
     }
     mt_get_root(ec_mt, ec_root);
     stop = std::chrono::high_resolution_clock::now();
-    const double ec_seconds = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
-                .count() /
+    const double ec_seconds =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start)
+        .count() /
       1e9;
     std::cout << "EC :"
               << " num_insert=" << ec_hashes.size()

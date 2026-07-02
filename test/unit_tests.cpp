@@ -149,7 +149,7 @@ TEST_CASE("PathT equality")
 
   const auto path0a = tree.path(0);
   const auto path0b = tree.path(0); // same path extracted twice
-  const auto path1 = tree.path(1);  // path to a different leaf
+  const auto path1 = tree.path(1); // path to a different leaf
 
   // Two paths to the same leaf should be equal
   REQUIRE(*path0a == *path0b);
@@ -166,7 +166,7 @@ TEST_CASE("PathT equality")
   h3.bytes[0] = 3;
   tree_diff.insert(h3);
 
-  const auto path_orig = tree.path(0);  // h0 leaf, element has h1
+  const auto path_orig = tree.path(0); // h0 leaf, element has h1
   const auto path_diff = tree_diff.path(0); // h0 leaf, element has h3
   REQUIRE_FALSE(*path_orig == *path_diff);
   REQUIRE(*path_orig != *path_diff);

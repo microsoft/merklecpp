@@ -121,7 +121,9 @@ namespace
     mixed_case_hex[0] = 'A';
     mixed_case_hex[1] = 'f';
     const merkle::Hash mixed_case_hash(mixed_case_hex);
-    require(mixed_case_hash.bytes[0] == 0xAF, "mixed-case hash string parsed incorrectly");
+    require(
+      mixed_case_hash.bytes[0] == 0xAF,
+      "mixed-case hash string parsed incorrectly");
 
     require_throws(
       [] { merkle::Hash(std::string(64, 'z')); },
@@ -267,9 +269,14 @@ namespace
 
     merkle::Tree copy_assigned(hash_with_byte(0xEE));
     copy_assigned = source;
-    require(copy_assigned.root() == expected_root, "copy assignment root mismatch");
-    require(copy_assigned.min_index() == expected_min, "copy assignment min mismatch");
-    require(copy_assigned.max_index() == expected_max, "copy assignment max mismatch");
+    require(
+      copy_assigned.root() == expected_root, "copy assignment root mismatch");
+    require(
+      copy_assigned.min_index() == expected_min,
+      "copy assignment min mismatch");
+    require(
+      copy_assigned.max_index() == expected_max,
+      "copy assignment max mismatch");
     require(
       copy_assigned.leaf(expected_min) == source_hashes[expected_min],
       "copy-assigned leaf mismatch");

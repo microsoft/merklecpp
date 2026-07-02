@@ -3,6 +3,8 @@
 
 #include "util.h"
 
+#include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
@@ -13,6 +15,7 @@
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -42,13 +45,26 @@ static std::string rel(const merkle::tiles::TileStore& store, const fs::path& p)
   return p.lexically_relative(store.root()).generic_string();
 }
 
+static bool any_tmp_files(const fs::path& dir)
+{
+  if (!fs::exists(dir))
+  {
+    return false;
+  }
+  return std::any_of(
+    fs::recursive_directory_iterator(dir),
+    fs::recursive_directory_iterator(),
+    [](const auto& entry) {
+      return entry.path().filename().string().find(".tmp") != std::string::npos;
+    });
+}
+
 // Overwrites a file with exactly the given bytes (to simulate corruption).
 static void overwrite_file(const fs::path& p, const std::vector<uint8_t>& bytes)
 {
   std::ofstream f(p, std::ios::binary | std::ios::trunc);
   f.write(
-    reinterpret_cast<const char*>(bytes.data()),
-    (std::streamsize)bytes.size());
+    reinterpret_cast<const char*>(bytes.data()), (std::streamsize)bytes.size());
 }
 
 int main()
@@ -140,13 +156,18 @@ int main()
 
       // Truncated tile: fewer bytes than a full tile.
       overwrite_file(store.tile_path(full_ref), std::vector<uint8_t>(hsz, 0));
+      expect(!store.has_full_tile(0, 0), "truncated tile is not durable");
       expect_throws(
         [&] { (void)store.read_tile(full_ref); }, "truncated tile rejected");
+      store.write_tile(full_ref, full);
+      expect(store.has_full_tile(0, 0), "truncated tile rewritten");
+      expect(store.read_tile(full_ref) == full, "rewritten tile round-trip");
 
       // Oversized tile: more bytes than a full tile.
       overwrite_file(
         store.tile_path(full_ref),
         std::vector<uint8_t>((merkle::tiles::TILE_WIDTH + 1) * hsz, 0));
+      expect(!store.has_full_tile(0, 0), "oversized tile is not durable");
       expect_throws(
         [&] { (void)store.read_tile(full_ref); }, "oversized tile rejected");
 
@@ -172,6 +193,34 @@ int main()
           (void)merkle::tiles::TileStore::decode_entries({0xFF, 0xFF, 0x00}, 1);
         },
         "decode_entries oversized length rejected");
+    }
+
+    // 3d. Concurrent same-tile writes use unique temp files and leave no
+    // temporary files behind after success.
+    {
+      const TileRef concurrent_ref{0, 42};
+      std::atomic<bool> ok{true};
+      std::vector<std::thread> threads;
+      for (size_t i = 0; i < 8; i++)
+      {
+        threads.emplace_back([&] {
+          try
+          {
+            store.write_tile(concurrent_ref, full);
+          }
+          catch (...)
+          {
+            ok = false;
+          }
+        });
+      }
+      for (auto& thread : threads)
+      {
+        thread.join();
+      }
+      expect(ok, "concurrent writes succeeded");
+      expect(store.read_tile(concurrent_ref) == full, "concurrent tile valid");
+      expect(!any_tmp_files(dir), "no temp files left after writes");
     }
 
     std::cout << "tiles_store: OK" << '\n';

@@ -82,8 +82,7 @@ int main()
 
       expect(store.has_full_tile(0, 0), "A L0 full tile");
       expect(
-        fs::file_size(store.tile_path(TileRef{0, 0})) ==
-          256U * Hash().size(),
+        fs::file_size(store.tile_path(TileRef{0, 0})) == 256U * Hash().size(),
         "A L0 full tile size");
       expect(!store.has_full_tile(1, 0), "A no L1 full tile");
       expect(!any_partial_dirs(store), "A no partial tiles");
@@ -133,8 +132,7 @@ int main()
       const auto l1 = store.read_tile(TileRef{1, 0});
       expect(l1.size() == 256, "B L1 full width");
       expect(l1[0] == rollup(store.read_tile(TileRef{0, 0})), "B L1[0]");
-      expect(
-        l1[255] == rollup(store.read_tile(TileRef{0, 255})), "B L1[255]");
+      expect(l1[255] == rollup(store.read_tile(TileRef{0, 255})), "B L1[255]");
 
       std::cout << "B (size 70000): OK" << '\n';
     }

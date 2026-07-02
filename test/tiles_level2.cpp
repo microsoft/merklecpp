@@ -21,11 +21,11 @@
 
 namespace fs = std::filesystem;
 using merkle::Hash;
+using merkle::tiles::TILE_WIDTH;
 using merkle::tiles::TileHashSource;
 using merkle::tiles::TileRef;
 using merkle::tiles::TileStore;
 using merkle::tiles::TileWriter;
-using merkle::tiles::TILE_WIDTH;
 
 static void expect(bool cond, const std::string& what)
 {
@@ -72,8 +72,7 @@ int main()
 
     // 65536 full L0 tiles + 256 full L1 tiles + 1 full L2 tile.
     expect(
-      stats.full_written ==
-        (uint64_t)TILE_WIDTH * TILE_WIDTH + TILE_WIDTH + 1,
+      stats.full_written == (uint64_t)TILE_WIDTH * TILE_WIDTH + TILE_WIDTH + 1,
       "level2: tile counts");
     expect(store.has_full_tile(2, 0), "level2: L2 tile present");
     expect(!store.has_full_tile(2, 1), "level2: no second L2 tile");
@@ -84,9 +83,10 @@ int main()
 
     const TileHashSource src(store, n);
 
-    // Each level-2 entry j is the root of level-1 tile j, which rolls up level-0
-    // tiles, which are the leaves verbatim. Cross-check the writer's roll-up,
-    // resolve's level-2 read, and the leaf chain on a sample of indices.
+    // Each level-2 entry j is the root of level-1 tile j, which rolls up
+    // level-0 tiles, which are the leaves verbatim. Cross-check the writer's
+    // roll-up, resolve's level-2 read, and the leaf chain on a sample of
+    // indices.
     for (const uint64_t j :
          {(uint64_t)0, (uint64_t)1, (uint64_t)200, (uint64_t)255})
     {
