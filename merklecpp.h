@@ -296,10 +296,14 @@ namespace merkle
   {
   public:
     /// @brief Path direction
-    using Direction = enum { PATH_LEFT, PATH_RIGHT };
+    enum Direction
+    {
+      PATH_LEFT,
+      PATH_RIGHT
+    };
 
     /// @brief Path element
-    using Element = struct
+    struct Element
     {
       /// @brief The hash of the path element
       HashT<HASH_SIZE> hash;
@@ -799,9 +803,9 @@ namespace merkle
     /// @param hash Hash to insert
     void insert(const Hash& hash)
     {
-      MERKLECPP_TRACE(MERKLECPP_TOUT << "> insert "
-                                     << hash.to_string(TRACE_HASH_SIZE)
-                                     << std::endl;);
+      MERKLECPP_TRACE(
+        MERKLECPP_TOUT << "> insert " << hash.to_string(TRACE_HASH_SIZE)
+                       << std::endl;);
       uninserted_leaf_nodes.push_back(Node::make(hash));
       statistics.num_insert++;
     }
@@ -843,10 +847,10 @@ namespace merkle
       walk_to(index, false, [this](Node*& n, bool go_right) {
         if (go_right && n->left)
         {
-          MERKLECPP_TRACE(MERKLECPP_TOUT
-                            << " - conflate "
-                            << n->left->hash.to_string(TRACE_HASH_SIZE)
-                            << std::endl;);
+          MERKLECPP_TRACE(
+            MERKLECPP_TOUT << " - conflate "
+                           << n->left->hash.to_string(TRACE_HASH_SIZE)
+                           << std::endl;);
           if (n->left && n->left->dirty)
           {
             hash(n->left);
@@ -901,10 +905,10 @@ namespace merkle
           n->dirty = true;
           if (go_left && n->right)
           {
-            MERKLECPP_TRACE(MERKLECPP_TOUT
-                              << " - eliminate "
-                              << n->right->hash.to_string(TRACE_HASH_SIZE)
-                              << std::endl;);
+            MERKLECPP_TRACE(
+              MERKLECPP_TOUT << " - eliminate "
+                             << n->right->hash.to_string(TRACE_HASH_SIZE)
+                             << std::endl;);
             bool is_root = n == _root;
 
             Node* old_left = n->left;
@@ -924,18 +928,18 @@ namespace merkle
 
             if (is_root)
             {
-              MERKLECPP_TRACE(MERKLECPP_TOUT
-                                << " - new root: "
-                                << n->hash.to_string(TRACE_HASH_SIZE)
-                                << std::endl;);
+              MERKLECPP_TRACE(
+                MERKLECPP_TOUT
+                  << " - new root: " << n->hash.to_string(TRACE_HASH_SIZE)
+                  << std::endl;);
               assert(_root == n);
             }
 
             assert(n->invariant());
 
-            MERKLECPP_TRACE(MERKLECPP_TOUT
-                              << " - after elimination: " << std::endl
-                              << to_string(TRACE_HASH_SIZE) << std::endl;);
+            MERKLECPP_TRACE(
+              MERKLECPP_TOUT << " - after elimination: " << std::endl
+                             << to_string(TRACE_HASH_SIZE) << std::endl;);
             return false;
           }
           return true;
@@ -1008,9 +1012,9 @@ namespace merkle
       statistics.num_root++;
       compute_root();
       assert(_root && !_root->dirty);
-      MERKLECPP_TRACE(MERKLECPP_TOUT
-                        << " - root: " << _root->hash.to_string(TRACE_HASH_SIZE)
-                        << std::endl;);
+      MERKLECPP_TRACE(
+        MERKLECPP_TOUT << " - root: " << _root->hash.to_string(TRACE_HASH_SIZE)
+                       << std::endl;);
       return _root->hash;
     }
 
@@ -1080,12 +1084,12 @@ namespace merkle
         {
           walk_stack.push_back(cur);
         }
-        MERKLECPP_TRACE(MERKLECPP_TOUT
-                          << " - at " << cur->hash.to_string(TRACE_HASH_SIZE)
-                          << " (" << cur->size << "/" << (unsigned)cur->height
-                          << ")"
-                          << " (" << (go_right ? "R" : "L") << ")"
-                          << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << " - at " << cur->hash.to_string(TRACE_HASH_SIZE)
+                         << " (" << cur->size << "/" << (unsigned)cur->height
+                         << ")"
+                         << " (" << (go_right ? "R" : "L") << ")"
+                         << std::endl;);
         if (cur->height == height)
         {
           if (!f(cur, go_right))
@@ -1140,8 +1144,9 @@ namespace merkle
     /// tree to @p as_of and then extracting the path of @p index.
     std::shared_ptr<Path> past_path(size_t index, size_t as_of)
     {
-      MERKLECPP_TRACE(MERKLECPP_TOUT << "> past_path from " << index
-                                     << " as of " << as_of << std::endl;);
+      MERKLECPP_TRACE(
+        MERKLECPP_TOUT << "> past_path from " << index << " as of " << as_of
+                       << std::endl;);
       statistics.num_past_paths++;
 
       if (
@@ -1180,24 +1185,24 @@ namespace merkle
         bool const go_right_i = ((it_i >> (8 * sizeof(it_i) - 1)) & 0x01) != 0U;
         bool const go_right_a = ((it_a >> (8 * sizeof(it_a) - 1)) & 0x01) != 0U;
 
-        MERKLECPP_TRACE(MERKLECPP_TOUT
-                          << " - at " << (unsigned)height << ": "
-                          << cur_i->hash.to_string(TRACE_HASH_SIZE) << " ("
-                          << cur_i->size << "/" << (unsigned)cur_i->height
-                          << "/" << (go_right_i ? "R" : "L") << ")"
-                          << " / " << cur_a->hash.to_string(TRACE_HASH_SIZE)
-                          << " (" << cur_a->size << "/"
-                          << (unsigned)cur_a->height << "/"
-                          << (go_right_a ? "R" : "L") << ")" << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << " - at " << (unsigned)height << ": "
+                         << cur_i->hash.to_string(TRACE_HASH_SIZE) << " ("
+                         << cur_i->size << "/" << (unsigned)cur_i->height << "/"
+                         << (go_right_i ? "R" : "L") << ")"
+                         << " / " << cur_a->hash.to_string(TRACE_HASH_SIZE)
+                         << " (" << cur_a->size << "/"
+                         << (unsigned)cur_a->height << "/"
+                         << (go_right_a ? "R" : "L") << ")" << std::endl;);
 
         if (!fork_node && go_right_i != go_right_a)
         {
           assert(cur_i == cur_a);
           assert(!go_right_i && go_right_a);
-          MERKLECPP_TRACE(MERKLECPP_TOUT
-                            << " - split at "
-                            << cur_i->hash.to_string(TRACE_HASH_SIZE)
-                            << std::endl;);
+          MERKLECPP_TRACE(
+            MERKLECPP_TOUT << " - split at "
+                           << cur_i->hash.to_string(TRACE_HASH_SIZE)
+                           << std::endl;);
           fork_node = cur_i;
         }
 
@@ -1417,8 +1422,8 @@ namespace merkle
 
         compute_root();
 
-        MERKLECPP_TRACE(MERKLECPP_TOUT << to_string(TRACE_HASH_SIZE)
-                                       << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << to_string(TRACE_HASH_SIZE) << std::endl;);
 
         std::vector<Node*> extras;
         walk_to(min_index(), false, [&extras](Node*& n, bool go_right) {
@@ -1442,8 +1447,9 @@ namespace merkle
     /// @param bytes The vector of bytes to serialise to
     void serialise(size_t from, size_t to, std::vector<uint8_t>& bytes)
     {
-      MERKLECPP_TRACE(MERKLECPP_TOUT << "> serialise from " << from << " to "
-                                     << to << std::endl;);
+      MERKLECPP_TRACE(
+        MERKLECPP_TOUT << "> serialise from " << from << " to " << to
+                       << std::endl;);
 
       validate_partial_range(from, to);
 
@@ -1460,8 +1466,8 @@ namespace merkle
 
         compute_root();
 
-        MERKLECPP_TRACE(MERKLECPP_TOUT << to_string(TRACE_HASH_SIZE)
-                                       << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << to_string(TRACE_HASH_SIZE) << std::endl;);
 
         std::vector<Node*> extras;
         walk_to(from, false, [&extras](Node*& n, bool go_right) {
@@ -1516,19 +1522,24 @@ namespace merkle
         // Restore extra hashes on the left edge of the tree
         if ((it & 0x01) != 0U)
         {
+          const uint8_t restored_height = level_no + 1;
+          if (restored_height >= std::numeric_limits<size_t>::digits)
+          {
+            throw std::runtime_error("invalid serialised tree height");
+          }
           Hash h(bytes, position);
           MERKLECPP_TRACE(MERKLECPP_TOUT << "+";);
           auto n = Node::make(h);
-          n->height = level_no + 1;
-          n->size = (1 << n->height) - 1;
+          n->height = restored_height;
+          n->size = (static_cast<size_t>(1) << n->height) - 1;
           assert(n->invariant());
           level.insert(level.begin(), n);
         }
 
-        MERKLECPP_TRACE(for (auto& n
-                             : level) MERKLECPP_TOUT
-                          << " " << n->hash.to_string(TRACE_HASH_SIZE);
-                        MERKLECPP_TOUT << std::endl;);
+        MERKLECPP_TRACE(
+          for (auto& n : level) MERKLECPP_TOUT
+            << " " << n->hash.to_string(TRACE_HASH_SIZE);
+          MERKLECPP_TOUT << std::endl;);
 
         // Rebuild the level
         for (size_t i = 0; i < level.size(); i += 2)
@@ -1953,9 +1964,9 @@ namespace merkle
     {
       while (true)
       {
-        MERKLECPP_TRACE(MERKLECPP_TOUT << "  @ "
-                                       << n->hash.to_string(TRACE_HASH_SIZE)
-                                       << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << "  @ " << n->hash.to_string(TRACE_HASH_SIZE)
+                         << std::endl;);
         assert(n->invariant());
 
         if (n->is_full())
@@ -2026,10 +2037,10 @@ namespace merkle
 
         if (!complete && !result->is_full())
         {
-          MERKLECPP_TRACE(MERKLECPP_TOUT
-                            << "  X save "
-                            << result->hash.to_string(TRACE_HASH_SIZE)
-                            << std::endl;);
+          MERKLECPP_TRACE(
+            MERKLECPP_TOUT << "  X save "
+                           << result->hash.to_string(TRACE_HASH_SIZE)
+                           << std::endl;);
           return result;
         }
       }
@@ -2044,9 +2055,9 @@ namespace merkle
     /// @param n New leaf node to insert
     void insert_leaf(Node*& root, Node* n)
     {
-      MERKLECPP_TRACE(MERKLECPP_TOUT << " - insert_leaf "
-                                     << n->hash.to_string(TRACE_HASH_SIZE)
-                                     << std::endl;);
+      MERKLECPP_TRACE(
+        MERKLECPP_TOUT << " - insert_leaf "
+                       << n->hash.to_string(TRACE_HASH_SIZE) << std::endl;);
       leaf_nodes.push_back(n);
       if (insertion_stack.empty() && !root)
       {
@@ -2066,9 +2077,9 @@ namespace merkle
     {
       if (!uninserted_leaf_nodes.empty())
       {
-        MERKLECPP_TRACE(MERKLECPP_TOUT
-                          << "* insert_leaves " << leaf_nodes.size() << " +"
-                          << uninserted_leaf_nodes.size() << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << "* insert_leaves " << leaf_nodes.size() << " +"
+                         << uninserted_leaf_nodes.size() << std::endl;);
         // Potential future improvement: make this go fast when there are many
         // leaves to insert.
         for (auto& n : uninserted_leaf_nodes)

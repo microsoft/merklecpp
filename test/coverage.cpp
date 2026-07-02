@@ -257,6 +257,18 @@ namespace
       "partial serialised_size should reject retracted to index");
   }
 
+  void test_deserialise_rejects_invalid_flushed_height()
+  {
+    std::vector<uint8_t> buffer;
+    merkle::serialise_uint64_t(0, buffer);
+    merkle::serialise_uint64_t(uint64_t{1} << 63, buffer);
+
+    merkle::Tree tree;
+    require_throws(
+      [&] { tree.deserialise(buffer); },
+      "deserialise should reject impossible flushed subtree heights");
+  }
+
   void test_tree_assignment_and_moves()
   {
     const auto source_hashes = make_hashes(5);
@@ -319,6 +331,7 @@ int main()
     test_hash_string_parsing();
     test_path_metadata_and_equality();
     test_tree_partial_serialisation_bounds();
+    test_deserialise_rejects_invalid_flushed_height();
     test_tree_assignment_and_moves();
   }
   catch (const std::exception& ex)

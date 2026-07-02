@@ -515,7 +515,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 #  ifdef O_CLOEXEC
         flags |= O_CLOEXEC;
 #  endif
-        int fd = ::open(path.c_str(), flags);
+        const int fd = ::open(path.c_str(), flags);
         if (fd < 0)
         {
           throw std::runtime_error(
@@ -642,10 +642,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
           const uint64_t full_tiles = entries / TILE_WIDTH;
 
-          if (!cursor_inited[level])
+          if (cursor_inited[level] == 0)
           {
             next_full[level] = full_prefix_length(level);
-            cursor_inited[level] = true;
+            cursor_inited[level] = 1;
           }
 
           for (uint64_t n = next_full[level]; n < full_tiles; n++)
@@ -677,7 +677,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       std::vector<uint64_t> next_full;
 
       /// @brief Per-level flag indicating next_full has been initialised.
-      std::vector<bool> cursor_inited;
+      std::vector<uint8_t> cursor_inited;
 
       /// @brief Number of complete level-@p level entries for a tree of @p
       /// size.
@@ -694,7 +694,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         if (next_full.size() < needed)
         {
           next_full.resize(needed, 0);
-          cursor_inited.resize(needed, false);
+          cursor_inited.resize(needed, 0);
         }
       }
 
@@ -747,8 +747,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           else
           {
             // Roll up the complete child full tile (256 complete entries).
-            out.push_back(perfect_root<HASH_SIZE, HASH_FUNCTION>(
-              store.read_tile(TileRef{(uint8_t)(level - 1), g})));
+            out.push_back(
+              perfect_root<HASH_SIZE, HASH_FUNCTION>(
+                store.read_tile(TileRef{(uint8_t)(level - 1), g})));
           }
         }
         return out;

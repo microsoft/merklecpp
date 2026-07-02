@@ -1,9 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-project(merklecpp LANGUAGES CXX C ASM)
-
 cmake_minimum_required(VERSION 3.11)
+
+project(merklecpp LANGUAGES CXX C ASM)
 set(CMAKE_CXX_STANDARD 17)
 
 set(MERKLECPP_DIR ${CMAKE_CURRENT_SOURCE_DIR})

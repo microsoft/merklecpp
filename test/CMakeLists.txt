@@ -37,6 +37,12 @@ add_merklecpp_test(tiles_entries tiles_entries.cpp)
 add_merklecpp_test(tiles_level2 tiles_level2.cpp)
 add_merklecpp_test(time_tiles time_tiles.cpp)
 
+find_path(DOCTEST_DIR doctest.h)
+if(NOT DOCTEST_DIR)
+  message(FATAL_ERROR "doctest.h not found; install doctest or set DOCTEST_DIR")
+endif()
+add_merklecpp_test(unit_tests unit_tests.cpp)
+
 if(TARGET evercrypt.host)
   add_merklecpp_test(compare_evercrypt compare_evercrypt.cpp)
 endif()
@@ -45,10 +51,4 @@ if(OPENSSL
    OR EVERCRYPT
 )
   add_merklecpp_test(compare_hash_functions compare_hash_functions.cpp)
-endif()
-
-find_path(DOCTEST_DIR doctest.h)
-
-if(DOCTEST_DIR)
-  add_merklecpp_test(unit_tests unit_tests.cpp)
 endif()

@@ -175,7 +175,7 @@ TEST_CASE("PathT equality")
 TEST_CASE("TreeT to_string")
 {
   // Empty tree produces "<EMPTY>"
-  merkle::Tree empty_tree;
+  const merkle::Tree empty_tree;
   const std::string empty_str = empty_tree.to_string();
   REQUIRE(empty_str.find("<EMPTY>") != std::string::npos);
 
@@ -192,7 +192,7 @@ TEST_CASE("TreeT to_string")
 TEST_CASE("TreeT leaf bounds and uninserted leaves")
 {
   // leaf() out of bounds on empty tree
-  merkle::Tree empty_tree;
+  const merkle::Tree empty_tree;
   REQUIRE_THROWS(empty_tree.leaf(0));
 
   // Access leaf before insertion is flushed (uninserted_leaf_nodes path)
@@ -216,7 +216,7 @@ TEST_CASE("TreeT size with uninserted leaves")
 {
   merkle::Tree tree;
   // size() when tree has uninserted leaves triggers insert_leaves()
-  merkle::Tree::Hash h;
+  const merkle::Tree::Hash h;
   tree.insert(h);
   // size() forces lazy insertion
   const size_t sz = tree.size();
