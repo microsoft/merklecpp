@@ -39,7 +39,26 @@ add_merklecpp_test(time_tiles time_tiles.cpp)
 
 find_path(DOCTEST_DIR doctest.h)
 if(NOT DOCTEST_DIR)
-  message(FATAL_ERROR "doctest.h not found; install doctest or set DOCTEST_DIR")
+  set(DOCTEST_VERSION 2.4.11)
+  set(DOCTEST_DIR "${CMAKE_BINARY_DIR}/_deps/doctest-${DOCTEST_VERSION}")
+  set(DOCTEST_HEADER "${DOCTEST_DIR}/doctest.h")
+
+  message(STATUS "doctest.h not found; downloading doctest v${DOCTEST_VERSION}")
+  file(MAKE_DIRECTORY "${DOCTEST_DIR}")
+  file(
+    DOWNLOAD
+    "https://raw.githubusercontent.com/doctest/doctest/v${DOCTEST_VERSION}/doctest/doctest.h"
+    "${DOCTEST_HEADER}"
+    EXPECTED_HASH SHA256=44faa038e9c3f9728efbda143748d01124ea0a27f4bf78f35a15d8fab2e039fb
+    STATUS DOCTEST_DOWNLOAD_STATUS
+    TLS_VERIFY ON
+  )
+
+  list(GET DOCTEST_DOWNLOAD_STATUS 0 DOCTEST_DOWNLOAD_CODE)
+  list(GET DOCTEST_DOWNLOAD_STATUS 1 DOCTEST_DOWNLOAD_MESSAGE)
+  if(NOT DOCTEST_DOWNLOAD_CODE EQUAL 0)
+    message(FATAL_ERROR "failed to download doctest.h: ${DOCTEST_DOWNLOAD_MESSAGE}")
+  endif()
 endif()
 add_merklecpp_test(unit_tests unit_tests.cpp)
 
