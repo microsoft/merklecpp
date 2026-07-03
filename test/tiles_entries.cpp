@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <merklecpp.h>
@@ -27,6 +28,13 @@ static void expect(bool cond, const std::string& what)
   {
     throw std::runtime_error("check failed: " + what);
   }
+}
+
+static void overwrite_file(const fs::path& p, const std::vector<uint8_t>& bytes)
+{
+  std::ofstream f(p, std::ios::binary | std::ios::trunc);
+  f.write(
+    reinterpret_cast<const char*>(bytes.data()), (std::streamsize)bytes.size());
 }
 
 int main()
@@ -50,6 +58,19 @@ int main()
       expect(enc.size() == 8 + 0 + 1 + 3 + 300, "encoded size");
       const auto dec = TileStore::decode_entries(enc, entries.size());
       expect(dec == entries, "encode/decode round-trip");
+
+      auto trailing = enc;
+      trailing.push_back(0xFF);
+      bool trailing_threw = false;
+      try
+      {
+        (void)TileStore::decode_entries(trailing, entries.size());
+      }
+      catch (const std::exception&)
+      {
+        trailing_threw = true;
+      }
+      expect(trailing_threw, "decode rejects trailing bytes");
     }
 
     const auto hashes = make_hashes(70000);
@@ -106,6 +127,13 @@ int main()
       expect(writer.write_up_to(256, entry_at).full_written == 1, "inc s1");
       const auto s2 = writer.write_up_to(256, entry_at);
       expect(s2.full_written == 0, "inc immutable rerun");
+      overwrite_file(store.entries_path(0), {0x00, 0x05, 0x01});
+      expect(!store.has_entry_bundle(0), "inc corrupt bundle not durable");
+      EntryBundleWriter resumed(store);
+      expect(
+        resumed.write_up_to(256, entry_at).full_written == 1,
+        "inc rewrite corrupt");
+      expect(store.has_entry_bundle(0), "inc rewritten bundle durable");
       const auto s3 = writer.write_up_to(600, entry_at);
       expect(s3.full_written == 1, "inc s3 full");
       expect(store.has_entry_bundle(1), "inc bundle 1");

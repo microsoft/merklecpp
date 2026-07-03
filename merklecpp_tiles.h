@@ -199,7 +199,21 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Whether a full entry bundle exists on disk.
       [[nodiscard]] bool has_entry_bundle(uint64_t index) const
       {
-        return std::filesystem::exists(entries_path(index));
+        std::error_code ec;
+        const auto path = entries_path(index);
+        if (!std::filesystem::is_regular_file(path, ec) || ec)
+        {
+          return false;
+        }
+        try
+        {
+          (void)decode_entries(read_file(path), TILE_WIDTH);
+          return true;
+        }
+        catch (const std::exception&)
+        {
+          return false;
+        }
       }
 
       /// @brief Writes a full entry bundle to disk atomically.
@@ -254,14 +268,14 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         size_t pos = 0;
         for (size_t i = 0; i < count; i++)
         {
-          if (pos + 2 > bytes.size())
+          if (bytes.size() - pos < 2)
           {
             throw std::runtime_error("truncated entry bundle");
           }
           const auto len =
             (uint16_t)(((uint16_t)bytes[pos] << 8) | bytes[pos + 1]);
           pos += 2;
-          if (pos + len > bytes.size())
+          if (len > bytes.size() - pos)
           {
             throw std::runtime_error("truncated entry bundle");
           }
@@ -269,6 +283,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
             bytes.begin() + static_cast<std::ptrdiff_t>(pos),
             bytes.begin() + static_cast<std::ptrdiff_t>(pos + len));
           pos += len;
+        }
+        if (pos != bytes.size())
+        {
+          throw std::runtime_error("trailing bytes in entry bundle");
         }
         return out;
       }

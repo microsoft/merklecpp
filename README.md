@@ -60,6 +60,24 @@ and [doc/design/tlog-tiles.md](doc/design/tlog-tiles.md) for the full design,
 file/directory layout, and the proof algorithms.
 
 
+## Building and testing
+
+Enable the test suite with CMake's `TESTS` option:
+
+    cmake -S . -B build -DTESTS=ON
+    cmake --build build
+    ctest --test-dir build
+
+Some tile coverage is intentionally long-running. `LONG_TESTS` is off by
+default for local builds; turn it on when you want the full tile stress suite,
+including level-2 tile coverage and tile proof timing:
+
+    cmake -S . -B build -DTESTS=ON -DLONG_TESTS=ON
+
+The repository CI enables `LONG_TESTS` so pull requests continue to exercise the
+full tiled-storage matrix.
+
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

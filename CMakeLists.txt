@@ -14,6 +14,7 @@ option(EVERCRYPT "enable comparison with EverCrypt Merkle trees" OFF)
 option(OPENSSL "enable OpenSSL" OFF)
 option(TRACE "enable debug traces" OFF)
 option(CLANG_TIDY "enable clang-tidy checks during build" OFF)
+option(LONG_TESTS "enable long-running tests" OFF)
 
 if(CLANG_TIDY)
   find_program(CLANG_TIDY_PROGRAM clang-tidy)

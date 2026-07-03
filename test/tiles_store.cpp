@@ -178,14 +178,25 @@ int main()
         entries[i] = {(uint8_t)i, 0x7F};
       }
       store.write_entry_bundle(0, entries);
+      expect(store.has_entry_bundle(0), "bundle durable before truncation");
       expect(
         store.read_entry_bundle(0).size() == merkle::tiles::TILE_WIDTH,
         "bundle valid before truncation");
       // Claims a 5-byte entry but supplies only one trailing byte.
       overwrite_file(store.entries_path(0), {0x00, 0x05, 0x01});
+      expect(!store.has_entry_bundle(0), "truncated bundle is not durable");
       expect_throws(
         [&] { (void)store.read_entry_bundle(0); },
         "truncated entry bundle rejected");
+
+      // A syntactically complete bundle with trailing bytes is not durable.
+      auto encoded = merkle::tiles::TileStore::encode_entries(entries);
+      encoded.push_back(0xFF);
+      overwrite_file(store.entries_path(0), encoded);
+      expect(!store.has_entry_bundle(0), "trailing bundle is not durable");
+      expect_throws(
+        [&] { (void)store.read_entry_bundle(0); },
+        "trailing entry bundle rejected");
 
       // decode_entries directly: a length prefix that overruns the buffer.
       expect_throws(
@@ -193,6 +204,11 @@ int main()
           (void)merkle::tiles::TileStore::decode_entries({0xFF, 0xFF, 0x00}, 1);
         },
         "decode_entries oversized length rejected");
+      expect_throws(
+        [] {
+          (void)merkle::tiles::TileStore::decode_entries({0x00, 0x00, 0xFF}, 1);
+        },
+        "decode_entries trailing bytes rejected");
     }
 
 // Windows file replacement semantics can reject racing same-path replaces even
