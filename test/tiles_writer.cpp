@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <merklecpp.h>
@@ -47,6 +48,14 @@ static size_t tile_file_count(const TileStore& store)
 static Hash rollup(const std::vector<Hash>& leaves)
 {
   return merkle::tiles::perfect_root<32, merkle::sha256_compress>(leaves);
+}
+
+static void overwrite_file(
+  const fs::path& path, const std::vector<uint8_t>& bytes)
+{
+  std::ofstream file(path, std::ios::binary | std::ios::trunc);
+  file.write(
+    reinterpret_cast<const char*>(bytes.data()), (std::streamsize)bytes.size());
 }
 
 int main()
@@ -239,6 +248,69 @@ int main()
         "E second resume idempotent");
 
       std::cout << "E (writer resume): OK" << '\n';
+    }
+
+    // ---- F. Resume discovers the first hole rather than trusting later valid
+    // files as proof that the prefix is contiguous.
+    {
+      const auto hashes = make_hashes(2048);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
+      const fs::path dir = base / "f";
+
+      {
+        TileStore store(dir);
+        TileWriter writer(store);
+        expect(
+          writer.write_up_to(2048, leaf_at).full_written == 8,
+          "F initial tiles");
+        overwrite_file(store.tile_path(TileRef{0, 3}), {0});
+        expect(!store.has_full_tile(0, 3), "F interior tile corrupt");
+        expect(store.has_full_tile(0, 7), "F later tile remains valid");
+      }
+
+      TileStore store(dir);
+      TileWriter writer(store);
+      expect(
+        writer.write_up_to(2048, leaf_at).full_written == 1,
+        "F rewrites interior hole");
+      const std::vector<Hash> expected(
+        hashes.begin() + (std::ptrdiff_t)merkle::tiles::TILE_WIDTH * 3,
+        hashes.begin() + (std::ptrdiff_t)merkle::tiles::TILE_WIDTH * 4);
+      expect(
+        store.read_tile(TileRef{0, 3}) == expected, "F repaired tile contents");
+      expect(tile_file_count(store) == 8, "F exact tile file count");
+
+      std::cout << "F (interior recovery): OK" << '\n';
+    }
+
+    // ---- G. Recovery is bounded by the requested tree size, so sparse files
+    // at geometrically increasing indices cannot overflow its search.
+    {
+      const fs::path dir = base / "g";
+      const auto hashes = make_hashes(merkle::tiles::TILE_WIDTH);
+      {
+        TileStore store(dir);
+        store.write_tile(TileRef{0, 0}, hashes);
+        for (uint64_t index = 1;; index <<= 1)
+        {
+          store.write_tile(TileRef{0, index}, hashes);
+          if (index == (uint64_t{1} << 63))
+          {
+            break;
+          }
+        }
+      }
+
+      TileStore store(dir);
+      TileWriter writer(store);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
+      expect(
+        writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at).full_written ==
+          0,
+        "G bounded sparse recovery");
+      expect(store.has_full_tile(0, 0), "G requested tile remains valid");
+
+      std::cout << "G (bounded sparse recovery): OK" << '\n';
     }
 
     std::cout << "tiles_writer: OK" << '\n';

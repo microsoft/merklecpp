@@ -97,7 +97,9 @@ the tree that produced them or contain enough state to restore its size and
 root. If your application persists and validates that state separately, use
 the lower-level `TileStore` and `TileWriter` APIs; `TileWriter` intentionally
 resumes existing full tiles and therefore trusts the caller to supply the same
-tree and hash function.
+tree and hash function. A fresh writer scans the requested range in order,
+stopping at the first missing or malformed file, so an interior hole is
+rewritten rather than hidden by later files.
 
 `flush()` is incremental: each call writes only the full tiles that became
 complete since the previous call. Full tiles are immutable: written once after
@@ -107,8 +109,10 @@ memory until it crosses the next full-tile boundary.
 Tile files are written through unique temporary files, synced, then published
 with an atomic replace. On POSIX systems, each newly created directory is made
 durable by syncing its parent, and the destination directory is synced after
-the rename. A wrong-size file at a tile path is not a published tile, so the
-writer does not treat mere file existence as success.
+the rename. Before reusing a visible file, a writer also re-confirms its
+directory chain and destination directory. This makes a retry repeat a failed
+directory sync even when the rename or directory creation is already visible.
+A wrong-size file at a tile path is not a published tile and is rewritten.
 
 ## Flushing and compaction
 
@@ -168,9 +172,15 @@ log.retract_to(index);   // keep leaves [0, index], drop the rest
 - `retract_to` mirrors `merkle::Tree::retract_to`: `index` is the new *last*
   leaf, so the resulting size is `index + 1`.
 
-> ⚠️ Retracting the underlying tree directly via `log.tree_ref().retract_to(...)`
-> bypasses this guard and can leave the tiles inconsistent with the tree. Use
-> `TiledTree::retract_to` instead.
+> **Warning:** Treat `tree_ref()` as an inspection escape hatch unless you also
+> maintain every tiled-tree invariant yourself. Direct retraction bypasses the
+> guard, can make `flushed_size()` and `immutable_size()` exceed `size()`, and
+> can make `flushed_size()` regress. Use `TiledTree::retract_to` instead.
+
+`store_ref()` is similarly unsafe for mutation. A later flush trusts any
+correctly sized tile written through it without checking that the hashes match
+the in-memory tree. A mismatched tile can silently invalidate proofs after
+compaction.
 
 ## Proofs
 
@@ -243,6 +253,11 @@ auto stats = writer.write_up_to(
 // stats.full_written
 ```
 
+`TileWriter` keeps an in-memory next-file cursor. A new writer reconstructs it
+by checking the contiguous prefix only up to the number of full files relevant
+to the requested tree size. Existing files are re-confirmed as durably
+published before reuse; malformed files and holes are rewritten.
+
 ### Reading tiles and computing proofs
 
 A `HashSource` resolves the root of a complete subtree; pick where it reads from:
@@ -268,7 +283,9 @@ tiles). For the live frontier, combine it with a `MemoryHashSource` — which is
 exactly what `TiledTree` does for you.
 
 `TiledTree` simply wires a `CombinedHashSource(MemoryHashSource, TileHashSource)`
-into a `ProofEngine` for you.
+into a `ProofEngine` for you. It creates these sources for each proof call, so
+its tile cache is per-call. A long-lived lower-level `TileHashSource` retains
+its cache across calls.
 
 ## Entry bundles (optional)
 

@@ -14,8 +14,10 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <limits>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -51,6 +53,20 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
     /// @brief Number of hashes in a full tile (2**TILE_HEIGHT).
     static constexpr uint16_t TILE_WIDTH = 256;
+
+    namespace detail
+    {
+      template <typename Present>
+      uint64_t contiguous_prefix_length(uint64_t limit, const Present& present)
+      {
+        uint64_t length = 0;
+        while (length < limit && present(length))
+        {
+          length++;
+        }
+        return length;
+      }
+    }
 
     /// @brief Encodes a tile index as tlog-tiles path elements.
     /// @param n The tile index
@@ -97,6 +113,18 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       uint64_t index = 0;
     };
 
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class TileWriterT;
+
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class EntryBundleWriterT;
+
     /// @brief Reads and writes tlog-tiles tile files on a local filesystem.
     /// @tparam HASH_SIZE Size of each hash in bytes
     /// @tparam HASH_FUNCTION The tree's node hash function (carried for use by
@@ -109,6 +137,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
     class TileStoreT
     {
+      friend class TileWriterT<HASH_SIZE, HASH_FUNCTION>;
+      friend class EntryBundleWriterT<HASH_SIZE, HASH_FUNCTION>;
+
     public:
       /// @brief The type of hashes stored in tiles.
       using Hash = HashT<HASH_SIZE>;
@@ -297,8 +328,45 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       }
 
     protected:
+      using DirectorySync = std::function<void(const std::filesystem::path&)>;
+
+      TileStoreT(std::filesystem::path prefix, DirectorySync directory_sync) :
+        prefix(std::move(prefix)), directory_sync(std::move(directory_sync))
+      {}
+
       /// @brief The root directory of the store.
       std::filesystem::path prefix;
+
+      DirectorySync directory_sync;
+      std::set<std::filesystem::path> durable_directory_entries;
+      std::set<std::filesystem::path> durable_directory_contents;
+
+      [[nodiscard]] bool confirm_full_tile(uint8_t level, uint64_t index)
+      {
+        const auto path = tile_path(TileRef{level, index});
+        if (!has_full_tile(level, index))
+        {
+          return false;
+        }
+        confirm_file_durable(path);
+        return true;
+      }
+
+      [[nodiscard]] bool confirm_entry_bundle(uint64_t index)
+      {
+        const auto path = entries_path(index);
+        if (!has_entry_bundle(index))
+        {
+          return false;
+        }
+        confirm_file_durable(path);
+        return true;
+      }
+
+      void begin_write_attempt()
+      {
+        durable_directory_contents.clear();
+      }
 
       /// @brief Reads an entire file into a byte vector.
       static std::vector<uint8_t> read_file(const std::filesystem::path& path)
@@ -315,9 +383,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Writes a file atomically via a synced temporary file.
       /// @note Uses unique temp names, cleans them up on errors, and syncs the
       /// file before publishing it with an atomic replace. POSIX builds also
-      /// sync each newly created directory's parent and the destination
-      /// directory after rename.
-      static void write_file_atomically(
+      /// confirm each directory entry in the path and sync the destination
+      /// directory after rename. Existing files are only reused after these
+      /// syncs are re-confirmed by the current write attempt.
+      void write_file_atomically(
         const std::filesystem::path& path, const std::vector<uint8_t>& bytes)
       {
         create_directories_durably(path.parent_path());
@@ -325,18 +394,32 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         const std::filesystem::path tmp = temp_path(path);
         TempFileGuard guard(tmp);
         write_and_sync_file(tmp, bytes);
+        const auto parent = directory_or_dot(path.parent_path());
+        durable_directory_contents.erase(parent);
         replace_file(tmp, path);
-        sync_directory(path.parent_path());
+        sync_directory_contents(parent);
         guard.dismiss();
       }
 
-      template <typename SyncParent>
-      static void create_directories_durably(
-        const std::filesystem::path& directory, const SyncParent& sync_parent)
+      static std::filesystem::path directory_or_dot(
+        const std::filesystem::path& directory)
       {
-        if (directory.empty())
+        return directory.empty() ? std::filesystem::path(".") : directory;
+      }
+
+      void create_directories_durably(
+        const std::filesystem::path& requested_directory)
+      {
+        const auto directory = directory_or_dot(requested_directory);
+        if (durable_directory_entries.count(directory) != 0)
         {
           return;
+        }
+
+        auto parent = directory_or_dot(directory.parent_path());
+        if (parent != directory)
+        {
+          create_directories_durably(parent);
         }
 
         std::error_code ec;
@@ -363,34 +446,48 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
               "cannot create directory " + directory.string() +
               ": path exists and is not a directory");
           }
-          return;
+        }
+        else
+        {
+          const bool created = std::filesystem::create_directory(directory, ec);
+          if (ec)
+          {
+            throw std::runtime_error(
+              "cannot create directory " + directory.string() + ": " +
+              ec.message());
+          }
+          if (!created && !std::filesystem::is_directory(directory, ec))
+          {
+            throw std::runtime_error(
+              "cannot create directory " + directory.string() +
+              (ec ? ": " + ec.message() : ""));
+          }
         }
 
-        const auto parent = directory.parent_path();
         if (parent != directory)
         {
-          create_directories_durably(parent, sync_parent);
+          sync_directory_for_durability(parent);
+          durable_directory_contents.insert(parent);
         }
-
-        const bool created = std::filesystem::create_directory(directory, ec);
-        if (ec)
-        {
-          throw std::runtime_error(
-            "cannot create directory " + directory.string() + ": " +
-            ec.message());
-        }
-        if (created)
-        {
-          sync_parent(parent.empty() ? std::filesystem::path(".") : parent);
-        }
+        durable_directory_entries.insert(directory);
       }
 
-      static void create_directories_durably(
-        const std::filesystem::path& directory)
+      void confirm_file_durable(const std::filesystem::path& path)
       {
-        create_directories_durably(
-          directory,
-          [](const std::filesystem::path& parent) { sync_directory(parent); });
+        const auto parent = directory_or_dot(path.parent_path());
+        create_directories_durably(parent);
+        sync_directory_contents(parent);
+      }
+
+      void sync_directory_contents(const std::filesystem::path& directory)
+      {
+        const auto path = directory_or_dot(directory);
+        if (durable_directory_contents.count(path) != 0)
+        {
+          return;
+        }
+        sync_directory_for_durability(path);
+        durable_directory_contents.insert(path);
       }
 
       class TempFileGuard
@@ -592,7 +689,17 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 #endif
       }
 
-      static void sync_directory(const std::filesystem::path& path)
+      void sync_directory_for_durability(const std::filesystem::path& path)
+      {
+        if (directory_sync)
+        {
+          directory_sync(path);
+          return;
+        }
+        sync_directory_on_disk(path);
+      }
+
+      static void sync_directory_on_disk(const std::filesystem::path& path)
       {
 #ifndef _WIN32
         int flags = O_RDONLY;
@@ -711,13 +818,15 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// [0, size); only ever queried for leaves of complete subtrees.
       /// @return Counts of tiles written
       /// @note Incremental: full tiles already on disk are immutable and are
-      /// never rewritten. Entries that do not complete a tile are not written.
+      /// never rewritten once validated and confirmed durable. Malformed files
+      /// are replaced. Entries that do not complete a tile are not written.
       /// Tiles are always rolled up at every level (0..63), so the on-disk set
       /// always contains the higher-level roll-ups that proof generation relies
       /// on.
       Stats write_up_to(uint64_t size, const LeafFn& leaf_at)
       {
         Stats stats;
+        store.begin_write_attempt();
 
         // tlog-tiles defines levels 0..63; the loop stops early once a level
         // has no complete entries (see the entries == 0 break below).
@@ -736,13 +845,13 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
           if (cursor_inited[level] == 0)
           {
-            next_full[level] = full_prefix_length(level);
+            next_full[level] = full_prefix_length(level, full_tiles);
             cursor_inited[level] = 1;
           }
 
           for (uint64_t n = next_full[level]; n < full_tiles; n++)
           {
-            if (store.has_full_tile(level, n))
+            if (store.confirm_full_tile(level, n))
             {
               continue; // immutable: never rewrite an existing full tile
             }
@@ -790,33 +899,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         }
       }
 
-      /// @brief Length of the contiguous prefix of full tiles already on disk.
-      [[nodiscard]] uint64_t full_prefix_length(uint8_t level) const
+      /// @brief Length of the confirmed contiguous prefix, bounded by @p limit.
+      [[nodiscard]] uint64_t full_prefix_length(uint8_t level, uint64_t limit)
       {
-        if (!store.has_full_tile(level, 0))
-        {
-          return 0;
-        }
-        uint64_t lo = 0; // present
-        uint64_t hi = 1;
-        while (store.has_full_tile(level, hi))
-        {
-          lo = hi;
-          hi <<= 1;
-        }
-        while (hi - lo > 1)
-        {
-          const uint64_t mid = lo + (hi - lo) / 2;
-          if (store.has_full_tile(level, mid))
-          {
-            lo = mid;
-          }
-          else
-          {
-            hi = mid;
-          }
-        }
-        return lo + 1;
+        return detail::contiguous_prefix_length(limit, [&](uint64_t index) {
+          return store.confirm_full_tile(level, index);
+        });
       }
 
       /// @brief Collects @p count consecutive level-@p level entries, each the
@@ -1461,12 +1549,19 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       }
 
       /// @brief Access to the underlying tree.
+      /// @warning Mutating the tree directly bypasses tiled-tree bookkeeping.
+      /// In particular, direct retraction can make flushed_size() and
+      /// immutable_size() exceed size() and can make flushed_size() regress.
+      /// Use TiledTreeT operations whenever they are available.
       Tree& tree_ref()
       {
         return tree;
       }
 
       /// @brief Access to the underlying tile store.
+      /// @warning Files written or changed through this reference are trusted
+      /// by later flushes without checking that their hashes match this tree.
+      /// Mismatched files can silently invalidate proofs after compaction.
       Store& store_ref()
       {
         return store;
@@ -1542,8 +1637,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @note Only full tiles are immutable: this throws if the resulting size
       /// would be smaller than immutable_size(). A failed flush may advance
       /// immutable_size() without advancing flushed_size().
-      /// (Retracting the underlying tree directly via tree_ref() bypasses this
-      /// guard and can leave stale tiles -- do not do that.)
       void retract_to(size_t index)
       {
         if ((uint64_t)index + 1 < sealed_size)
@@ -1686,21 +1779,23 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// [0, size); only ever queried for entries of complete bundles.
       /// @return Counts of bundles written
       /// @note Incremental: full bundles already on disk are immutable and are
-      /// never rewritten. The incomplete tail is never bundled.
+      /// never rewritten once validated and confirmed durable. Malformed files
+      /// are replaced. The incomplete tail is never bundled.
       Stats write_up_to(uint64_t size, const EntryFn& entry_at)
       {
         Stats stats;
+        store.begin_write_attempt();
         const uint64_t full = size / TILE_WIDTH;
 
         if (!cursor_inited)
         {
-          next_full = full_prefix_length();
+          next_full = full_prefix_length(full);
           cursor_inited = true;
         }
 
         for (uint64_t n = next_full; n < full; n++)
         {
-          if (store.has_entry_bundle(n))
+          if (store.confirm_entry_bundle(n))
           {
             continue; // immutable: never rewrite an existing full bundle
           }
@@ -1733,32 +1828,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         return out;
       }
 
-      [[nodiscard]] uint64_t full_prefix_length() const
+      [[nodiscard]] uint64_t full_prefix_length(uint64_t limit)
       {
-        if (!store.has_entry_bundle(0))
-        {
-          return 0;
-        }
-        uint64_t lo = 0;
-        uint64_t hi = 1;
-        while (store.has_entry_bundle(hi))
-        {
-          lo = hi;
-          hi <<= 1;
-        }
-        while (hi - lo > 1)
-        {
-          const uint64_t mid = lo + (hi - lo) / 2;
-          if (store.has_entry_bundle(mid))
-          {
-            lo = mid;
-          }
-          else
-          {
-            hi = mid;
-          }
-        }
-        return lo + 1;
+        return detail::contiguous_prefix_length(limit, [&](uint64_t index) {
+          return store.confirm_entry_bundle(index);
+        });
       }
     };
 

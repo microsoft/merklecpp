@@ -12,6 +12,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
 #include <string>
@@ -64,19 +65,52 @@ class TileStoreProbe : public merkle::tiles::TileStore
 public:
   using Store = merkle::tiles::TileStore;
 
-  static std::vector<fs::path> create_and_record_directory_syncs(
-    const fs::path& directory)
-  {
-    std::vector<fs::path> synced;
-    Store::create_directories_durably(
-      directory, [&](const fs::path& parent) { synced.push_back(parent); });
-    return synced;
-  }
-
   static void check_write_progress(size_t written)
   {
     Store::require_write_progress(written, "test");
   }
+};
+
+struct SyncFault
+{
+  fs::path fail_path;
+  size_t failures_remaining = 0;
+  size_t matching_calls_before_failure = 0;
+  std::vector<fs::path> calls;
+
+  void sync(const fs::path& path)
+  {
+    const auto normalised = path.lexically_normal();
+    calls.push_back(normalised);
+    if (failures_remaining > 0 && normalised == fail_path.lexically_normal())
+    {
+      if (matching_calls_before_failure > 0)
+      {
+        matching_calls_before_failure--;
+        return;
+      }
+      failures_remaining--;
+      throw std::runtime_error("injected directory sync failure");
+    }
+  }
+
+  [[nodiscard]] size_t call_count(const fs::path& path) const
+  {
+    const auto normalised = path.lexically_normal();
+    return (size_t)std::count(calls.begin(), calls.end(), normalised);
+  }
+};
+
+class FaultInjectingTileStore : public merkle::tiles::TileStore
+{
+public:
+  using Store = merkle::tiles::TileStore;
+
+  FaultInjectingTileStore(
+    fs::path prefix, const std::shared_ptr<SyncFault>& fault) :
+    Store(
+      std::move(prefix), [fault](const fs::path& path) { fault->sync(path); })
+  {}
 };
 
 // Overwrites a file with exactly the given bytes (to simulate corruption).
@@ -112,6 +146,8 @@ int main()
       "encode 1234067");
 
     merkle::tiles::TileStore store(dir);
+    const size_t hsz = Hash().size();
+    const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
 
     // 2. Resource path layout (full tiles and bundles only).
     expect_eq(
@@ -125,19 +161,22 @@ int main()
     expect_eq(
       rel(store, store.entries_path(5)), "tile/entries/005", "entries full");
 
-    // 2b. Every newly-created directory link is followed by a sync of its
-    // parent, from the first missing ancestor through the final directory.
+    // 2b. Production writes sync each directory link and the destination
+    // directory in order.
     {
-      const fs::path nested = dir / "durable" / "tile" / "1";
-      const auto synced =
-        TileStoreProbe::create_and_record_directory_syncs(nested);
+      const fs::path prefix = dir / "durable";
+      const auto fault = std::make_shared<SyncFault>();
+      FaultInjectingTileStore durable_store(prefix, fault);
+      durable_store.write_tile(TileRef{1, 0}, full);
       const std::vector<fs::path> expected = {
-        dir.parent_path(), dir, dir / "durable", dir / "durable" / "tile"};
-      expect(synced == expected, "new directory parents synced in order");
-      expect(fs::is_directory(nested), "nested directories created");
+        dir.parent_path(), dir, prefix, prefix / "tile", prefix / "tile" / "1"};
       expect(
-        TileStoreProbe::create_and_record_directory_syncs(nested).empty(),
-        "existing directories need no creation sync");
+        fault->calls.size() >= expected.size() &&
+          std::equal(
+            expected.begin(),
+            expected.end(),
+            fault->calls.end() - (std::ptrdiff_t)expected.size()),
+        "directory parents and destination synced in order");
     }
 
     // 2c. A successful write must make progress. This shared guard prevents
@@ -156,10 +195,102 @@ int main()
       TileStoreProbe::check_write_progress(1);
     }
 
-    const size_t hsz = Hash().size();
+    // 2d. A failed destination-directory sync after rename is retried before
+    // another already-open writer trusts the visible tile.
+    {
+      const fs::path prefix = dir / "retry_destination";
+      const fs::path destination = prefix / "tile" / "0";
+      const auto fault = std::make_shared<SyncFault>();
+      fault->fail_path = destination;
+      constexpr uint64_t growing_size = (uint64_t)merkle::tiles::TILE_WIDTH * 2;
+      const auto growing = make_hashes((size_t)growing_size);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& {
+        return growing[i];
+      };
+
+      FaultInjectingTileStore retry_store(prefix, fault);
+      merkle::tiles::TileWriter retry_writer(retry_store);
+      expect(
+        retry_writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at)
+            .full_written == 1,
+        "first writer publishes initial tile");
+
+      fault->matching_calls_before_failure = 1;
+      fault->failures_remaining = 1;
+      {
+        FaultInjectingTileStore failed_store(prefix, fault);
+        merkle::tiles::TileWriter writer(failed_store);
+        bool sync_threw = false;
+        try
+        {
+          (void)writer.write_up_to(growing_size, leaf_at);
+        }
+        catch (const std::exception&)
+        {
+          sync_threw = true;
+        }
+        expect(sync_threw, "destination sync failure propagated");
+        expect(
+          failed_store.has_full_tile(0, 1),
+          "renamed tile remains visible after sync failure");
+      }
+
+      expect(
+        retry_writer.write_up_to(growing_size, leaf_at).full_written == 0,
+        "retry certifies visible tile without rewriting");
+      expect(
+        fault->call_count(destination) == 4,
+        "destination directory sync retried");
+      const std::vector<Hash> second(
+        growing.begin() + (std::ptrdiff_t)merkle::tiles::TILE_WIDTH,
+        growing.end());
+      expect(
+        retry_store.read_tile(TileRef{0, 1}) == second,
+        "retried tile remains intact");
+    }
+
+    // 2e. A failed ancestor-parent sync is retried even though the directory
+    // created before the failure remains visible.
+    {
+      const fs::path prefix = dir / "retry_ancestor";
+      const auto fault = std::make_shared<SyncFault>();
+      fault->fail_path = prefix;
+      fault->failures_remaining = 1;
+
+      {
+        FaultInjectingTileStore failed_store(prefix, fault);
+        merkle::tiles::TileWriter writer(failed_store);
+        const auto leaf_at = [&](uint64_t i) -> const Hash& { return full[i]; };
+        bool sync_threw = false;
+        try
+        {
+          (void)writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at);
+        }
+        catch (const std::exception&)
+        {
+          sync_threw = true;
+        }
+        expect(sync_threw, "ancestor sync failure propagated");
+        expect(
+          fs::is_directory(prefix / "tile"),
+          "directory remains visible after parent sync failure");
+        expect(
+          !failed_store.has_full_tile(0, 0),
+          "tile not published before ancestor sync succeeds");
+      }
+
+      FaultInjectingTileStore retry_store(prefix, fault);
+      merkle::tiles::TileWriter retry_writer(retry_store);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& { return full[i]; };
+      expect(
+        retry_writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at)
+            .full_written == 1,
+        "retry writes tile after certifying existing ancestor");
+      expect(fault->call_count(prefix) == 2, "ancestor parent sync retried");
+      expect(retry_store.has_full_tile(0, 0), "retry publishes full tile");
+    }
 
     // 3a. Full tile byte round-trip.
-    const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
     const TileRef full_ref{0, 0};
     store.write_tile(full_ref, full);
     expect(store.has_full_tile(0, 0), "has_full_tile after write");
@@ -266,7 +397,8 @@ int main()
 // when the final tile remains valid, so keep this stress check POSIX-only.
 #ifndef _WIN32
     // 3d. Concurrent same-tile writes use unique temp files and leave no
-    // temporary files behind after success.
+    // temporary files behind after success. Each thread owns its store object;
+    // sharing one object requires caller-provided synchronization.
     {
       const TileRef concurrent_ref{0, 42};
       std::atomic<bool> ok{true};
@@ -276,7 +408,8 @@ int main()
         threads.emplace_back([&] {
           try
           {
-            store.write_tile(concurrent_ref, full);
+            merkle::tiles::TileStore thread_store(dir);
+            thread_store.write_tile(concurrent_ref, full);
           }
           catch (...)
           {

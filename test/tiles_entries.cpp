@@ -140,6 +140,67 @@ int main()
       expect(!store.has_entry_bundle(2), "inc no tail bundle");
     }
 
+    // 5. Resume repairs an interior malformed bundle even when later files are
+    // valid.
+    {
+      const fs::path dir = base / "eholes";
+      {
+        TileStore store(dir);
+        EntryBundleWriter writer(store);
+        expect(
+          writer.write_up_to(2048, entry_at).full_written == 8,
+          "holes initial bundles");
+        overwrite_file(store.entries_path(3), {0x00, 0x05, 0x01});
+        expect(!store.has_entry_bundle(3), "holes interior bundle malformed");
+        expect(store.has_entry_bundle(7), "holes later bundle remains valid");
+      }
+
+      TileStore store(dir);
+      EntryBundleWriter writer(store);
+      expect(
+        writer.write_up_to(2048, entry_at).full_written == 1,
+        "holes rewrites interior bundle");
+      std::vector<std::vector<uint8_t>> expected;
+      expected.reserve(merkle::tiles::TILE_WIDTH);
+      constexpr uint64_t hole_begin = (uint64_t)merkle::tiles::TILE_WIDTH * 3;
+      constexpr uint64_t hole_end = (uint64_t)merkle::tiles::TILE_WIDTH * 4;
+      for (uint64_t i = hole_begin; i < hole_end; i++)
+      {
+        expected.push_back(entry_at(i));
+      }
+      expect(
+        store.read_entry_bundle(3) == expected,
+        "holes repaired bundle contents");
+    }
+
+    // 6. Recovery examines only bundle indices relevant to the requested size.
+    {
+      const fs::path dir = base / "esparse";
+      const std::vector<std::vector<uint8_t>> bundle(
+        merkle::tiles::TILE_WIDTH, {0x42});
+      {
+        TileStore store(dir);
+        store.write_entry_bundle(0, bundle);
+        for (uint64_t index = 1;; index <<= 1)
+        {
+          store.write_entry_bundle(index, bundle);
+          if (index == (uint64_t{1} << 63))
+          {
+            break;
+          }
+        }
+      }
+
+      TileStore store(dir);
+      EntryBundleWriter writer(store);
+      expect(
+        writer.write_up_to(merkle::tiles::TILE_WIDTH, entry_at).full_written ==
+          0,
+        "sparse bounded recovery");
+      expect(
+        store.has_entry_bundle(0), "sparse requested bundle remains valid");
+    }
+
     std::cout << "tiles_entries: OK" << '\n';
 
     std::error_code ec;

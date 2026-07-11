@@ -357,9 +357,11 @@ public:
 
 - Writes use a unique temporary file, sync the file contents, publish with an
   atomic replace, and on POSIX sync every newly created directory link plus the
-  destination directory after the rename. A crash should leave either the old
-  tile or the new complete tile visible; a wrong-size tile is not treated as a
-  durable full tile and is rewritten by the writer.
+  destination directory after the rename. Before reusing a visible file, the
+  writer re-confirms the directory chain and destination directory, so a retry
+  repeats a failed sync even if directory creation or rename is already
+  visible. A wrong-size tile is not treated as a durable full tile and is
+  rewritten by the writer.
 - Full tiles are written once and never rewritten (immutability), so every file
   under `tile/<L>/` is write-once.
 - A small in-process cache of recently read tiles avoids repeated I/O during
@@ -402,8 +404,10 @@ entry(L, g):
 - Level 0 reads leaf hashes via the supplied `leaf_at` (e.g. `Tree::leaf(i)`),
   which exist **before** flushing. Higher levels roll up from the level-0 tiles
   just written — independent of tree internals and robust to prior flushes.
-- `first_unwritten_full(L)` is tracked in the store (probe `has_full_tile`, or a
-  small persisted cursor) to keep each flush O(new tiles).
+- `first_unwritten_full(L)` is cached in each writer. A fresh writer reconstructs
+  it with a bounded, ordered scan of the contiguous prefix up to `full_L`.
+  Scanning in order is required because malformed or externally created files
+  can make raw file presence non-monotonic.
 
 Compaction integration (the "on compaction" story):
 
@@ -444,6 +448,9 @@ struct HashSource {                       // concept (duck-typed or virtual)
 - `TileHashSource` mutates its LRU cache during `const` reads. It and every
   `ProofEngine` that refers to it require caller-provided synchronization when
   shared between threads.
+- `TiledTreeT` constructs these sources for each proof call, so its cache lasts
+  for one call. A caller that wants cross-call caching can retain a lower-level
+  `TileHashSource`.
 
 ### 6.6 `ProofEngineT` — inclusion & consistency
 
@@ -464,6 +471,8 @@ public:
 
   // RFC 6962 consistency proof that size `m` is a prefix of size `n` (m<=n).
   std::vector<Hash> consistency_proof(uint64_t m, uint64_t n) const;
+  std::vector<Hash> consistency_proof_from_indices(
+    uint64_t first_index, uint64_t second_index) const;
 
   // Verifier (consistency is new to merklecpp; inclusion reuses PathT::verify).
   static bool verify_consistency(uint64_t m, uint64_t n,
@@ -545,17 +554,19 @@ public:
   // Proofs over tiles ∪ resident tree (works for flushed indices).
   std::shared_ptr<Path> inclusion_proof(uint64_t index, uint64_t size);
   std::vector<Hash>     consistency_proof(uint64_t m, uint64_t n);
+  std::vector<Hash>     consistency_proof_from_indices(uint64_t i, uint64_t j);
 
-  Tree& tree();                                       // escape hatch
+  Tree&  tree_ref();                                  // mutable escape hatch
+  Store& store_ref();                                 // mutable escape hatch
 };
 ```
 
 `TiledTreeT` performs no internal locking. The caller must serialize every
 operation on a shared instance, including proof calls.
 
-Stateless alternative for callers with their own storage: free functions
-`write_tiles(tree, store, size, opts)` and a `ProofEngineT` built on a
-`CombinedHashSource`, so the wrapper is optional sugar.
+Callers with their own storage can construct a `TileWriterT` and call
+`write_up_to`, then build a `ProofEngineT` on a `CombinedHashSource`, so the
+wrapper is optional sugar.
 
 ### 6.8 Entry bundles (optional)
 
@@ -745,12 +756,16 @@ compatible":
   resulting size is below `immutable_size()`. A failed flush may advance
   `immutable_size()` without advancing `flushed_size()`; retry with the same
   tree state. Retracting the underlying tree directly via `tree_ref()` bypasses
-  this guard and must be avoided.
+  this guard, can make the size boundaries inconsistent or non-monotonic, and
+  must be avoided. Files written through `store_ref()` are trusted without
+  checking that they match the tree and can invalidate proofs after compaction.
 - **No internal synchronization.** Every tiled-storage object and shared store
   prefix requires external serialization. This includes `const` proof reads,
   which update the tile cache.
 - **Very large indices.** Index math uses `uint64_t`; encoding handles
-  multi-group indices. Level bound `≤ 63` per spec (8 suffices for `2^64`).
+  multi-group indices. Level bound `<= 63` per spec (8 suffices for `2^64`).
+  Resume scans are bounded by the requested tree size and cannot follow sparse
+  files beyond that range.
 - **Open question — `subtree_root` in core vs. `past_path`-derived memory
   source.** Recommend the tiny non-hashing accessor; falls back to zero-core-
   change if maintainers prefer. Either keeps hashing untouched.
