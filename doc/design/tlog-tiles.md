@@ -413,7 +413,7 @@ uint64_t covered = (size / TILE_WIDTH) * TILE_WIDTH;       // full level-0 cover
 immutable_size = max(immutable_size, covered);             // before any write
 writer.write_up_to(size, [&](uint64_t i) -> const Hash& { return tree.leaf(i); });
 flushed_size = covered;                                    // after all levels succeed
-// compact() drops only [min_index, covered); the frontier [covered, size) stays.
+// compact() retains the last covered leaf (when any) and the entire frontier.
 ```
 
 If `write_up_to` throws, `immutable_size` remains advanced because a full tile
@@ -577,8 +577,8 @@ entry bundles are an **application-owned** add-on, included for completeness:
 The pairing of tile writing with `flush_to` gives two central correctness
 invariants:
 
-> **Compaction invariant.** Never compact past the last fully successful flush:
-> `min_index() <= flushed_size`.
+> **Compaction invariant.** Retain the final leaf of the last fully successful
+> flush: `flushed_size == 0 || min_index() < flushed_size`.
 >
 > **Immutability invariant.** Never roll back below a full-tile boundary that a
 > flush may have published: `size >= immutable_size`.
@@ -598,11 +598,11 @@ Per flush:
 3. `write_up_to(size, leaf_at)` - persist newly-complete **full** tiles at all
    levels (incremental).
 4. After every level succeeds, set `flushed_size = covered`.
-5. *(optional)* `compact()` -> `flush_to(covered - retention_margin)` - reclaim
-   memory, only when `compact_on_flush` is set (or `compact()` is called
-   explicitly). It drops only the full-tile-covered prefix, so the un-tiled
-   frontier always stays resident. By default nothing is dropped and the tree
-   stays whole.
+5. *(optional)* `compact()` computes an aligned retention target, capped below
+   nonzero `covered`, then calls `flush_to(target)`. This reclaims memory only
+   when `compact_on_flush` is set (or `compact()` is called explicitly), while
+   retaining the final tiled leaf and the entire un-tiled frontier. By default
+   nothing is dropped and the tree stays whole.
 
 If step 3 fails, steps 4 and 5 do not run. `immutable_size` stays advanced to
 prevent stale-tile rollback, while `flushed_size` stays at the last complete
@@ -735,10 +735,10 @@ compatible":
   final, and every emitted tile is write-once. A stand-alone tile reader cannot
   serve the frontier; that is the in-memory tree's job (or the application must
   keep it elsewhere).
-- **`flush_to` alignment.** Compaction flushes only to a 256-multiple (minus
-  retention) to uphold the coverage invariant; it also keeps at least one
-  resident leaf, since `flush_to` cannot drain the whole tree. Enforced inside
-  `TiledTreeT::compact`.
+- **`flush_to` alignment.** Compaction normally flushes to a 256-multiple
+  derived from retention. When that target equals `flushed_size`, it stops one
+  leaf earlier so `TreeT` can still retract to exactly that size. This one-leaf
+  overlap is enforced inside `TiledTreeT::compact`.
 - **Rollback vs. immutable tiles.** Tiles are write-once, so rolling the tree
   back (`retract_to`) over a range that a flush may have published would leave
   stale, never-rewritten tiles. `TiledTreeT::retract_to` therefore throws if the

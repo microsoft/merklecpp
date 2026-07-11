@@ -261,11 +261,11 @@ Recorded so the breadth of the review is auditable:
   already-written child tiles; the `next_full` cursor + `has_full_tile` skip avoid
   duplicate writes and never skip a tile; atomic temp+rename keeps the on-disk
   prefix contiguous, so the monotonic `full_prefix_length` binary search is valid.
-* **`compact` / `retract_to`** — `target` is clamped to a `TILE_WIDTH` multiple
-  ≤ `tiles_size`, so the frontier is always retained and `min_index ≤ tiles_size`
-  (no coverage gap); `target ≥ n` keeps ≥ 1 resident leaf; the `index + 1 <
-  tiles_size` guard protects the immutable prefix while allowing rollback to
-  exactly `flushed_size`.
+* **`compact` / `retract_to`** - `target` is normally aligned to a `TILE_WIDTH`
+  multiple and, for a nonzero `tiles_size`, is capped below it, so the frontier
+  and final tiled leaf remain resident. The `index + 1 < sealed_size` guard
+  protects the immutable prefix while allowing rollback to exactly
+  `immutable_size`.
 * **`TileStoreT` I/O** — `decode_entries`/`read_tile` bounds checks are correct and
   overflow-free (fuzzed clean under ASan/UBSan); paths are built only from integer
   indices + the caller's `prefix`, so path traversal is not realistic;

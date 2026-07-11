@@ -303,7 +303,8 @@ int main()
       dtt.flush();
       expect(dtt.tree_ref().min_index() == 0, "default: nothing dropped");
       dtt.compact();
-      expect(dtt.tree_ref().min_index() == 768, "compact() drops to 768");
+      expect(
+        dtt.tree_ref().min_index() == 767, "compact() keeps boundary leaf");
     }
 
     TiledTree::Config cfg;
@@ -318,7 +319,7 @@ int main()
     }
     tt.flush(); // flushes full tiles; flushed_size = covered = 768
     expect(tt.flushed_size() == 768, "flushed size");
-    expect(tt.tree_ref().min_index() == 768, "compacted to 768");
+    expect(tt.tree_ref().min_index() == 767, "compacted with boundary overlap");
 
     for (uint64_t i = n1; i < N; i++)
     {
@@ -387,7 +388,7 @@ int main()
     // work (this also confirms the writer never reads a flushed leaf).
     tt.flush(); // flushes full tiles; flushed_size = covered = 1280
     expect(tt.flushed_size() == 1280, "second flushed size");
-    expect(tt.tree_ref().min_index() == 1280, "flushed to 1280");
+    expect(tt.tree_ref().min_index() == 1279, "second boundary leaf retained");
 
     for (const uint64_t i :
          {(uint64_t)0,
@@ -598,7 +599,43 @@ int main()
         expect(rb.size() == 256, "rb retract to tiled prefix allowed");
       }
 
-      // 3c. Rollback interacts correctly with compaction (flushed + tiled
+      // 3c. Compaction keeps the final tiled leaf resident, so rollback to a
+      // tree size of exactly immutable_size() remains representable.
+      {
+        TiledTree::Config cfg;
+        cfg.prefix = base / "rb_exact_boundary";
+        cfg.compact_on_flush = true;
+        TiledTree rb(cfg);
+        for (uint64_t i = 0; i < 1000; i++)
+        {
+          rb.append(hashes[i]);
+        }
+        rb.flush();
+        expect(rb.flushed_size() == 768, "rb boundary flushed size");
+        expect(rb.immutable_size() == 768, "rb boundary immutable size");
+        expect(
+          rb.tree_ref().min_index() == 767,
+          "rb boundary final tiled leaf retained");
+
+        rb.retract_to(767);
+        expect(rb.size() == 768, "rb exact immutable boundary allowed");
+
+        merkle::Tree expected;
+        for (uint64_t i = 0; i < 768; i++)
+        {
+          expected.insert(hashes[i]);
+        }
+        const Hash expected_root = expected.root();
+        expect(
+          rb.root() == expected_root, "rb boundary root matches reference");
+        const auto proof = rb.inclusion_proof(0, 768);
+        expect(
+          *proof == *expected.path(0),
+          "rb boundary inclusion matches reference");
+        expect(proof->verify(expected_root), "rb boundary inclusion verifies");
+      }
+
+      // 3d. Rollback interacts correctly with compaction (flushed + tiled
       // past).
       {
         TiledTree::Config cfg;
@@ -609,8 +646,10 @@ int main()
         {
           rb.append(hashes[i]);
         }
-        rb.flush(); // flushed_size = covered = 768; compact to 768
-        expect(rb.tree_ref().min_index() == 768, "rb compact flushed to 768");
+        rb.flush(); // flushed_size = covered = 768; retain boundary leaf 767
+        expect(
+          rb.tree_ref().min_index() == 767,
+          "rb compact boundary leaf retained");
         for (uint64_t i = 1000; i < 1200; i++)
         {
           rb.append(hashes[i]);
@@ -641,7 +680,7 @@ int main()
         expect(threw, "rb compact retract below tiled throws");
       }
 
-      // 3d. A failed flush may publish an immutable full tile before a later
+      // 3e. A failed flush may publish an immutable full tile before a later
       // write fails. The attempted full-tile boundary is sealed against
       // rollback, while flushed_size advances only after a successful retry.
       {

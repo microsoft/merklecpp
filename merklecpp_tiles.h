@@ -1329,6 +1329,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
         /// @brief Number of most-recent leaves to keep resident when
         /// compacting (i.e. never dropped from memory).
+        /// @note Compaction may retain one additional tiled boundary leaf so
+        /// rollback to exactly immutable_size() remains possible.
         uint64_t retention_margin = 0;
 
         /// @brief If set, flush() compacts after writing tiles, dropping
@@ -1441,28 +1443,28 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         return stats;
       }
 
-      /// @brief Drops from the in-memory tree every leaf already covered by a
-      /// durably-written full tile, keeping retention_margin recent leaves.
+      /// @brief Drops old leaves covered by durably-written full tiles, keeping
+      /// retention_margin recent leaves and one tiled boundary leaf.
       /// @return The new minimum (smallest still-resident) leaf index
       /// @note Only leaves covered by a full tile are dropped, so the un-tiled
       /// frontier is always retained in memory and inclusion/consistency proofs
-      /// remain available (the past from tiles, the frontier from memory). Has
-      /// no effect until tiling has produced full tiles.
+      /// remain available (the past from tiles, the frontier from memory). The
+      /// leaf at flushed_size() - 1 also remains resident so retract_to() can
+      /// represent a tree whose size is exactly immutable_size(). Has no effect
+      /// until tiling has produced full tiles.
       uint64_t compact()
       {
-        const uint64_t n = tree.num_leaves();
         const uint64_t covered = (tiles_size / TILE_WIDTH) * TILE_WIDTH;
         uint64_t target = covered > config.retention_margin ?
           covered - config.retention_margin :
           0;
         target = (target / TILE_WIDTH) * TILE_WIDTH;
-        // merklecpp's flush_to keeps at least one resident leaf, so never flush
-        // the whole tree (this can only arise when the size is an exact
-        // multiple of TILE_WIDTH and nothing is retained); the extra resident
-        // leaf is harmless (it is also covered by a full tile).
-        if (n > 0 && target >= n)
+        // TreeT cannot retract below min_index(). Keep the final tiled leaf
+        // resident so rollback to a size of exactly immutable_size() remains
+        // representable after compaction.
+        if (covered > 0 && target == covered)
         {
-          target = n - 1;
+          target--;
         }
         if (target > tree.min_index())
         {

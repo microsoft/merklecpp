@@ -127,9 +127,10 @@ merkle::tiles::TiledTree log(cfg);
 - `compact_on_flush` (default `false`): when set, `flush()` calls
   `compact()` for you.
 - `compact()` can also be called explicitly at any time. It drops from memory
-  only the leaves already covered by a **durably written full tile**, keeping
-  `retention_margin` recent leaves resident. It returns the new minimum
-  (smallest still-resident) leaf index.
+  only leaves already covered by a **durably written full tile**, keeping at
+  least `retention_margin` recent leaves resident. It also retains the final
+  tiled leaf so rollback to exactly `immutable_size()` remains representable.
+  It returns the new minimum (smallest still-resident) leaf index.
 - Proofs for dropped leaves are still produced — they are served from the tiles
   and transparently combined with the resident frontier.
 
@@ -158,6 +159,8 @@ log.retract_to(index);   // keep leaves [0, index], drop the rest
 - Allowed when the resulting size is `>= immutable_size()`.
 - Throws otherwise, because a flush may already have published an immutable
   full tile for that range.
+- The exact `immutable_size()` boundary remains available after compaction;
+  compaction retains the final tiled leaf needed by the in-memory tree.
 - After a successful flush, `immutable_size() == flushed_size()`. After an
   interrupted flush, `immutable_size()` may be larger until the same tree state
   is flushed successfully.
