@@ -24,7 +24,7 @@ using merkle::tiles::TiledTree;
 
 static_assert(!std::is_copy_constructible_v<TiledTree>);
 static_assert(!std::is_copy_assignable_v<TiledTree>);
-static_assert(std::is_move_constructible_v<TiledTree>);
+static_assert(std::is_nothrow_move_constructible_v<TiledTree>);
 static_assert(!std::is_move_assignable_v<TiledTree>);
 
 class ProofEngineProbe : public ProofEngine

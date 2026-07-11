@@ -1321,7 +1321,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       TiledTreeT& operator=(const TiledTreeT&) = delete;
 
       /// @brief Moves a tiled tree, rebinding its writer to the moved store.
-      TiledTreeT(TiledTreeT&& other) :
+      TiledTreeT(TiledTreeT&& other) noexcept :
         config(std::move(other.config)),
         store(std::move(other.store)),
         writer(store),
