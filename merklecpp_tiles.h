@@ -315,18 +315,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Writes a file atomically via a synced temporary file.
       /// @note Uses unique temp names, cleans them up on errors, and syncs the
       /// file before publishing it with an atomic replace. POSIX builds also
-      /// sync the parent directory after rename.
+      /// sync each newly created directory's parent and the destination
+      /// directory after rename.
       static void write_file_atomically(
         const std::filesystem::path& path, const std::vector<uint8_t>& bytes)
       {
-        std::error_code ec;
-        std::filesystem::create_directories(path.parent_path(), ec);
-        if (ec)
-        {
-          throw std::runtime_error(
-            "cannot create directory " + path.parent_path().string() + ": " +
-            ec.message());
-        }
+        create_directories_durably(path.parent_path());
 
         const std::filesystem::path tmp = temp_path(path);
         TempFileGuard guard(tmp);
@@ -334,6 +328,69 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         replace_file(tmp, path);
         sync_directory(path.parent_path());
         guard.dismiss();
+      }
+
+      template <typename SyncParent>
+      static void create_directories_durably(
+        const std::filesystem::path& directory, const SyncParent& sync_parent)
+      {
+        if (directory.empty())
+        {
+          return;
+        }
+
+        std::error_code ec;
+        const bool exists = std::filesystem::exists(directory, ec);
+        if (ec)
+        {
+          throw std::runtime_error(
+            "cannot inspect directory " + directory.string() + ": " +
+            ec.message());
+        }
+        if (exists)
+        {
+          const bool is_directory =
+            std::filesystem::is_directory(directory, ec);
+          if (ec)
+          {
+            throw std::runtime_error(
+              "cannot inspect directory " + directory.string() + ": " +
+              ec.message());
+          }
+          if (!is_directory)
+          {
+            throw std::runtime_error(
+              "cannot create directory " + directory.string() +
+              ": path exists and is not a directory");
+          }
+          return;
+        }
+
+        const auto parent = directory.parent_path();
+        if (parent != directory)
+        {
+          create_directories_durably(parent, sync_parent);
+        }
+
+        const bool created = std::filesystem::create_directory(directory, ec);
+        if (ec)
+        {
+          throw std::runtime_error(
+            "cannot create directory " + directory.string() + ": " +
+            ec.message());
+        }
+        if (created)
+        {
+          sync_parent(parent.empty() ? std::filesystem::path(".") : parent);
+        }
+      }
+
+      static void create_directories_durably(
+        const std::filesystem::path& directory)
+      {
+        create_directories_durably(
+          directory,
+          [](const std::filesystem::path& parent) { sync_directory(parent); });
       }
 
       class TempFileGuard
@@ -392,6 +449,15 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 #endif
       }
 
+      static void require_write_progress(
+        size_t written, const std::filesystem::path& path)
+      {
+        if (written == 0)
+        {
+          throw std::runtime_error("short write: " + path.string());
+        }
+      }
+
       static void write_and_sync_file(
         const std::filesystem::path& path, const std::vector<uint8_t>& bytes)
       {
@@ -424,6 +490,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
               throw std::runtime_error(
                 system_error_message("error writing file " + path.string()));
             }
+            require_write_progress((size_t)done, path);
             written += done;
           }
           if (!FlushFileBuffers(handle))
@@ -473,10 +540,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
               throw std::runtime_error(
                 system_error_message("error writing file " + path.string()));
             }
-            if (done == 0)
-            {
-              throw std::runtime_error("short write: " + path.string());
-            }
+            require_write_progress((size_t)done, path);
             written += (size_t)done;
           }
           if (::fsync(fd) != 0)

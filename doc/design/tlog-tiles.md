@@ -356,10 +356,10 @@ public:
 ```
 
 - Writes use a unique temporary file, sync the file contents, publish with an
-  atomic replace, and on POSIX sync the parent directory after the rename. A
-  crash should leave either the old tile or the new complete tile visible; a
-  wrong-size tile is not treated as a durable full tile and is rewritten by the
-  writer.
+  atomic replace, and on POSIX sync every newly created directory link plus the
+  destination directory after the rename. A crash should leave either the old
+  tile or the new complete tile visible; a wrong-size tile is not treated as a
+  durable full tile and is rewritten by the writer.
 - Full tiles are written once and never rewritten (immutability), so every file
   under `tile/<L>/` is write-once.
 - A small in-process cache of recently read tiles avoids repeated I/O during

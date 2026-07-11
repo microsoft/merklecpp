@@ -59,6 +59,26 @@ static bool any_tmp_files(const fs::path& dir)
     });
 }
 
+class TileStoreProbe : public merkle::tiles::TileStore
+{
+public:
+  using Store = merkle::tiles::TileStore;
+
+  static std::vector<fs::path> create_and_record_directory_syncs(
+    const fs::path& directory)
+  {
+    std::vector<fs::path> synced;
+    Store::create_directories_durably(
+      directory, [&](const fs::path& parent) { synced.push_back(parent); });
+    return synced;
+  }
+
+  static void check_write_progress(size_t written)
+  {
+    Store::require_write_progress(written, "test");
+  }
+};
+
 // Overwrites a file with exactly the given bytes (to simulate corruption).
 static void overwrite_file(const fs::path& p, const std::vector<uint8_t>& bytes)
 {
@@ -104,6 +124,37 @@ int main()
       "tile_path L1 big index");
     expect_eq(
       rel(store, store.entries_path(5)), "tile/entries/005", "entries full");
+
+    // 2b. Every newly-created directory link is followed by a sync of its
+    // parent, from the first missing ancestor through the final directory.
+    {
+      const fs::path nested = dir / "durable" / "tile" / "1";
+      const auto synced =
+        TileStoreProbe::create_and_record_directory_syncs(nested);
+      const std::vector<fs::path> expected = {
+        dir.parent_path(), dir, dir / "durable", dir / "durable" / "tile"};
+      expect(synced == expected, "new directory parents synced in order");
+      expect(fs::is_directory(nested), "nested directories created");
+      expect(
+        TileStoreProbe::create_and_record_directory_syncs(nested).empty(),
+        "existing directories need no creation sync");
+    }
+
+    // 2c. A successful write must make progress. This shared guard prevents
+    // the Windows WriteFile loop from spinning if it reports zero bytes.
+    {
+      bool zero_threw = false;
+      try
+      {
+        TileStoreProbe::check_write_progress(0);
+      }
+      catch (const std::exception&)
+      {
+        zero_threw = true;
+      }
+      expect(zero_threw, "zero-byte write rejected");
+      TileStoreProbe::check_write_progress(1);
+    }
 
     const size_t hsz = Hash().size();
 

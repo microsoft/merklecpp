@@ -105,9 +105,10 @@ all 256 entries are final and never rewritten. The remaining frontier stays in
 memory until it crosses the next full-tile boundary.
 
 Tile files are written through unique temporary files, synced, then published
-with an atomic replace. On POSIX systems the parent directory is also synced
-after the rename. A wrong-size file at a tile path is not a published tile, so
-the writer does not treat mere file existence as success.
+with an atomic replace. On POSIX systems, each newly created directory is made
+durable by syncing its parent, and the destination directory is synced after
+the rename. A wrong-size file at a tile path is not a published tile, so the
+writer does not treat mere file existence as success.
 
 ## Flushing and compaction
 

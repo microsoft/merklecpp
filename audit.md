@@ -32,10 +32,10 @@ and (c) several **robustness / hostile-input / test / doc** gaps.
 > tree (`tiles_tree` Part 0).
 >
 > **Update (hardening commit).** The remaining implementation findings are now
-> addressed: **C2/D2** by synced unique-temp writes, parent-directory sync on
-> POSIX, and size-validated tile presence; **C3/C4** by overflow-safe public
-> arithmetic guards; **C5** by unique temp names and cleanup; and **P1/D1** by a
-> per-source tile read cache plus corrected docs.
+> addressed: **C2/D2** by synced unique-temp writes, durable creation of every
+> directory ancestor on POSIX, and size-validated tile presence; **C3/C4** by
+> overflow-safe public arithmetic guards; **C5** by unique temp names and
+> cleanup; and **P1/D1** by a per-source tile read cache plus corrected docs.
 
 ---
 
@@ -44,7 +44,7 @@ and (c) several **robustness / hostile-input / test / doc** gaps.
 | # | Severity | Area | Summary |
 |---|----------|------|---------|
 | C1 | Medium | Correctness (config) | **Fixed:** the `write_higher_levels` option was removed, so required roll-up tiles are always written |
-| C2 | Medium | Durability | **Fixed:** `write_file_atomically` syncs unique temp files, atomically replaces, syncs POSIX parent dirs, and bad-size tiles are rewritten |
+| C2 | Medium | Durability | **Fixed:** `write_file_atomically` syncs unique temp files, atomically replaces, durably creates POSIX directory ancestors, and rewrites bad-size tiles |
 | C3 | Low | Robustness (public API) | **Fixed:** `TreeT::subtree_root` validates `level`/`index` before shifting and uses overflow-safe range checks |
 | C4 | Low | Robustness (hostile input) | **Fixed:** `largest_pow2_lt` uses an overflow-safe loop condition for `size > 2^63` |
 | C5 | Low | Concurrency / cleanup | **Fixed:** temp file names are unique per process/time/counter and cleaned up on error |
@@ -108,17 +108,19 @@ remove/guard the option or document the incompatibility.
 ### C2 — `write_file_atomically` is atomic but not durable; the store can wedge after a crash (Medium)
 
 > **Status:** Fixed by the hardening commit. `write_file_atomically` now writes a
-> unique temp file, syncs it, publishes it with atomic replace, syncs the POSIX
-> parent directory, and removes the temp file on error. `has_full_tile` also
-> requires the exact full-tile byte size, so a truncated/oversized tile is
-> rewritten instead of treated as durable.
+> unique temp file, syncs it, publishes it with atomic replace, syncs every
+> newly created directory link and the destination directory on POSIX, and
+> removes the temp file on error. `has_full_tile` also requires the exact
+> full-tile byte size, so a truncated/oversized tile is rewritten instead of
+> treated as durable.
 
 The original implementation used stream flush plus rename and treated file
 existence as the idempotence signal. A crash could therefore leave a present but
-wrong-size tile that future writes skipped and future reads rejected. The current
-implementation syncs the temp file before publishing, syncs POSIX parent
-directories after publishing, and makes `has_full_tile` require the exact full
-tile size so wrong-size tiles are rewritten.
+wrong-size tile that future writes skipped and future reads rejected. The
+current implementation syncs the temp file before publishing, durably creates
+each POSIX directory ancestor, syncs the destination directory after
+publishing, and makes `has_full_tile` require the exact full tile size so
+wrong-size tiles are rewritten.
 
 ### C3 — `TreeT::subtree_root` does not validate its arguments (Low)
 
@@ -235,7 +237,8 @@ when that option was removed.
 * **D1 (Medium)** — Fixed: `doc/design/tlog-tiles.md` now describes the
   implemented per-source tile cache.
 * **D2 (Low)** — Fixed: `doc/design/tlog-tiles.md` and the code comment now
-  describe synced unique-temp writes, atomic replace, and bad-size tile rewrite.
+  describe synced unique-temp writes, durable directory creation, atomic
+  replace, and bad-size tile rewrite.
 
 ---
 
