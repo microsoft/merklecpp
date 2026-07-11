@@ -79,9 +79,9 @@ auto consistency = log.consistency_proof(/*m=*/100, /*n=*/n);
 construction keeps its writer bound to the destination tree's tile store.
 
 `flush()` is incremental: each call writes only the full tiles that became
-complete since the previous call. Full tiles are immutable — written once and
-never rewritten — and the incomplete frontier is never tiled (it stays in
-memory until it grows into a full tile).
+complete since the previous call. Full tiles are immutable: written once after
+all 256 entries are final and never rewritten. The remaining frontier stays in
+memory until it crosses the next full-tile boundary.
 
 Tile files are written through unique temporary files, synced, then published
 with an atomic replace. On POSIX systems the parent directory is also synced
@@ -204,7 +204,7 @@ for (auto& leaf : batch) tree.insert(leaf);
 merkle::tiles::TileStore  store("/var/log/mylog");
 merkle::tiles::TileWriter writer(store);
 
-// Write all newly-complete full tiles (the incomplete frontier is not tiled).
+// Write all newly-complete full tiles; keep the remaining frontier in memory.
 auto stats = writer.write_up_to(
   tree.num_leaves(),
   [&](uint64_t i) -> const merkle::Hash& { return tree.leaf(i); });
@@ -269,8 +269,8 @@ Under the configured `prefix`:
 ```
 
 Tile indices use the tlog-tiles path encoding: zero-padded 3-digit groups with
-all but the last prefixed by `x` (e.g. index `1234067` → `x001/x234/067`). All
-tiles are full (256-wide) and immutable; the incomplete frontier is never tiled.
-See
+all but the last prefixed by `x` (e.g. index `1234067` -> `x001/x234/067`). Every
+tile is full (256-wide), final, and immutable. Entries beyond the last full-tile
+boundary remain in memory. See
 [`design/tlog-tiles.md`](design/tlog-tiles.md) for the full specification of the
 geometry and proof algorithms.

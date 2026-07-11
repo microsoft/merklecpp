@@ -32,12 +32,11 @@
 #  include <unistd.h>
 #endif
 
-// Tiled storage for merklecpp trees, following the C2SP tlog-tiles layout
-// (https://c2sp.org/tlog-tiles). The tile geometry, path encoding and partial
-// tile rules match the specification; the hash values stored in tiles are
-// produced by the tree's existing HASH_FUNCTION, so tile-derived proofs are
-// byte-identical to those produced by merkle::TreeT (see
-// doc/design/tlog-tiles.md).
+// Tiled storage for merklecpp trees, following the full-tile geometry and path
+// encoding of the C2SP tlog-tiles layout (https://c2sp.org/tlog-tiles). Only
+// complete, immutable tiles are stored. Their hash values are produced by the
+// tree's existing HASH_FUNCTION, so tile-derived proofs are byte-identical to
+// those produced by merkle::TreeT (see doc/design/tlog-tiles.md).
 
 namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 {
@@ -601,10 +600,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// @tparam HASH_FUNCTION The tree's node hash function
     /// @note Only balanced subtrees are tiled: a level-L entry is the root of a
     /// complete 2**(8L)-leaf subtree. Only full tiles (256 such entries) are
-    /// written; they are therefore immutable and written exactly once. The
-    /// incomplete frontier is deliberately never tiled (no partial tiles are
-    /// produced): it is retained in memory by the owning tree until it grows
-    /// into a full tile.
+    /// written; they are therefore immutable and written exactly once. Entries
+    /// beyond the last full-tile boundary remain in memory until a later flush
+    /// completes the next tile.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -638,9 +636,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// [0, size); only ever queried for leaves of complete subtrees.
       /// @return Counts of tiles written
       /// @note Incremental: full tiles already on disk are immutable and are
-      /// never rewritten. The incomplete frontier is never tiled. Tiles are
-      /// always rolled up at every level (0..63), so the on-disk set always
-      /// contains the higher-level roll-ups that proof generation relies on.
+      /// never rewritten. Entries that do not complete a tile are not written.
+      /// Tiles are always rolled up at every level (0..63), so the on-disk set
+      /// always contains the higher-level roll-ups that proof generation relies
+      /// on.
       Stats write_up_to(uint64_t size, const LeafFn& leaf_at)
       {
         Stats stats;
@@ -805,10 +804,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
     /// @brief Resolves subtree roots from tlog-tiles tile files.
     /// @note @p available_size is rounded down to a whole number of full tiles:
-    /// only complete, durably-written full tiles are read (no partial tiles).
-    /// A complete subtree within that full-tile prefix is resolvable; anything
-    /// reaching into the incomplete frontier yields false so that a proof
-    /// builder can fall back to another source (e.g. an in-memory tree).
+    /// only complete, durably-written full tiles are read. A complete subtree
+    /// within that full-tile prefix is resolvable; anything reaching into the
+    /// incomplete frontier yields false so that a proof builder can fall back
+    /// to another source (e.g. an in-memory tree).
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -861,9 +860,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
       /// @brief Resolves a complete subtree known to lie within the full-tile
       /// prefix, reading the highest-level full tile that holds it (and rolling
-      /// up); descends to lower full tiles where a higher-level tile is not
-      /// full (it would otherwise have been the unwritten partial). Terminates
-      /// because full level-0 tiles always cover the prefix.
+      /// up); descends to lower full tiles when a higher-level full tile has not
+      /// completed. Terminates because full level-0 tiles always cover the
+      /// prefix.
       void resolve(uint8_t level, uint64_t index, Hash& out) const
       {
         if (level <= TILE_HEIGHT)
@@ -1501,10 +1500,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// stores leaf hashes, while the raw entries (and the leaf-hash derivation
     /// linking each entry to its level-0 tile hash) are the application's
     /// responsibility. Only full bundles (TILE_WIDTH entries) are written; they
-    /// are immutable and written exactly once. The incomplete tail is never
-    /// bundled (no partial bundles are produced): it stays with the application
-    /// until it grows into a full bundle, mirroring the un-tiled Merkle
-    /// frontier.
+    /// are immutable and written exactly once. The incomplete tail stays with
+    /// the application until it grows into a full bundle, mirroring the
+    /// un-tiled Merkle frontier.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(

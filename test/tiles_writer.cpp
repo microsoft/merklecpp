@@ -29,24 +29,18 @@ static void expect(bool cond, const std::string& what)
   }
 }
 
-// True if any partial-tile directory (".p") exists anywhere in the store: the
-// writer must never produce one.
-static bool any_partial_dirs(const TileStore& store)
+static size_t tile_file_count(const TileStore& store)
 {
   const fs::path tiles = store.root() / "tile";
   if (!fs::exists(tiles))
   {
-    return false;
+    return 0;
   }
   const fs::recursive_directory_iterator it(tiles);
-  return std::any_of(begin(it), end(it), [](const fs::directory_entry& e) {
-    if (!e.is_directory())
-    {
-      return false;
-    }
-    const std::string name = e.path().filename().string();
-    return name.size() >= 2 && name.substr(name.size() - 2) == ".p";
-  });
+  return (size_t)std::count_if(
+    begin(it), end(it), [](const fs::directory_entry& e) {
+      return e.is_regular_file();
+    });
 }
 
 // Roll up a full level-0 tile and compare with a level-1 tile entry.
@@ -67,9 +61,9 @@ int main()
 
   try
   {
-    // ---- A. size 256: exactly one full L0 tile, no partials and no L1 tile
-    //         (the L1 root is not yet a full tile; it stays in memory). The
-    //         level-1 entry it would hold equals the real merkle::Tree root.
+    // ---- A. size 256: exactly one full L0 tile and no L1 tile (the L1 root is
+    //         not yet a full tile, so it stays in memory). The level-1 entry it
+    //         would hold equals the real merkle::Tree root.
     {
       const auto hashes = make_hashes(256);
       const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
@@ -85,7 +79,7 @@ int main()
         fs::file_size(store.tile_path(TileRef{0, 0})) == 256U * Hash().size(),
         "A L0 full tile size");
       expect(!store.has_full_tile(1, 0), "A no L1 full tile");
-      expect(!any_partial_dirs(store), "A no partial tiles");
+      expect(tile_file_count(store) == 1, "A exact tile file count");
 
       // Level-0 tile is the leaf hashes verbatim.
       const auto l0 = store.read_tile(TileRef{0, 0});
@@ -126,7 +120,7 @@ int main()
 
       expect(!fs::exists(store.root() / "tile" / "2"), "B no level 2");
       expect(!fs::exists(store.root() / "tile" / "3"), "B no level 3");
-      expect(!any_partial_dirs(store), "B no partial tiles");
+      expect(tile_file_count(store) == 274, "B exact tile file count");
 
       // Higher-level entries are roll-ups of the complete child tiles.
       const auto l1 = store.read_tile(TileRef{1, 0});
@@ -137,8 +131,7 @@ int main()
       std::cout << "B (size 70000): OK" << '\n';
     }
 
-    // ---- C. incremental writes: immutability and idempotency; never a
-    // partial.
+    // ---- C. incremental writes preserve immutability and idempotency.
     {
       const auto hashes = make_hashes(1024);
       const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
@@ -161,14 +154,13 @@ int main()
       expect(store.has_full_tile(0, 1), "C L0 tile 1");
       expect(!store.has_full_tile(0, 2), "C no L0 tile 2");
       expect(!store.has_full_tile(1, 0), "C no L1 full tile");
-      expect(!any_partial_dirs(store), "C no partial tiles");
+      expect(tile_file_count(store) == 2, "C exact tile file count");
 
       std::cout << "C (incremental): OK" << '\n';
     }
 
     // ---- D. crossing into a full level-1 tile: the roll-up appears as a full
-    //         tile, prior full tiles are never rewritten, and no partial is
-    //         ever produced.
+    //         tile and prior full tiles are never rewritten.
     {
       const auto hashes = make_hashes(65536);
       const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
@@ -180,7 +172,7 @@ int main()
       const auto s1 = writer.write_up_to(65535, leaf_at);
       expect(s1.full_written == 255, "D s1 255 full L0");
       expect(!store.has_full_tile(1, 0), "D no L1 before completion");
-      expect(!any_partial_dirs(store), "D no partial before completion");
+      expect(tile_file_count(store) == 255, "D initial tile file count");
 
       // Completing the 256th L0 tile yields one new L0 tile and one full L1.
       const auto s2 = writer.write_up_to(65536, leaf_at);
@@ -189,7 +181,7 @@ int main()
       expect(store.has_full_tile(1, 0), "D L1 tile 0");
       expect(!store.has_full_tile(1, 1), "D no L1 tile 1");
       expect(!store.has_full_tile(2, 0), "D no L2 tile");
-      expect(!any_partial_dirs(store), "D no partial tiles");
+      expect(tile_file_count(store) == 257, "D final tile file count");
 
       const auto l1 = store.read_tile(TileRef{1, 0});
       expect(l1[0] == rollup(store.read_tile(TileRef{0, 0})), "D L1[0]");
@@ -237,7 +229,7 @@ int main()
         store.read_tile(TileRef{1, 0})[0] ==
           rollup(store.read_tile(TileRef{0, 0})),
         "E L1[0] rolled up from resumed L0");
-      expect(!any_partial_dirs(store), "E no partial tiles");
+      expect(tile_file_count(store) == 274, "E exact tile file count");
 
       // A third fresh writer confirms full idempotence after a resume.
       TileStore store3(dir);

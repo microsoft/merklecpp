@@ -57,7 +57,6 @@ and (c) several **robustness / hostile-input / test / doc** gaps.
 | T6 | Low | Tests | **Fixed:** empty tree and `65537` boundary coverage added |
 | D1 | Medium | Docs | **Fixed:** design doc now matches the per-source tile cache |
 | D2 | Low | Docs | **Fixed:** durability wording now describes synced temp-file atomic replace and bad-size tile rewrite |
-| D3 | Low | Docs | Partial-tile / spec material retained as background; correct but worth a sharper "not implemented" caveat |
 
 ---
 
@@ -237,10 +236,6 @@ when that option was removed.
   implemented per-source tile cache.
 * **D2 (Low)** — Fixed: `doc/design/tlog-tiles.md` and the code comment now
   describe synced unique-temp writes, atomic replace, and bad-size tile rewrite.
-* **D3 (Low)** — Partial-tile spec material remains as background (`§2.1`, `§4`).
-  It is consistently caveated as the upstream format and "not produced or read
-  here", so this is acceptable; a one-line "the implementation has no notion of a
-  partial tile" near each occurrence would remove any doubt.
 
 ---
 
@@ -288,6 +283,4 @@ Recorded so the breadth of the review is auditable:
 ## Recommended priority
 
 All implementation, test, and documentation findings from this audit have now
-been addressed except **D3**, which remains a low-priority wording polish item:
-the design doc still includes partial-tile spec background, but consistently
-caveats that this implementation does not write or read partial tiles.
+been addressed.
