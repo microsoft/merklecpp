@@ -1317,6 +1317,20 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         config(std::move(config)), store(this->config.prefix), writer(store)
       {}
 
+      TiledTreeT(const TiledTreeT&) = delete;
+      TiledTreeT& operator=(const TiledTreeT&) = delete;
+
+      /// @brief Moves a tiled tree, rebinding its writer to the moved store.
+      TiledTreeT(TiledTreeT&& other) :
+        config(std::move(other.config)),
+        store(std::move(other.store)),
+        writer(store),
+        tree(std::move(other.tree)),
+        tiles_size(std::exchange(other.tiles_size, 0))
+      {}
+
+      TiledTreeT& operator=(TiledTreeT&&) = delete;
+
       /// @brief Appends a leaf hash.
       void append(const Hash& leaf_hash)
       {

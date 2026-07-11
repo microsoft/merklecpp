@@ -12,6 +12,7 @@
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -20,6 +21,11 @@ using merkle::Hash;
 using merkle::tiles::MemoryHashSource;
 using merkle::tiles::ProofEngine;
 using merkle::tiles::TiledTree;
+
+static_assert(!std::is_copy_constructible_v<TiledTree>);
+static_assert(!std::is_copy_assignable_v<TiledTree>);
+static_assert(std::is_move_constructible_v<TiledTree>);
+static_assert(!std::is_move_assignable_v<TiledTree>);
 
 class ProofEngineProbe : public ProofEngine
 {
@@ -147,6 +153,49 @@ int main()
       }
       expect(ethrew, "empty: root throws");
       std::cout << "empty tree: OK" << '\n';
+    }
+
+    // ---- Part 0b: moving a tree rebinds its writer to the destination store.
+    {
+      TiledTree::Config move_cfg;
+      move_cfg.prefix = base / "tt_move_expected";
+      TiledTree source(move_cfg);
+      for (uint64_t i = 0; i < 300; i++)
+      {
+        source.append(hashes[i]);
+      }
+      source.flush();
+
+      const fs::path work = base / "tt_move_cwd";
+      fs::create_directories(work);
+      const fs::path previous_cwd = fs::current_path();
+      fs::current_path(work);
+      try
+      {
+        TiledTree moved(std::move(source));
+        expect(moved.flushed_size() == 256, "move: flushed size retained");
+        expect(
+          moved.store_ref().root() == move_cfg.prefix,
+          "move: destination store retained");
+        for (uint64_t i = 300; i < 512; i++)
+        {
+          moved.append(hashes[i]);
+        }
+        expect(moved.flush().full_written == 1, "move: next tile written");
+        expect(
+          fs::is_regular_file(move_cfg.prefix / "tile/0/001"),
+          "move: tile written to configured store");
+        expect(
+          !fs::exists(work / "tile/0/001"),
+          "move: no tile written relative to current directory");
+      }
+      catch (...)
+      {
+        fs::current_path(previous_cwd);
+        throw;
+      }
+      fs::current_path(previous_cwd);
+      std::cout << "move construction: OK" << '\n';
     }
 
     // ---- Part 1: memory-source proofs (exercises TreeT::subtree_root).

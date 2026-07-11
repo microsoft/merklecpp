@@ -75,6 +75,9 @@ assert(inclusion->verify(root));
 auto consistency = log.consistency_proof(/*m=*/100, /*n=*/n);
 ```
 
+`TiledTree` can be move-constructed, but it cannot be copied or assigned. Move
+construction keeps its writer bound to the destination tree's tile store.
+
 `flush()` is incremental: each call writes only the full tiles that became
 complete since the previous call. Full tiles are immutable — written once and
 never rewritten — and the incomplete frontier is never tiled (it stays in
