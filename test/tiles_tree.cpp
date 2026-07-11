@@ -200,6 +200,39 @@ int main()
       std::cout << "move construction: OK" << '\n';
     }
 
+    // ---- Part 0c: a TiledTree is fresh-only. It accepts an existing root
+    //      directory, but rejects a tile namespace that may belong to another
+    //      tree rather than silently adopting its immutable files.
+    {
+      TiledTree::Config existing_cfg;
+      existing_cfg.prefix = base / "tt_existing";
+      fs::create_directories(existing_cfg.prefix / "tile");
+      {
+        TiledTree first(existing_cfg);
+        for (uint64_t i = 0; i < 256; i++)
+        {
+          first.append(hashes[i]);
+        }
+        expect(
+          first.flush().full_written == 1,
+          "existing prefix: first tree writes tile");
+      }
+
+      bool construction_threw = false;
+      try
+      {
+        const TiledTree second(existing_cfg);
+      }
+      catch (const std::exception&)
+      {
+        construction_threw = true;
+      }
+      expect(
+        construction_threw,
+        "existing prefix: second tree rejects existing tiles");
+      std::cout << "existing tile namespace: OK" << '\n';
+    }
+
     // ---- Part 1: memory-source proofs (exercises TreeT::subtree_root).
     for (const uint64_t n :
          {(uint64_t)1,

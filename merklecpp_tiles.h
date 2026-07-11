@@ -611,6 +611,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// completes the next tile.
     /// @warning No internal synchronization is provided. Callers must serialize
     /// access to a writer and its store.
+    /// @warning A writer trusts existing full tiles as output from the same
+    /// tree and hash function. Callers resuming a store must establish that
+    /// ownership and restore the matching tree state.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -1295,6 +1298,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// Config::compact_on_flush, or call compact() explicitly; it never drops
     /// the un-tiled frontier. Proofs are served from the combination of the
     /// resident tree (frontier) and the full tiles (compacted past).
+    /// @note TiledTree creates a new tiled tree and cannot reopen one from tile
+    /// files alone. Construction rejects a non-empty tile namespace because
+    /// the files do not identify their tree or record enough state to restore
+    /// it. Use TileWriter directly only when the caller owns and restores that
+    /// state.
     /// @warning No internal synchronization is provided. Callers must serialize
     /// all access to a shared tree, including proof operations.
     template <
@@ -1314,7 +1322,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Configuration for a tiled tree.
       struct Config
       {
-        /// @brief Root directory for the tiles.
+        /// @brief Root directory for a new tiled tree.
+        /// @note The directory itself may exist, but its tile subdirectory must
+        /// be absent or empty.
         std::filesystem::path prefix;
 
         /// @brief Number of most-recent leaves to keep resident when
@@ -1329,7 +1339,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
       explicit TiledTreeT(Config config) :
         config(std::move(config)), store(this->config.prefix), writer(store)
-      {}
+      {
+        require_empty_tile_namespace();
+      }
 
       TiledTreeT(const TiledTreeT&) = delete;
       TiledTreeT& operator=(const TiledTreeT&) = delete;
@@ -1512,6 +1524,45 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       Tree tree;
       uint64_t tiles_size = 0;
       uint64_t sealed_size = 0;
+
+      void require_empty_tile_namespace() const
+      {
+        const auto tile_root = store.root() / "tile";
+        std::error_code ec;
+        const bool exists = std::filesystem::exists(tile_root, ec);
+        if (ec)
+        {
+          throw std::runtime_error(
+            "TiledTree: cannot inspect tile namespace " + tile_root.string() +
+            ": " + ec.message());
+        }
+        if (!exists)
+        {
+          return;
+        }
+
+        const bool is_directory = std::filesystem::is_directory(tile_root, ec);
+        if (ec)
+        {
+          throw std::runtime_error(
+            "TiledTree: cannot inspect tile namespace " + tile_root.string() +
+            ": " + ec.message());
+        }
+        const bool is_empty =
+          is_directory && std::filesystem::is_empty(tile_root, ec);
+        if (ec)
+        {
+          throw std::runtime_error(
+            "TiledTree: cannot inspect tile namespace " + tile_root.string() +
+            ": " + ec.message());
+        }
+        if (!is_empty)
+        {
+          throw std::runtime_error(
+            "TiledTree: tile namespace is not empty; reopening an existing "
+            "tiled tree is not supported");
+        }
+      }
 
       /// @brief Builds a proof engine over the combined resident-tree
       /// (frontier) and full-tile (flushed past) source, and invokes @p fn with

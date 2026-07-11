@@ -583,6 +583,13 @@ invariants:
 > **Immutability invariant.** Never roll back below a full-tile boundary that a
 > flush may have published: `size >= immutable_size`.
 
+`TiledTree` is fresh-only: its configured directory may exist, but the `tile`
+subdirectory must be absent or empty. Tile files do not carry the size, root,
+hash identity, or ownership information needed to reopen a tree safely, so the
+wrapper rejects an existing tile namespace rather than adopting it. The
+lower-level `TileWriter` supports resume for applications that persist and
+validate the matching tree state themselves.
+
 Per flush:
 
 1. `append(...)` new leaf hashes; compute `root()`.

@@ -90,6 +90,15 @@ auto consistency = log.consistency_proof(/*m=*/100, /*n=*/n);
 `TiledTree` can be move-constructed, but it cannot be copied or assigned. Move
 construction keeps its writer bound to the destination tree's tile store.
 
+`TiledTree` always creates a new tiled tree. The configured directory may
+already exist, but its `tile` subdirectory must be absent or empty. Construction
+throws rather than adopting existing tiles because those files do not identify
+the tree that produced them or contain enough state to restore its size and
+root. If your application persists and validates that state separately, use
+the lower-level `TileStore` and `TileWriter` APIs; `TileWriter` intentionally
+resumes existing full tiles and therefore trusts the caller to supply the same
+tree and hash function.
+
 `flush()` is incremental: each call writes only the full tiles that became
 complete since the previous call. Full tiles are immutable: written once after
 all 256 entries are final and never rewritten. The remaining frontier stays in

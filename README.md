@@ -54,6 +54,12 @@ byte-identical to one from `merkle::Tree::path()` and verifies with the same
 
     auto consistency = log.consistency_proof(/*m=*/100, /*n=*/log.size());
 
+`TiledTree` creates a new tiled tree: the configured directory may exist, but
+its `tile` subdirectory must be absent or empty. It deliberately rejects
+existing tile data because tile files alone do not identify or restore the
+tree that produced them. Applications with externally persisted tree state can
+use the lower-level `TileStore` and `TileWriter` APIs to resume a store.
+
 See the [tiled storage guide](doc/tiles-guide.md) for a how-to covering
 flushing, compaction, rollback, proofs, and the lower-level building blocks,
 and [doc/design/tlog-tiles.md](doc/design/tlog-tiles.md) for the full design,
