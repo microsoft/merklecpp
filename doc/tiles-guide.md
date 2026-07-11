@@ -14,6 +14,7 @@ page is a practical how-to.
 ## Contents
 
 - [Requirements and a note on hashing](#requirements-and-a-note-on-hashing)
+- [Thread safety](#thread-safety)
 - [Quick start: `TiledTree`](#quick-start-tiledtree)
 - [Flushing and compaction](#flushing-and-compaction)
 - [Rollback](#rollback)
@@ -43,6 +44,17 @@ page is a practical how-to.
   application's job. The tile hash values are whatever your `HASH_FUNCTION`
   produces; they are not RFC 6962 unless you instantiate your tree with an
   RFC 6962 hash function (not required, and not the goal here).
+
+## Thread safety
+
+The tiled-storage API provides no internal synchronization. Treat every
+`TileStore`, `TileWriter`, `TileHashSource`, `ProofEngine`, `TiledTree`, and
+`EntryBundleWriter` instance as single-threaded.
+
+If an object or store prefix is shared between threads, the caller must
+serialize every operation. This includes methods declared `const`: proof
+generation updates the `TileHashSource` LRU cache. The library deliberately
+does not add locks or otherwise coordinate concurrent readers and writers.
 
 ## Quick start: `TiledTree`
 
@@ -85,9 +97,8 @@ memory until it crosses the next full-tile boundary.
 
 Tile files are written through unique temporary files, synced, then published
 with an atomic replace. On POSIX systems the parent directory is also synced
-after the rename. A wrong-size tile file is not considered durable by the
-writer, so a later flush rewrites it instead of treating mere file existence as
-success.
+after the rename. A wrong-size file at a tile path is not a published tile, so
+the writer does not treat mere file existence as success.
 
 ## Flushing and compaction
 
@@ -113,6 +124,14 @@ merkle::tiles::TiledTree log(cfg);
 - Proofs for dropped leaves are still produced — they are served from the tiles
   and transparently combined with the resident frontier.
 
+`flushed_size()` is the boundary completed successfully at every required tile
+level, and it is the only boundary used for proof reads and compaction.
+`immutable_size()` is the rollback boundary. A flush seals that boundary before
+it starts writing, because an error can occur after a full tile becomes visible.
+If a flush throws, `immutable_size()` may advance while `flushed_size()` does
+not. Keep the same tree contents, correct the I/O failure, and retry `flush()`;
+finalized tiles are reused rather than rewritten.
+
 ```cpp
 log.compact();                      // free memory now
 uint64_t resident_from = log.tree_ref().min_index();
@@ -120,19 +139,19 @@ uint64_t resident_from = log.tree_ref().min_index();
 
 ## Rollback
 
-Tiles are immutable, so you may only roll back entries that have **not yet been
-committed to tiles** (i.e. appended since the last flush). `retract_to`
-enforces this:
+Tiles are immutable, so you may only roll back entries beyond the boundary
+returned by `immutable_size()`. `retract_to` enforces this:
 
 ```cpp
 log.retract_to(index);   // keep leaves [0, index], drop the rest
 ```
 
-- Allowed when the resulting size is `>= flushed_size()` — i.e. only the
-  un-tiled frontier is removed. `flushed_size()` is the full-tile-covered prefix
-  (a multiple of 256), so everything appended since the last full tile can be
-  rolled back.
-- Throws otherwise (rolling back committed entries would leave stale tiles).
+- Allowed when the resulting size is `>= immutable_size()`.
+- Throws otherwise, because a flush may already have published an immutable
+  full tile for that range.
+- After a successful flush, `immutable_size() == flushed_size()`. After an
+  interrupted flush, `immutable_size()` may be larger until the same tree state
+  is flushed successfully.
 - `retract_to` mirrors `merkle::Tree::retract_to`: `index` is the new *last*
   leaf, so the resulting size is `index + 1`.
 

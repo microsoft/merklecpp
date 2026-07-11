@@ -141,6 +141,7 @@ int main()
       expect(ett.size() == 0, "empty: size 0");
       expect(ett.flush().full_written == 0, "empty: flush writes nothing");
       expect(ett.flushed_size() == 0, "empty: flushed size 0");
+      expect(ett.immutable_size() == 0, "empty: immutable size 0");
       expect(ett.compact() == 0, "empty: compact no-op");
       bool ethrew = false;
       try
@@ -174,6 +175,7 @@ int main()
       {
         TiledTree moved(std::move(source));
         expect(moved.flushed_size() == 256, "move: flushed size retained");
+        expect(moved.immutable_size() == 256, "move: immutable size retained");
         expect(
           moved.store_ref().root() == move_cfg.prefix,
           "move: destination store retained");
@@ -451,7 +453,7 @@ int main()
       bool threw = false;
       try
       {
-        rtt.retract_to(700); // size 701 < flushed_size 768
+        rtt.retract_to(700); // size 701 < immutable_size 768
       }
       catch (const std::exception&)
       {
@@ -536,7 +538,7 @@ int main()
 
         // Only the immutable full-tile prefix [0,256) is protected: rolling
         // back into it is refused, while rolling back within the un-tiled
-        // frontier (>= flushed_size()) is allowed.
+        // frontier (>= immutable_size()) is allowed.
         expect(rb.flushed_size() == 256, "rb flushed to full-tile prefix");
 
         bool threw = false;
@@ -559,7 +561,7 @@ int main()
           threw = true;
         }
         expect(threw, "rb retract just below tiled prefix throws");
-        rb.retract_to(255); // size 256 == flushed_size(): drops only frontier
+        rb.retract_to(255); // size 256 == immutable_size(): drops only frontier
         expect(rb.size() == 256, "rb retract to tiled prefix allowed");
       }
 
@@ -580,7 +582,8 @@ int main()
         {
           rb.append(hashes[i]);
         }
-        rb.retract_to(1099); // frontier rollback (>= flushed_size()) is allowed
+        // Frontier rollback (>= immutable_size()) is allowed.
+        rb.retract_to(1099);
         expect(rb.size() == 1100, "rb compact frontier retract ok");
 
         merkle::Tree exp_tree;
@@ -603,6 +606,97 @@ int main()
           threw = true;
         }
         expect(threw, "rb compact retract below tiled throws");
+      }
+
+      // 3d. A failed flush may publish an immutable full tile before a later
+      // write fails. The attempted full-tile boundary is sealed against
+      // rollback, while flushed_size advances only after a successful retry.
+      {
+        TiledTree::Config cfg;
+        cfg.prefix = base / "rb_interrupted";
+        TiledTree interrupted(cfg);
+        for (uint64_t i = 0; i < 512; i++)
+        {
+          interrupted.append(hashes[i]);
+        }
+
+        const fs::path blocker = cfg.prefix / "tile/0/001";
+        fs::create_directories(blocker);
+        bool flush_threw = false;
+        try
+        {
+          interrupted.flush();
+        }
+        catch (const std::exception&)
+        {
+          flush_threw = true;
+        }
+
+        expect(flush_threw, "interrupted flush throws");
+        expect(
+          fs::is_regular_file(cfg.prefix / "tile/0/000"),
+          "interrupted flush published first full tile");
+        expect(
+          interrupted.flushed_size() == 0,
+          "interrupted flush does not advance flushed size");
+        expect(
+          interrupted.immutable_size() == 512,
+          "interrupted flush seals attempted boundary");
+        expect(
+          interrupted.compact() == 0,
+          "interrupted flush does not permit compaction");
+
+        TiledTree recovered(std::move(interrupted));
+        expect(
+          recovered.immutable_size() == 512,
+          "interrupted flush seal survives move");
+
+        bool retract_threw = false;
+        try
+        {
+          recovered.retract_to(0);
+        }
+        catch (const std::exception&)
+        {
+          retract_threw = true;
+        }
+        expect(
+          retract_threw,
+          "interrupted flush rejects rollback across attempted tiles");
+        expect(recovered.size() == 512, "interrupted rollback changes nothing");
+
+        fs::remove(blocker);
+        expect(
+          recovered.flush().full_written == 1,
+          "interrupted flush retry writes only missing tile");
+        expect(
+          recovered.flushed_size() == 512,
+          "interrupted flush retry advances flushed size");
+        expect(
+          recovered.immutable_size() == 512,
+          "interrupted flush retry preserves immutable size");
+        recovered.compact();
+
+        merkle::Tree expected;
+        for (uint64_t i = 0; i < 512; i++)
+        {
+          expected.insert(hashes[i]);
+        }
+        const Hash expected_root = expected.root();
+        expect(
+          recovered.root() == expected_root,
+          "interrupted flush root matches reference");
+        for (const uint64_t i :
+             {(uint64_t)0, (uint64_t)255, (uint64_t)256, (uint64_t)511})
+        {
+          const auto proof = recovered.inclusion_proof(i, 512);
+          expect(
+            *proof == *expected.path(i),
+            "interrupted flush inclusion matches reference");
+          expect(
+            proof->verify(expected_root),
+            "interrupted flush inclusion verifies");
+        }
       }
     }
     std::cout << "rollback: OK" << '\n';

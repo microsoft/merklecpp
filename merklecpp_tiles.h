@@ -37,6 +37,10 @@
 // complete, immutable tiles are stored. Their hash values are produced by the
 // tree's existing HASH_FUNCTION, so tile-derived proofs are byte-identical to
 // those produced by merkle::TreeT (see doc/design/tlog-tiles.md).
+//
+// Thread safety: types in this header do not synchronize access internally.
+// Callers must serialize all operations on shared objects and store prefixes,
+// including const proof operations that update the tile cache.
 
 namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 {
@@ -97,6 +101,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// @tparam HASH_SIZE Size of each hash in bytes
     /// @tparam HASH_FUNCTION The tree's node hash function (carried for use by
     /// later components; tile I/O itself does not hash).
+    /// @warning No internal synchronization is provided. Callers must serialize
+    /// access to a store and to all stores that share its prefix.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -603,6 +609,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// written; they are therefore immutable and written exactly once. Entries
     /// beyond the last full-tile boundary remain in memory until a later flush
     /// completes the next tile.
+    /// @warning No internal synchronization is provided. Callers must serialize
+    /// access to a writer and its store.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -808,6 +816,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// within that full-tile prefix is resolvable; anything reaching into the
     /// incomplete frontier yields false so that a proof builder can fall back
     /// to another source (e.g. an in-memory tree).
+    /// @warning No internal synchronization is provided. Even const operations
+    /// update the internal LRU cache, so callers must serialize all access to a
+    /// shared source.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -937,6 +948,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// HASH_FUNCTION, so an inclusion proof is byte-identical to the one
     /// produced by merkle::TreeT::path()/past_path() and verifies with
     /// PathT::verify().
+    /// @warning Thread safety is inherited from the supplied HashSource. Callers
+    /// must serialize operations when the source is shared.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -1282,6 +1295,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// Config::compact_on_flush, or call compact() explicitly; it never drops
     /// the un-tiled frontier. Proofs are served from the combination of the
     /// resident tree (frontier) and the full tiles (compacted past).
+    /// @warning No internal synchronization is provided. Callers must serialize
+    /// all access to a shared tree, including proof operations.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -1325,7 +1340,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         store(std::move(other.store)),
         writer(store),
         tree(std::move(other.tree)),
-        tiles_size(std::exchange(other.tiles_size, 0))
+        tiles_size(std::exchange(other.tiles_size, 0)),
+        sealed_size(std::exchange(other.sealed_size, 0))
       {}
 
       TiledTreeT& operator=(TiledTreeT&&) = delete;
@@ -1348,11 +1364,22 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         return tree.root();
       }
 
-      /// @brief The number of leaves durably written to full tiles (always a
-      /// multiple of TILE_WIDTH; the incomplete frontier is not tiled).
+      /// @brief The number of leaves covered by the last fully successful flush.
+      /// @note This is always a multiple of TILE_WIDTH. It advances only after
+      /// every required tile level has been written successfully, and controls
+      /// proof reads and compaction.
       [[nodiscard]] uint64_t flushed_size() const
       {
         return tiles_size;
+      }
+
+      /// @brief The rollback seal for ranges a flush may have published.
+      /// @note A flush seals its full-tile boundary before writing. If the write
+      /// fails, this may exceed flushed_size(); keep the same tree contents and
+      /// retry the flush.
+      [[nodiscard]] uint64_t immutable_size() const
+      {
+        return sealed_size;
       }
 
       /// @brief Access to the underlying tree.
@@ -1370,9 +1397,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Writes newly-complete full tiles to disk; compacts only if
       /// Config::compact_on_flush is set.
       /// @return Counts of the full tiles written by this flush
-      /// @note Only full (balanced) tiles are written, so flushed_size()
-      /// advances to the largest multiple of TILE_WIDTH <= size(); the
-      /// incomplete frontier stays resident in memory.
+      /// @note The full-tile boundary is made immutable before any tile write.
+      /// Only after every required tile level succeeds does flushed_size()
+      /// advance to that boundary. On failure, immutable_size() may advance
+      /// while flushed_size() does not; the tree remains resident and the flush
+      /// can be retried without rewriting finalized tiles.
       Stats flush()
       {
         Stats stats;
@@ -1382,10 +1411,16 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           return stats;
         }
 
+        const uint64_t covered = (n / TILE_WIDTH) * TILE_WIDTH;
+        if (covered > sealed_size)
+        {
+          sealed_size = covered;
+        }
+
         stats = writer.write_up_to(n, [this](uint64_t i) -> const Hash& {
           return tree.leaf((size_t)i);
         });
-        tiles_size = (n / TILE_WIDTH) * TILE_WIDTH;
+        tiles_size = covered;
 
         if (config.compact_on_flush)
         {
@@ -1427,17 +1462,17 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Rolls the tree back so that @p index becomes the last leaf,
       /// removing all leaves after it (same semantics as TreeT::retract_to).
       /// @note Only full tiles are immutable: this throws if the resulting size
-      /// would be smaller than flushed_size() (the full-tile prefix). The
-      /// un-tiled frontier (>= flushed_size()) may be freely rolled back.
+      /// would be smaller than immutable_size(). A failed flush may advance
+      /// immutable_size() without advancing flushed_size().
       /// (Retracting the underlying tree directly via tree_ref() bypasses this
       /// guard and can leave stale tiles -- do not do that.)
       void retract_to(size_t index)
       {
-        if ((uint64_t)index + 1 < tiles_size)
+        if ((uint64_t)index + 1 < sealed_size)
         {
           throw std::runtime_error(
-            "TiledTree::retract_to: cannot roll back entries already committed "
-            "to immutable tiles (resulting size < flushed size)");
+            "TiledTree::retract_to: cannot roll back entries sealed for "
+            "immutable tiles (resulting size < immutable size)");
         }
         tree.retract_to(index);
       }
@@ -1476,6 +1511,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       Writer writer;
       Tree tree;
       uint64_t tiles_size = 0;
+      uint64_t sealed_size = 0;
 
       /// @brief Builds a proof engine over the combined resident-tree
       /// (frontier) and full-tile (flushed past) source, and invokes @p fn with
@@ -1503,6 +1539,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// are immutable and written exactly once. The incomplete tail stays with
     /// the application until it grows into a full bundle, mirroring the
     /// un-tiled Merkle frontier.
+    /// @warning No internal synchronization is provided. Callers must serialize
+    /// access to a writer and its store.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
