@@ -1,16 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#include "util.h"
+
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
 #include <map>
-#include <stdexcept>
-
 #include <merklecpp.h>
-
-#include "util.h"
+#include <stdexcept>
 
 constexpr size_t PRINT_HASH_SIZE = 3;
 
@@ -38,7 +37,8 @@ int main()
     for (size_t k = 0; k < num_trees && !timed_out(timeout, test_start_time);
          k++)
     {
-      const auto num_leaves = static_cast<size_t>(1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
+      const auto num_leaves = static_cast<size_t>(
+        1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
       total_leaves += num_leaves;
       auto hashes = make_hashes(num_leaves);
 
@@ -80,10 +80,8 @@ int main()
         mt.serialised_size() != mt2.serialised_size() ||
         mt.size() != mt2.size())
       {
-        std::cout << "before:" << '\n'
-                  << mt.to_string(PRINT_HASH_SIZE) << '\n';
-        std::cout << "after:" << '\n'
-                  << mt2.to_string(PRINT_HASH_SIZE) << '\n';
+        std::cout << "before:" << '\n' << mt.to_string(PRINT_HASH_SIZE) << '\n';
+        std::cout << "after:" << '\n' << mt2.to_string(PRINT_HASH_SIZE) << '\n';
         throw std::runtime_error("tree properties mismatch");
       }
 

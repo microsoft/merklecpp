@@ -1,9 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-project(merklecpp LANGUAGES CXX C ASM)
-
 cmake_minimum_required(VERSION 3.11)
+
+project(merklecpp LANGUAGES CXX C ASM)
 set(CMAKE_CXX_STANDARD 17)
 
 set(MERKLECPP_DIR ${CMAKE_CURRENT_SOURCE_DIR})
@@ -14,6 +14,7 @@ option(EVERCRYPT "enable comparison with EverCrypt Merkle trees" OFF)
 option(OPENSSL "enable OpenSSL" OFF)
 option(TRACE "enable debug traces" OFF)
 option(CLANG_TIDY "enable clang-tidy checks during build" OFF)
+option(LONG_TESTS "enable long-running tests" OFF)
 
 if(CLANG_TIDY)
   find_program(CLANG_TIDY_PROGRAM clang-tidy)

@@ -1,14 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#include "util.h"
+
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
-
 #include <merklecpp.h>
-
-#include "util.h"
 
 constexpr size_t PRINT_HASH_SIZE = 3;
 
@@ -37,8 +36,10 @@ int main()
     for (size_t l = 0; l < num_trees && !timed_out(timeout, test_start_time);
          l++)
     {
-      const auto num_leaves = static_cast<size_t>(1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
-      const auto num_paths = static_cast<size_t>(1 + (std::rand() / (double)RAND_MAX) * max_num_paths);
+      const auto num_leaves = static_cast<size_t>(
+        1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
+      const auto num_paths = static_cast<size_t>(
+        1 + (std::rand() / (double)RAND_MAX) * max_num_paths);
 
       total_leaves += num_leaves;
       total_paths += num_paths;
@@ -55,7 +56,9 @@ int main()
       for (size_t p = 0; p < num_paths && !timed_out(timeout, test_start_time);
            p++)
       {
-        const auto i = static_cast<size_t>((std::rand() / static_cast<double>(RAND_MAX)) * static_cast<double>(num_leaves - 1));
+        const auto i = static_cast<size_t>(
+          (std::rand() / static_cast<double>(RAND_MAX)) *
+          static_cast<double>(num_leaves - 1));
         auto path = mt.path(i);
         if (!path->verify(root))
         {
@@ -65,7 +68,8 @@ int main()
         path->serialise(serialised_path);
         if (path->serialised_size() != serialised_path.size())
         {
-          throw std::runtime_error("serialised_size() != serialised_path.size()");
+          throw std::runtime_error(
+            "serialised_size() != serialised_path.size()");
         }
       }
     }

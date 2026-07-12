@@ -121,7 +121,9 @@ namespace
     mixed_case_hex[0] = 'A';
     mixed_case_hex[1] = 'f';
     const merkle::Hash mixed_case_hash(mixed_case_hex);
-    require(mixed_case_hash.bytes[0] == 0xAF, "mixed-case hash string parsed incorrectly");
+    require(
+      mixed_case_hash.bytes[0] == 0xAF,
+      "mixed-case hash string parsed incorrectly");
 
     require_throws(
       [] { merkle::Hash(std::string(64, 'z')); },
@@ -255,6 +257,18 @@ namespace
       "partial serialised_size should reject retracted to index");
   }
 
+  void test_deserialise_rejects_invalid_flushed_height()
+  {
+    std::vector<uint8_t> buffer;
+    merkle::serialise_uint64_t(0, buffer);
+    merkle::serialise_uint64_t(uint64_t{1} << 63, buffer);
+
+    merkle::Tree tree;
+    require_throws(
+      [&] { tree.deserialise(buffer); },
+      "deserialise should reject impossible flushed subtree heights");
+  }
+
   void test_tree_assignment_and_moves()
   {
     const auto source_hashes = make_hashes(5);
@@ -267,9 +281,14 @@ namespace
 
     merkle::Tree copy_assigned(hash_with_byte(0xEE));
     copy_assigned = source;
-    require(copy_assigned.root() == expected_root, "copy assignment root mismatch");
-    require(copy_assigned.min_index() == expected_min, "copy assignment min mismatch");
-    require(copy_assigned.max_index() == expected_max, "copy assignment max mismatch");
+    require(
+      copy_assigned.root() == expected_root, "copy assignment root mismatch");
+    require(
+      copy_assigned.min_index() == expected_min,
+      "copy assignment min mismatch");
+    require(
+      copy_assigned.max_index() == expected_max,
+      "copy assignment max mismatch");
     require(
       copy_assigned.leaf(expected_min) == source_hashes[expected_min],
       "copy-assigned leaf mismatch");
@@ -312,6 +331,7 @@ int main()
     test_hash_string_parsing();
     test_path_metadata_and_equality();
     test_tree_partial_serialisation_bounds();
+    test_deserialise_rejects_invalid_flushed_height();
     test_tree_assignment_and_moves();
   }
   catch (const std::exception& ex)

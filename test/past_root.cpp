@@ -1,16 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#include "util.h"
+
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
 #include <map>
-#include <stdexcept>
-
 #include <merklecpp.h>
-
-#include "util.h"
+#include <stdexcept>
 
 constexpr size_t PRINT_HASH_SIZE = 3;
 
@@ -80,7 +79,8 @@ int main()
          k++)
     {
       std::map<size_t, merkle::Hash> past_roots;
-      const auto num_leaves = static_cast<size_t>(1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
+      const auto num_leaves = static_cast<size_t>(
+        1 + (std::rand() / (double)RAND_MAX) * max_num_leaves);
       total_leaves += num_leaves;
       auto hashes = make_hashes(num_leaves);
 
@@ -112,8 +112,7 @@ int main()
         if (*pr != kv.second)
         {
           std::cout << pr->to_string(PRINT_HASH_SIZE)
-                    << " != " << kv.second.to_string(PRINT_HASH_SIZE)
-                    << '\n';
+                    << " != " << kv.second.to_string(PRINT_HASH_SIZE) << '\n';
           throw std::runtime_error("past root hash mismatch");
         }
       }

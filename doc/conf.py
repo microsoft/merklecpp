@@ -12,17 +12,18 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath('.'))
+
+sys.path.insert(0, os.path.abspath("."))
 
 
 # -- Project information -----------------------------------------------------
 
-project = 'merklecpp'
-copyright = '2021, Microsoft'
-author = 'Christoph M. Wintersteiger'
+project = "merklecpp"
+copyright = "2021, Microsoft"
+author = "Christoph M. Wintersteiger"
 
 # The full version, including alpha/beta/rc tags
-release = '1.0.0'
+release = "1.0.0"
 
 
 # -- General configuration ---------------------------------------------------
@@ -31,12 +32,12 @@ release = '1.0.0'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-  "breathe",
-  "sphinx.ext.githubpages",
+    "breathe",
+    "sphinx.ext.githubpages",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -49,17 +50,15 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'pydata_sphinx_theme'
+html_theme = "pydata_sphinx_theme"
 
-# Add any paths that contain custom static files (such as style sheets) here,
-# relative to this directory. They are copied after the builtin static files,
-# so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+# Add custom static paths here when the documentation needs local assets.
+html_static_path = []
 
 # Setup the breathe extension
 breathe_projects = {"merklecpp": "xml"}
 breathe_default_project = "merklecpp"
-breathe_domain_by_extension = {"h" : "cpp"}
+breathe_domain_by_extension = {"h": "cpp"}
 
 
 def setup(self):

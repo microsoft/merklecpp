@@ -41,9 +41,9 @@ int main()
         std::cout << "P" << std::setw(2) << std::setfill('0') << i << ": "
                   << path->to_string(PRINT_HASH_SIZE) << " " << '\n';
         if (!path->verify(root))
-          {
-            throw std::runtime_error("root hash mismatch");
-          }
+        {
+          throw std::runtime_error("root hash mismatch");
+        }
         const std::vector<uint8_t> chk = *path;
       }
 
@@ -52,9 +52,9 @@ int main()
       mt.serialise(buffer);
       merkle::Tree dmt(buffer);
       if (mt.root() != dmt.root())
-        {
-          throw std::runtime_error("root hash mismatch");
-        }
+      {
+        throw std::runtime_error("root hash mismatch");
+      }
 
       std::cout << '\n';
     }
@@ -74,7 +74,6 @@ int main()
       /// SNIPPET_END: OpenSSL-SHA256
     }
 #endif
-
   }
   catch (std::exception& ex)
   {
