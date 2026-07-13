@@ -1,10 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+cmake_minimum_required(VERSION 3.12)
+
 project(merklecpp LANGUAGES CXX C ASM)
 
-cmake_minimum_required(VERSION 3.11)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(MERKLECPP_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -23,6 +25,7 @@ if(CLANG_TIDY)
 endif()
 
 add_library(merklecpp INTERFACE)
+target_compile_features(merklecpp INTERFACE cxx_std_20)
 target_include_directories(merklecpp INTERFACE .)
 
 if(TRACE)

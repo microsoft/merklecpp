@@ -10,9 +10,9 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <iterator>
@@ -78,28 +78,24 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// encoded as "x001/x234/067" and 5 as "005".
     static inline std::string encode_tile_index(uint64_t n)
     {
-      std::vector<std::string> parts;
-      char buf[8];
+      std::vector<uint16_t> parts;
       do
       {
-        std::snprintf(buf, sizeof(buf), "%03u", (unsigned)(n % 1000));
-        parts.emplace_back(buf);
+        parts.emplace_back(static_cast<uint16_t>(n % 1000));
         n /= 1000;
       } while (n > 0);
 
       std::string r;
+      r.reserve(parts.size() * 5);
       for (size_t i = 0; i < parts.size(); i++)
       {
-        const std::string& part = parts[parts.size() - 1 - i];
-        if (i != 0)
-        {
-          r += "/";
-        }
-        if (i + 1 < parts.size())
-        {
-          r += "x";
-        }
-        r += part;
+        const auto part = parts[parts.size() - 1 - i];
+        std::format_to(
+          std::back_inserter(r),
+          "{}{}{:03}",
+          i == 0 ? "" : "/",
+          i + 1 < parts.size() ? "x" : "",
+          part);
       }
       return r;
     }
@@ -176,8 +172,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         const std::string& hash_algorithm_short_name)
       {
         validate_hash_algorithm_short_name(hash_algorithm_short_name);
-        return hash_algorithm_short_name + "-" + std::to_string(TILE_WIDTH) +
-          "w";
+        return std::format("{}-{}w", hash_algorithm_short_name, TILE_WIDTH);
       }
 
       /// @brief Encodes a tile index (see encode_tile_index).
@@ -189,15 +184,19 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief The filesystem path of a tile.
       [[nodiscard]] std::filesystem::path tile_path(const TileRef& ref) const
       {
-        return prefix /
-          ("tile/" + std::to_string((unsigned)ref.level) + "/" +
-           encode_tile_index(ref.index));
+        const auto relative_path = std::format(
+          "tile/{}/{}",
+          static_cast<unsigned>(ref.level),
+          encode_tile_index(ref.index));
+        return prefix / relative_path;
       }
 
       /// @brief The filesystem path of an entry bundle.
       [[nodiscard]] std::filesystem::path entries_path(uint64_t index) const
       {
-        return prefix / ("tile/entries/" + encode_tile_index(index));
+        const auto relative_path =
+          std::format("tile/entries/{}", encode_tile_index(index));
+        return prefix / relative_path;
       }
 
       /// @brief Whether a full tile exists on disk.
@@ -479,7 +478,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         std::ifstream f(path, std::ios::binary);
         if (!f.good())
         {
-          throw std::runtime_error("cannot open file: " + path.string());
+          throw std::runtime_error(
+            std::format("cannot open file: {}", path.string()));
         }
         return {
           std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
@@ -516,7 +516,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         const std::filesystem::path& requested_directory)
       {
         const auto directory = directory_or_dot(requested_directory);
-        if (durable_directory_entries.count(directory) != 0)
+        if (durable_directory_entries.contains(directory))
         {
           return;
         }
@@ -531,9 +531,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         const bool exists = std::filesystem::exists(directory, ec);
         if (ec)
         {
-          throw std::runtime_error(
-            "cannot inspect directory " + directory.string() + ": " +
-            ec.message());
+          throw std::runtime_error(std::format(
+            "cannot inspect directory {}: {}",
+            directory.string(),
+            ec.message()));
         }
         if (exists)
         {
@@ -541,15 +542,16 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
             std::filesystem::is_directory(directory, ec);
           if (ec)
           {
-            throw std::runtime_error(
-              "cannot inspect directory " + directory.string() + ": " +
-              ec.message());
+            throw std::runtime_error(std::format(
+              "cannot inspect directory {}: {}",
+              directory.string(),
+              ec.message()));
           }
           if (!is_directory)
           {
-            throw std::runtime_error(
-              "cannot create directory " + directory.string() +
-              ": path exists and is not a directory");
+            throw std::runtime_error(std::format(
+              "cannot create directory {}: path exists and is not a directory",
+              directory.string()));
           }
         }
         else
@@ -557,15 +559,20 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           const bool created = std::filesystem::create_directory(directory, ec);
           if (ec)
           {
-            throw std::runtime_error(
-              "cannot create directory " + directory.string() + ": " +
-              ec.message());
+            throw std::runtime_error(std::format(
+              "cannot create directory {}: {}",
+              directory.string(),
+              ec.message()));
           }
           if (!created && !std::filesystem::is_directory(directory, ec))
           {
             throw std::runtime_error(
-              "cannot create directory " + directory.string() +
-              (ec ? ": " + ec.message() : ""));
+              ec ?
+                std::format(
+                  "cannot create directory {}: {}",
+                  directory.string(),
+                  ec.message()) :
+                std::format("cannot create directory {}", directory.string()));
           }
         }
 
@@ -587,7 +594,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       void sync_directory_contents(const std::filesystem::path& directory)
       {
         const auto path = directory_or_dot(directory);
-        if (durable_directory_contents.count(path) != 0)
+        if (durable_directory_contents.contains(path))
         {
           return;
         }
@@ -627,9 +634,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         const auto stamp =
           std::chrono::steady_clock::now().time_since_epoch().count();
         std::filesystem::path tmp = path;
-        tmp += ".tmp." + std::to_string(process_id()) + "." +
-          std::to_string((uint64_t)stamp) + "." +
-          std::to_string(counter.fetch_add(1, std::memory_order_relaxed));
+        tmp += std::format(
+          ".tmp.{}.{}.{}",
+          process_id(),
+          (uint64_t)stamp,
+          counter.fetch_add(1, std::memory_order_relaxed));
         return tmp;
       }
 
@@ -642,13 +651,27 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 #endif
       }
 
-      static std::string system_error_message(const std::string& what)
+      template <typename... Args>
+      static std::string system_error_message(
+        std::format_string<Args...> format_string, Args&&... args)
       {
 #ifdef _WIN32
-        return what + ": error " + std::to_string(GetLastError());
+        const auto error = GetLastError();
 #else
-        return what + ": " + std::strerror(errno);
+        const auto error = errno;
 #endif
+        std::string message;
+        std::format_to(
+          std::back_inserter(message),
+          format_string,
+          std::forward<Args>(args)...);
+#ifdef _WIN32
+        std::format_to(std::back_inserter(message), ": error {}", error);
+#else
+        std::format_to(
+          std::back_inserter(message), ": {}", std::strerror(error));
+#endif
+        return message;
       }
 
       static void require_write_progress(
@@ -656,7 +679,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       {
         if (written == 0)
         {
-          throw std::runtime_error("short write: " + path.string());
+          throw std::runtime_error(
+            std::format("short write: {}", path.string()));
         }
       }
 
@@ -674,7 +698,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           nullptr);
         if (handle == INVALID_HANDLE_VALUE)
         {
-          throw std::runtime_error("cannot open file: " + path.string());
+          throw std::runtime_error(
+            std::format("cannot open file: {}", path.string()));
         }
         bool close_handle = true;
         try
@@ -690,7 +715,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
                   handle, bytes.data() + written, chunk, &done, nullptr))
             {
               throw std::runtime_error(
-                system_error_message("error writing file " + path.string()));
+                system_error_message("error writing file {}", path.string()));
             }
             require_write_progress((size_t)done, path);
             written += done;
@@ -698,12 +723,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           if (!FlushFileBuffers(handle))
           {
             throw std::runtime_error(
-              system_error_message("error syncing file " + path.string()));
+              system_error_message("error syncing file {}", path.string()));
           }
           if (!CloseHandle(handle))
           {
             throw std::runtime_error(
-              system_error_message("error closing file " + path.string()));
+              system_error_message("error closing file {}", path.string()));
           }
           close_handle = false;
         }
@@ -724,7 +749,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         if (fd < 0)
         {
           throw std::runtime_error(
-            system_error_message("cannot open file " + path.string()));
+            system_error_message("cannot open file {}", path.string()));
         }
         try
         {
@@ -740,7 +765,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
                 continue;
               }
               throw std::runtime_error(
-                system_error_message("error writing file " + path.string()));
+                system_error_message("error writing file {}", path.string()));
             }
             require_write_progress((size_t)done, path);
             written += (size_t)done;
@@ -748,13 +773,13 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           if (::fsync(fd) != 0)
           {
             throw std::runtime_error(
-              system_error_message("error syncing file " + path.string()));
+              system_error_message("error syncing file {}", path.string()));
           }
           if (::close(fd) != 0)
           {
             fd = -1;
             throw std::runtime_error(
-              system_error_message("error closing file " + path.string()));
+              system_error_message("error closing file {}", path.string()));
           }
           fd = -1;
         }
@@ -779,17 +804,18 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
               MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
         {
           throw std::runtime_error(system_error_message(
-            "cannot rename temp file " + tmp.string() + " to " +
-            path.string()));
+            "cannot rename temp file {} to {}", tmp.string(), path.string()));
         }
 #else
         std::error_code ec;
         std::filesystem::rename(tmp, path, ec);
         if (ec)
         {
-          throw std::runtime_error(
-            "cannot rename temp file " + tmp.string() + " to " + path.string() +
-            ": " + ec.message());
+          throw std::runtime_error(std::format(
+            "cannot rename temp file {} to {}: {}",
+            tmp.string(),
+            path.string(),
+            ec.message()));
         }
 #endif
       }
@@ -818,19 +844,19 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         if (fd < 0)
         {
           throw std::runtime_error(
-            system_error_message("cannot open directory " + path.string()));
+            system_error_message("cannot open directory {}", path.string()));
         }
         if (::fsync(fd) != 0)
         {
           const std::string message =
-            system_error_message("error syncing directory " + path.string());
+            system_error_message("error syncing directory {}", path.string());
           ::close(fd);
           throw std::runtime_error(message);
         }
         if (::close(fd) != 0)
         {
           throw std::runtime_error(
-            system_error_message("error closing directory " + path.string()));
+            system_error_message("error closing directory {}", path.string()));
         }
 #else
         (void)path;

@@ -9,7 +9,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <format>
 #include <functional>
+#include <iterator>
 #include <list>
 #include <memory>
 #include <sstream>
@@ -118,21 +120,21 @@ namespace merkle
     uint8_t bytes[SIZE];
 
     /// @brief Constructs a Hash with all bytes set to zero
-    HashT<SIZE>()
+    HashT()
     {
       std::fill(bytes, bytes + SIZE, 0);
     }
 
     /// @brief Constructs a Hash from a byte buffer
     /// @param bytes Buffer with hash value
-    HashT<SIZE>(const uint8_t* bytes)
+    HashT(const uint8_t* bytes)
     {
       std::copy(bytes, bytes + SIZE, this->bytes);
     }
 
     /// @brief Constructs a Hash from a string
     /// @param s String to read the hash value from
-    HashT<SIZE>(const std::string& s)
+    HashT(const std::string& s)
     {
       if (s.length() != 2 * SIZE)
       {
@@ -153,7 +155,7 @@ namespace merkle
 
     /// @brief Deserialises a Hash from a vector of bytes
     /// @param bytes Vector to read the hash value from
-    HashT<SIZE>(const std::vector<uint8_t>& bytes)
+    HashT(const std::vector<uint8_t>& bytes)
     {
       if (bytes.size() < SIZE)
       {
@@ -165,7 +167,7 @@ namespace merkle
     /// @brief Deserialises a Hash from a vector of bytes
     /// @param bytes Vector to read the hash value from
     /// @param position Position of the first byte in @p bytes
-    HashT<SIZE>(const std::vector<uint8_t>& bytes, size_t& position)
+    HashT(const std::vector<uint8_t>& bytes, size_t& position)
     {
       if (bytes.size() - position < SIZE)
       {
@@ -176,7 +178,7 @@ namespace merkle
 
     /// @brief Deserialises a Hash from an array of bytes
     /// @param bytes Array to read the hash value from
-    HashT<SIZE>(const std::array<uint8_t, SIZE>& bytes)
+    HashT(const std::array<uint8_t, SIZE>& bytes)
     {
       std::copy(bytes.data(), bytes.data() + SIZE, this->bytes);
     }
@@ -206,14 +208,20 @@ namespace merkle
       size_t num_bytes = SIZE, bool lower_case = true) const
     {
       size_t const num_chars = 2 * num_bytes;
-      std::string r(num_chars, '_');
+      std::string r;
+      r.reserve(num_chars);
       for (size_t i = 0; i < num_bytes; i++)
       {
-        snprintf(
-          const_cast<char*>(r.data() + 2 * i),
-          num_chars + 1 - 2 * i,
-          lower_case ? "%02x" : "%02X",
-          bytes[i]);
+        if (lower_case)
+        {
+          std::format_to(
+            std::back_inserter(r), "{:02x}", static_cast<unsigned>(bytes[i]));
+        }
+        else
+        {
+          std::format_to(
+            std::back_inserter(r), "{:02X}", static_cast<unsigned>(bytes[i]));
+        }
       }
       return r;
     }
@@ -1916,8 +1924,10 @@ namespace merkle
       MERKLECPP_TRACE({
         std::string nodes;
         for (size_t i = 0; i < insertion_stack.size(); i++)
-          nodes +=
-            " " + insertion_stack.at(i).n->hash.to_string(TRACE_HASH_SIZE);
+          std::format_to(
+            std::back_inserter(nodes),
+            " {}",
+            insertion_stack.at(i).n->hash.to_string(TRACE_HASH_SIZE));
         MERKLECPP_TOUT << "  X " << (complete ? "complete" : "continue") << ":"
                        << nodes << std::endl;
       });
@@ -2104,7 +2114,7 @@ namespace merkle
       EVP_Digest(&block[0], sizeof(block), out.bytes, nullptr, md, nullptr);
     if (rc != 1)
     {
-      throw std::runtime_error("EVP_Digest failed: " + std::to_string(rc));
+      throw std::runtime_error(std::format("EVP_Digest failed: {}", rc));
     }
   }
 
@@ -2126,7 +2136,7 @@ namespace merkle
       EVP_Digest(&block[0], sizeof(block), out.bytes, nullptr, md, nullptr);
     if (rc != 1)
     {
-      throw std::runtime_error("EVP_Digest failed: " + std::to_string(rc));
+      throw std::runtime_error(std::format("EVP_Digest failed: {}", rc));
     }
   }
 
@@ -2148,7 +2158,7 @@ namespace merkle
       EVP_Digest(&block[0], sizeof(block), out.bytes, nullptr, md, nullptr);
     if (rc != 1)
     {
-      throw std::runtime_error("EVP_Digest failed: " + std::to_string(rc));
+      throw std::runtime_error(std::format("EVP_Digest failed: {}", rc));
     }
   }
 

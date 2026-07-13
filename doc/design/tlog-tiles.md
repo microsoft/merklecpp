@@ -225,7 +225,7 @@ Rooted below a configurable `prefix` directory on local disk:
 ```
 encode_tile_index(N):
    parts = []
-   do { parts.push_front(printf("%03d", N % 1000)); N /= 1000 } while (N > 0)
+   do { parts.push_front(format("{:03}", N % 1000)); N /= 1000 } while (N > 0)
    for each part except the last: prepend 'x'
    return join(parts, "/")
 ```
