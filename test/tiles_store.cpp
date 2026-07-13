@@ -195,6 +195,101 @@ int main()
       TileStoreProbe::check_write_progress(1);
     }
 
+    // 2d. A failed destination-directory sync after rename is retried before
+    // another already-open writer trusts the visible tile.
+    {
+      const fs::path prefix = dir / "retry_destination";
+      const fs::path destination = prefix / "tile" / "0";
+      const auto fault = std::make_shared<SyncFault>();
+      fault->fail_path = destination;
+      constexpr uint64_t growing_size = (uint64_t)merkle::tiles::TILE_WIDTH * 2;
+      const auto growing = make_hashes((size_t)growing_size);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& {
+        return growing[i];
+      };
+
+      FaultInjectingTileStore retry_store(prefix, fault);
+      merkle::tiles::TileWriter retry_writer(retry_store);
+      expect(
+        retry_writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at)
+            .full_written == 1,
+        "first writer publishes initial tile");
+
+      fault->matching_calls_before_failure = 1;
+      fault->failures_remaining = 1;
+      {
+        FaultInjectingTileStore failed_store(prefix, fault);
+        merkle::tiles::TileWriter writer(failed_store);
+        bool sync_threw = false;
+        try
+        {
+          (void)writer.write_up_to(growing_size, leaf_at);
+        }
+        catch (const std::exception&)
+        {
+          sync_threw = true;
+        }
+        expect(sync_threw, "destination sync failure propagated");
+        expect(
+          failed_store.has_full_tile(0, 1),
+          "renamed tile remains visible after sync failure");
+      }
+
+      expect(
+        retry_writer.write_up_to(growing_size, leaf_at).full_written == 0,
+        "retry certifies visible tile without rewriting");
+      expect(
+        fault->call_count(destination) == 4,
+        "destination directory sync retried");
+      const std::vector<Hash> second(
+        growing.begin() + (std::ptrdiff_t)merkle::tiles::TILE_WIDTH,
+        growing.end());
+      expect(
+        retry_store.read_tile(TileRef{0, 1}) == second,
+        "retried tile remains intact");
+    }
+
+    // 2e. A failed ancestor-parent sync is retried even though the directory
+    // created before the failure remains visible.
+    {
+      const fs::path prefix = dir / "retry_ancestor";
+      const auto fault = std::make_shared<SyncFault>();
+      fault->fail_path = prefix;
+      fault->failures_remaining = 1;
+
+      {
+        FaultInjectingTileStore failed_store(prefix, fault);
+        merkle::tiles::TileWriter writer(failed_store);
+        const auto leaf_at = [&](uint64_t i) -> const Hash& { return full[i]; };
+        bool sync_threw = false;
+        try
+        {
+          (void)writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at);
+        }
+        catch (const std::exception&)
+        {
+          sync_threw = true;
+        }
+        expect(sync_threw, "ancestor sync failure propagated");
+        expect(
+          fs::is_directory(prefix / "tile"),
+          "directory remains visible after parent sync failure");
+        expect(
+          !failed_store.has_full_tile(0, 0),
+          "tile not published before ancestor sync succeeds");
+      }
+
+      FaultInjectingTileStore retry_store(prefix, fault);
+      merkle::tiles::TileWriter retry_writer(retry_store);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& { return full[i]; };
+      expect(
+        retry_writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at)
+            .full_written == 1,
+        "retry writes tile after certifying existing ancestor");
+      expect(fault->call_count(prefix) == 2, "ancestor parent sync retried");
+      expect(retry_store.has_full_tile(0, 0), "retry publishes full tile");
+    }
+
     // 3a. Full tile byte round-trip.
     const TileRef full_ref{0, 0};
     store.write_tile(full_ref, full);

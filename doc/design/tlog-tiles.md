@@ -319,6 +319,62 @@ public:
 - `TileStoreT` does not synchronize access. Callers must serialize all
   operations on a store and across stores that share a prefix.
 
+### 6.4 Write path — `TileWriterT` (progressive, on compaction)
+
+```cpp
+class TileWriterT {
+public:
+  explicit TileWriterT(TileStoreT& store);
+
+  // Persist all newly-complete full tiles (all levels 0..63). Incremental:
+  // only writes tiles not already present. Higher levels are always rolled up,
+  // since proof generation relies on them.
+  // `leaf_at` supplies level-0 leaf hashes for [0, size) (e.g. Tree::leaf).
+  void write_up_to(uint64_t size,
+                   const std::function<const Hash&(uint64_t)>& leaf_at);
+};
+```
+
+Algorithm (`write_up_to`):
+
+```
+for L = 0, 1, 2, ... while entries_L = size >> (8*L) is > 0:
+    full_L = entries_L / 256
+    for N in [first_unwritten_full(L) .. full_L):          # new full tiles only
+        entries = [ entry(L, N*256 + i) for i in 0..255 ]
+        store.write_tile({L, N}, entries)
+    # rightmost incomplete entries are not written; they stay in memory until
+    # they complete a full tile
+
+entry(L, g):
+   if L == 0: return leaf_at(g)
+   else:      return perfect_root( store.read_tile({L-1, g}) )  # 256→1
+```
+
+- Level 0 reads leaf hashes via the supplied `leaf_at` (e.g. `Tree::leaf(i)`),
+  which exist **before** flushing. Higher levels roll up from the level-0 tiles
+  just written — independent of tree internals and robust to prior flushes.
+- `first_unwritten_full(L)` is cached in each writer. A fresh writer reconstructs
+  it with a bounded, ordered scan of the contiguous prefix up to `full_L`.
+  Scanning in order is required because malformed or externally created files
+  can make raw file presence non-monotonic.
+
+Compaction integration (the "on compaction" story):
+
+```cpp
+// In TiledTreeT::flush(): seal, write durable full tiles, THEN free memory.
+uint64_t covered = (size / TILE_WIDTH) * TILE_WIDTH;       // full level-0 coverage
+immutable_size = max(immutable_size, covered);             // before any write
+writer.write_up_to(size, [&](uint64_t i) -> const Hash& { return tree.leaf(i); });
+flushed_size = covered;                                    // after all levels succeed
+// compact() retains the last covered leaf (when any) and the entire frontier.
+```
+
+If `write_up_to` throws, `immutable_size` remains advanced because a full tile
+may already be visible, while `flushed_size` remains at its previous successful
+boundary. The in-memory tree is not compacted. The caller fixes the I/O error
+and retries with the same tree state; existing finalized tiles are reused.
+
 ### 6.8 Entry bundles (optional)
 
 merklecpp never sees raw entries (callers insert pre-computed leaf hashes), so
@@ -328,6 +384,27 @@ entry bundles are an **application-owned** add-on, included for completeness:
   256 per full bundle (full bundles only).
 - The application is responsible for the leaf-hash derivation it uses (e.g.
   `leaf_hash = H(entry)`); merklecpp stores whatever leaf hash is inserted.
+- An `EntryBundleWriterT` mirrors `TileWriterT`: it writes full bundles on
+  256-entry boundaries only; the incomplete tail stays with the application.
+  Marked optional/secondary.
+
+---
+
+## 9. Worked examples (used as test vectors)
+
+**Size 256:** exactly one full level-0 tile (`tile/0/000`). No level-1 tile (its
+single entry is the un-tiled frontier root, kept in memory).
+
+**Size 70 000:** 273 full level-0 tiles (`covered = 69 888`) + one full level-1
+tile (`tile/1/000`, rolling up level-0 tiles 0..255) = **274 full tiles**. The
+incomplete frontier at every level is not written; the remaining 112 leaves and
+the higher-level roll-ups stay in the in-memory tree.
+These exact counts are asserted in tests.
+
+**Index encoding:** `1234067 → x001/x234/067`; `1000 → x001/000`; `255 → 255`.
+
+---
+
 ## 10. Implementation plan
 
 Each phase is independently testable; phases 1–4 require **no** core changes.
