@@ -296,7 +296,8 @@ namespace merkle {
 namespace tiles {
 
 static constexpr uint16_t TILE_HEIGHT = 8;
-static constexpr uint16_t TILE_WIDTH  = 256;   // 2^TILE_HEIGHT
+static constexpr uint16_t TILE_WIDTH =
+  uint16_t{1U << TILE_HEIGHT};
 
 template <size_t HASH_SIZE,
           void HASH_FUNCTION(const HashT<HASH_SIZE>&,

@@ -55,7 +55,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     static constexpr uint16_t TILE_HEIGHT = 8;
 
     /// @brief Number of hashes in a full tile (2**TILE_HEIGHT).
-    static constexpr uint16_t TILE_WIDTH = 256;
+    static constexpr uint16_t TILE_WIDTH = uint16_t{1U << TILE_HEIGHT};
 
     namespace detail
     {
