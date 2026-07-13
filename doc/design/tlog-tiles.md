@@ -39,8 +39,9 @@ combination of the two.
 
 Partial tiles are out of scope: merklecpp never emits or reads them. During a
 flush, a tile becomes eligible only after all 256 entries are complete and
-final. Entries beyond that boundary remain in memory. Once published, a full
-tile is immutable and is never rewritten.
+final. Entries beyond that boundary remain in memory. Higher-level writers
+treat a published full tile as immutable; the low-level store permits atomic
+replacement only for repair and idempotent publication.
 
 ### Thread-safety policy
 
@@ -96,7 +97,7 @@ A tiled log exposes the Merkle tree as a set of static resources:
   on-disk tile set is always a full-tile prefix.
 - **Entry bundles** at `<prefix>/tile/entries/<N>`: big-endian `uint16`
   length-prefixed raw entries, 256 per full bundle. (See
-  [section 6.8](#68-entry-bundles-optional).)
+  [section 6.3](#63-entry-bundles-optional).)
 - **Pruning**: a log keeps a *minimum index*; tiles/bundles whose end index is
   `≤ minimum index` may be denied. This maps cleanly onto merklecpp's
   `flush_to()` / `min_index()`.
@@ -194,7 +195,8 @@ mth_range(a, b):                         // MTH(D[a:b]); a aligned to 2^ceil(log
 
 `mth_range` falls back to splitting when a perfect subtree is not directly
 resolvable from the chosen source; the recursion always bottoms out at resolvable
-pieces (see the [combined-source invariant](#7-progressive-production--compaction)).
+pieces supplied by the tile or memory source in the later combined-source
+phase.
 
 ---
 
@@ -273,16 +275,16 @@ types remain in namespace `merkle::tiles`, templated on
 | Component            | Responsibility                                                        |
 |----------------------|-----------------------------------------------------------------------|
 | PAL helpers          | exclusive file creation, replacement, and durability primitives      |
-| `TileCoord`          | pure index math + path encoding (no I/O)                              |
+| `TileRef` / encoder  | identify full tiles and encode their indices (no I/O)                |
 | `TileStoreT`         | read/write tile files on a local filesystem                          |
 | `TileWriterT`        | compute & persist newly-complete full tiles (write path)             |
 | `HashSource` impls   | resolve `subtree_root` from tiles, memory, or both                   |
 | `ProofEngineT`       | `mth_range`, `inclusion_proof`, `consistency_proof`, verifiers       |
 | `TiledTreeT`         | convenience wrapper: `append` / `flush` / `prove*` / compaction      |
 
-The **only** (optional) change to the core header is a small, read-only,
-**non-hashing** accessor (`subtree_root`) used by `MemoryHashSource`; see
-[§6.2](#62-optional-core-accessor-non-hashing).
+The storage aliases use read-only compile-time metadata exposed by the core
+types (`HashT::size_bytes` and `TreeT::hash_function`). A future combined
+memory/tile source may also require a non-hashing subtree accessor.
 
 ---
 
@@ -303,6 +305,7 @@ namespace tiles {
 static constexpr uint16_t TILE_HEIGHT = 8;
 static constexpr uint16_t TILE_WIDTH =
   uint16_t{1U << TILE_HEIGHT};
+static constexpr uint8_t MAX_TILE_LEVEL = 63;
 
 template <size_t HASH_SIZE,
           void HASH_FUNCTION(const HashT<HASH_SIZE>&,
@@ -328,7 +331,7 @@ and it only ever combines two `HASH_SIZE`-byte hashes — so the default
 introduced**. Convenience aliases derive both template arguments from the core
 tree type, so hash sizes and functions have one source of truth.
 
-### 6.3 `TileStoreT` — disk I/O
+### 6.2 `TileStoreT` — disk I/O
 
 ```cpp
 struct TileRef { uint8_t level; uint64_t index; }; // full tiles only
@@ -353,21 +356,24 @@ public:
 };
 ```
 
-- Writes use a unique temporary file, sync the file contents, publish with an
-  atomic replace, and on POSIX sync every newly created directory link plus the
-  destination directory after the rename. Before reusing a visible file, the
-  writer re-confirms the directory chain and destination directory, so a retry
-  repeats a failed sync even if directory creation or rename is already
-  visible. A wrong-size tile is not treated as a durable full tile and is
-  rewritten by the writer.
-- Full tiles are written once and never rewritten (immutability), so every file
-  under `<algorithm>-256w/tile/<L>/` is write-once.
-- A small in-process cache of recently read tiles avoids repeated I/O during
-  proof generation.
+- Writes use a unique temporary file, sync the file contents (`F_FULLFSYNC`
+  where supported on Apple platforms, with an `fsync` fallback), publish with
+  an atomic replace, and on POSIX sync every newly created directory link plus
+  the destination directory after the rename. Before reusing a visible file, a
+  higher-level writer re-confirms the directory chain and destination
+  directory, so a retry repeats a failed sync even if directory creation or
+  rename is already visible. A wrong-size tile is not treated as a durable full
+  tile and can be repaired by a later write.
+- Higher-level writers enforce full-tile immutability. The low-level
+  `TileStoreT` publication primitive deliberately permits atomic replacement
+  for repair and idempotent concurrent publication, and trusts callers not to
+  replace a tile with different content.
+- The planned `TileHashSource` owns the read cache used during proof
+  generation; `TileStoreT` itself does not cache reads.
 - `TileStoreT` does not synchronize access. Callers must serialize all
   operations on a store and across stores that share a prefix.
 
-### 6.8 Entry bundles (optional)
+### 6.3 Entry bundles (optional)
 
 merklecpp never sees raw entries (callers insert pre-computed leaf hashes), so
 entry bundles are an **application-owned** add-on, included for completeness:
@@ -376,25 +382,32 @@ entry bundles are an **application-owned** add-on, included for completeness:
   length-prefixed entries, 256 per full bundle (full bundles only).
 - The application is responsible for the leaf-hash derivation it uses (e.g.
   `leaf_hash = H(entry)`); merklecpp stores whatever leaf hash is inserted.
-## 10. Implementation plan
 
-Each phase is independently testable; phases 1–4 require **no** core changes.
+## 7. Implementation plan
+
+This PR implements Phases 0 and 1 plus the standalone entry-bundle codec and
+storage primitives. The remaining phases are delivered by the later PRs in the
+stack.
+
+Each phase is independently testable. Phases 1–3 require no further core
+changes; Phase 4 may add one non-hashing accessor.
 
 **Phase 0 — Scaffolding.** Add `merklecpp_tiles.h` (includes `merklecpp.h`) and
 the internal `merklecpp_pal.h`, `merkle::tiles` namespace, geometry
 constants, default aliases. Wire a new test group in `test/CMakeLists.txt`
 following `add_merklecpp_test`.
 
-**Phase 1 — Coordinates & store.** `TileCoord`/`encode_index`, `TileRef`,
+**Phase 1 — Coordinates & store.** `TileRef`/`encode_tile_index`,
 `TileStoreT` (path building, atomic `write_tile`, `read_tile`) and PAL-backed
 exclusive temporary-file creation. *Tests:* index-encoding vectors;
 algorithm-qualified roots; SHA-256 and SHA-384 both use 256-hash tiles; tile
 byte round-trip; existing-file and symlink collision rejection.
 
 **Phase 2 — Write path.** `TileWriterT::write_up_to` (level-0 from `leaf_at`,
-roll-ups, incremental cursor; full tiles only — the frontier is never tiled).
-*Tests:* sizes 256 & 70 000 produce exactly the expected full-tile set;
-full-tile immutability (re-running writes nothing new).
+roll-ups, incremental cursor) and `EntryBundleWriterT` (incremental full
+bundles); full resources only — the frontier is never tiled. *Tests:* sizes 256
+& 70 000 produce exactly the expected full-tile set; full-resource
+immutability (re-running writes nothing new).
 
 **Phase 3 — Hash sources & proof engine.** `TileHashSource`, `mth_range`,
 `ProofEngineT::root/inclusion_proof/consistency_proof/verify_consistency`.
@@ -409,8 +422,8 @@ with `flush_to`). *Tests:* build N leaves, flush, then prove
 inclusion for a **flushed** index and a **resident** index against a non-flushed
 reference tree's root; consistency across a flush boundary.
 
-**Phase 5 — Optional entry bundles** (`BundleWriter`) and docs (README "Usage"
-snippet, link this design doc, add the public and PAL headers to Doxygen inputs).
+**Phase 5 — User documentation and performance coverage.** Add a README usage
+example, link this design, and benchmark tile-backed operation.
 
 Deliverables: `merklecpp_tiles.h`; `merklecpp_pal.h`; `test/tiles_*.cpp`;
 CMake wiring; optional one-method core addition; README/docs updates.

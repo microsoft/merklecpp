@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -18,6 +19,7 @@
 #include <merklecpp.h>
 #include <merklecpp_pal.h>
 #include <merklecpp_tiles.h>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -52,7 +54,7 @@ static void expect_throws(
   {
     fn();
   }
-  catch (const std::exception&)
+  catch (const std::runtime_error&)
   {
     threw = true;
   }
@@ -66,7 +68,7 @@ static std::string expect_throws_message(
   {
     fn();
   }
-  catch (const std::exception& ex)
+  catch (const std::runtime_error& ex)
   {
     return ex.what();
   }
@@ -249,6 +251,18 @@ int main()
       "tile/1/x001/x234/067",
       "tile_path L1 big index");
     expect_eq(
+      rel(
+        store,
+        store.tile_path(TileRef{merkle::tiles::MAX_TILE_LEVEL, 0})),
+      "tile/63/000",
+      "maximum tile level");
+    expect_throws(
+      [&] {
+        (void)store.tile_path(TileRef{
+          static_cast<uint8_t>(merkle::tiles::MAX_TILE_LEVEL + 1), 0});
+      },
+      "tile level above 63 rejected");
+    expect_eq(
       rel(store, store.entries_path(5)), "tile/entries/005", "entries full");
     expect_eq(
       merkle::tiles::TileStore::storage_directory_name("sha384"),
@@ -298,6 +312,12 @@ int main()
       using TileStore384 = merkle::tiles::TileStoreT<
         merkle::Tree384::Hash::size_bytes,
         merkle::Tree384::hash_function>;
+      for (const std::string& mismatched_name : {"sha256", "sha512"})
+      {
+        expect_throws(
+          [&] { (void)TileStore384(dir, mismatched_name); },
+          "SHA384 store rejects mismatched algorithm names");
+      }
       TileStore384 store384(dir);
       const auto full384 = make_hashesT<merkle::Tree384::Hash::size_bytes>(
         merkle::tiles::TILE_WIDTH);
@@ -319,6 +339,12 @@ int main()
       using TileStore512 = merkle::tiles::TileStoreT<
         merkle::Tree512::Hash::size_bytes,
         merkle::Tree512::hash_function>;
+      for (const std::string& mismatched_name : {"sha256", "sha384"})
+      {
+        expect_throws(
+          [&] { (void)TileStore512(dir, mismatched_name); },
+          "SHA512 store rejects mismatched algorithm names");
+      }
       TileStore512 store512(dir);
       const auto full512 = make_hashesT<merkle::Tree512::Hash::size_bytes>(
         merkle::tiles::TILE_WIDTH);
@@ -496,6 +522,36 @@ int main()
       merkle::pal::require_write_progress(1, "test");
     }
 
+#ifndef _WIN32
+    // 2h. Interrupted sync operations are retried, while other failures are
+    // returned immediately with errno intact.
+    {
+      size_t attempts = 0;
+      const int retry_result = merkle::pal::detail::retry_on_eintr([&]() {
+        attempts++;
+        if (attempts == 1)
+        {
+          errno = EINTR;
+          return -1;
+        }
+        return 0;
+      });
+      expect(
+        retry_result == 0 && attempts == 2,
+        "interrupted sync operation retried");
+
+      attempts = 0;
+      const int error_result = merkle::pal::detail::retry_on_eintr([&]() {
+        attempts++;
+        errno = EIO;
+        return -1;
+      });
+      expect(
+        error_result == -1 && attempts == 1 && errno == EIO,
+        "non-interrupted sync failure preserved");
+    }
+#endif
+
     // 3a. Full tile byte round-trip.
     const TileRef full_ref{0, 0};
     store.write_tile(full_ref, full);
@@ -554,6 +610,12 @@ int main()
     expect(
       merkle::tiles::TileStore::decode_entries({}, 0).empty(),
       "empty entry sequence round-trip");
+    expect_throws(
+      [] {
+        (void)merkle::tiles::TileStore::decode_entries(
+          {}, std::numeric_limits<size_t>::max());
+      },
+      "impossible entry count rejected before allocation");
 
     const std::vector<uint8_t> maximum_entry(0xFFFF, 0xC3);
     const auto maximum_encoded =

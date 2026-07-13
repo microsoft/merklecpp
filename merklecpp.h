@@ -205,11 +205,16 @@ namespace merkle
     }
 
     /// @brief Convert a hash to a hex-encoded string
-    /// @param num_bytes The maximum number of bytes to convert
+    /// @param num_bytes The number of bytes to convert
     /// @param lower_case Enables lower-case hex characters
+    /// @throws std::out_of_range if @p num_bytes exceeds the hash size
     [[nodiscard]] std::string to_string(
-      size_t num_bytes = SIZE, bool lower_case = true) const
+      size_t num_bytes = size_bytes, bool lower_case = true) const
     {
+      if (num_bytes > size_bytes)
+      {
+        throw std::out_of_range("hash string byte count exceeds hash size");
+      }
       size_t const num_chars = 2 * num_bytes;
       std::string r;
       r.reserve(num_chars);
@@ -709,7 +714,7 @@ namespace merkle
         if (left && right)
         {
           size = left->size + right->size + 1;
-          height = std::max(left->height, right->height) + 1;
+          height = (std::max)(left->height, right->height) + 1;
         }
         else
         {

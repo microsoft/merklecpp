@@ -77,6 +77,35 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 #endif
     }
 
+#ifndef _WIN32
+    namespace detail
+    {
+      template <typename Operation>
+      static inline int retry_on_eintr(const Operation& operation)
+      {
+        int result = 0;
+        do
+        {
+          result = operation();
+        } while (result == -1 && errno == EINTR);
+        return result;
+      }
+
+      static inline int sync_file_on_disk(int fd)
+      {
+#  ifdef F_FULLFSYNC
+        const int result =
+          retry_on_eintr([fd]() { return ::fcntl(fd, F_FULLFSYNC); });
+        if (result == 0 || (errno != ENOTSUP && errno != EINVAL))
+        {
+          return result;
+        }
+#  endif
+        return retry_on_eintr([fd]() { return ::fsync(fd); });
+      }
+    }
+#endif
+
     static inline void require_write_progress(
       size_t written, const std::filesystem::path& path)
     {
@@ -121,7 +150,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         {
           const auto remaining = bytes.size() - written;
           const auto chunk = static_cast<DWORD>(std::min<size_t>(
-            remaining, static_cast<size_t>(std::numeric_limits<DWORD>::max())));
+            remaining,
+            static_cast<size_t>((std::numeric_limits<DWORD>::max)())));
           DWORD done = 0;
           if (!WriteFile(handle, bytes.data() + written, chunk, &done, nullptr))
           {
@@ -187,7 +217,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           require_write_progress(static_cast<size_t>(done), path);
           written += static_cast<size_t>(done);
         }
-        if (::fsync(fd) != 0)
+        if (detail::sync_file_on_disk(fd) != 0)
         {
           const auto error = last_system_error();
           throw std::runtime_error(system_error_message(
@@ -261,7 +291,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         throw std::runtime_error(system_error_message(
           error, "cannot open directory {}", path.string()));
       }
-      if (::fsync(fd) != 0)
+      if (detail::retry_on_eintr([fd]() { return ::fsync(fd); }) != 0)
       {
         const auto error = last_system_error();
         const std::string message = system_error_message(

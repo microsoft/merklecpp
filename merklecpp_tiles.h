@@ -44,6 +44,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// @brief Number of hashes in a full tile (2**TILE_HEIGHT).
     static constexpr uint16_t TILE_WIDTH = uint16_t{1U << TILE_HEIGHT};
 
+    /// @brief Highest tile level permitted by the tlog-tiles layout.
+    static constexpr uint8_t MAX_TILE_LEVEL = 63;
+
     namespace detail
     {
       static constexpr std::string_view SHA256_ALGORITHM_SHORT_NAME = "sha256";
@@ -96,7 +99,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// incomplete frontier is never tiled (see doc/design/tlog-tiles.md).
     struct TileRef
     {
-      /// @brief The level of the tile (0 == leaf hashes).
+      /// @brief The level of the tile (0 == leaf hashes, maximum 63).
       uint8_t level = 0;
 
       /// @brief The index of the tile within its level.
@@ -173,8 +176,13 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       }
 
       /// @brief The filesystem path of a tile.
+      /// @throws std::runtime_error if the tile level exceeds 63
       [[nodiscard]] std::filesystem::path tile_path(const TileRef& ref) const
       {
+        if (ref.level > MAX_TILE_LEVEL)
+        {
+          throw std::runtime_error("tile level out of range");
+        }
         const auto relative_path = std::format(
           "tile/{}/{}",
           static_cast<unsigned>(ref.level),
@@ -260,7 +268,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           (void)decode_entries(read_file(path), TILE_WIDTH);
           return true;
         }
-        catch (const std::exception&)
+        catch (const std::runtime_error&)
         {
           return false;
         }
@@ -313,6 +321,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       static std::vector<std::vector<uint8_t>> decode_entries(
         const std::vector<uint8_t>& bytes, size_t count)
       {
+        if (count > bytes.size() / 2)
+        {
+          throw std::runtime_error("truncated entry bundle");
+        }
         std::vector<std::vector<uint8_t>> out;
         out.reserve(count);
         size_t pos = 0;
@@ -341,6 +353,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         return out;
       }
 
+      /// @cond INTERNAL
     protected:
       using DirectorySync = std::function<void(const std::filesystem::path&)>;
 
@@ -651,6 +664,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         }
         merkle::pal::sync_directory_on_disk(path);
       }
+      /// @endcond
     };
 
     /// @brief Default tile store (SHA256, default hash function).
