@@ -710,6 +710,30 @@ one-method core addition; README/docs updates.
 
 ---
 
+## 11. Testing strategy
+
+The existing library is the **oracle** — this is how we guarantee "proofs remain
+compatible":
+
+- **Equality, not just verification.** Assert `*inclusion_proof(i,size) ==
+  *tree.path(i)` using the existing `PathT::operator==`, and likewise against
+  `past_path`. This is stronger than `verify()` and pins byte-compatibility.
+- **Root agreement.** `ProofEngineT::root(size)` == `tree.root()` /
+  `tree.past_root(size-1)` for many random sizes.
+- **Spec vectors.** Exact full-tile counts and on-disk file sets for sizes 256
+  and 70 000; index-encoding strings (incl. `x001/x234/067`).
+- **Flush/compaction.** Cross-check proofs for flushed indices against a twin
+  tree that was never flushed (same inserts) — roots must match and proofs must
+  verify.
+- **Consistency proofs.** Standard RFC 6962 `verify_consistency` plus the
+  reconciliation-of-`past_root`s check; randomized `m < n`.
+- **Templating.** Run a subset under `Tree`, `Tree384`, `Tree512` to confirm
+  hash-size independence.
+- **Style.** Mirror existing standalone-`main()` tests (`test/util.h`,
+  `make_hashes`, `get_timeout`) and register via `add_merklecpp_test`.
+
+---
+
 ## 12. Risks, edge cases, open questions
 
 - **External interop (by design, no).** With the default combiner the tiles are
@@ -748,3 +772,15 @@ one-method core addition; README/docs updates.
 
 ---
 
+## 13. Build & backwards-compatibility impact
+
+- **Additive only.** New header + tests; existing `merklecpp.h` behaviour and
+  API are unchanged. Default builds (no tiles) are unaffected.
+- **No new mandatory dependencies.** Roll-ups/proofs use the existing
+  `HASH_FUNCTION` (two-hash combiner), so `sha256_compress` suffices; OpenSSL
+  stays optional.
+- **Optional core change** is a single read-only accessor that performs no
+  hashing and does not alter any existing code path.
+- **CMake.** Add a `tiles` test group guarded like the others; no changes to the
+  `merklecpp` INTERFACE target are required for consumers that don't use tiles.
+```

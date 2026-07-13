@@ -21,6 +21,69 @@ unusual features like flushing, retracting, and tree segment serialisation.
     assert(path->verify(root));
 
 
+## Tiled storage (tlog-tiles)
+
+The companion header `merklecpp_tiles.h` adds optional, header-only support for
+persisting a tree as [tlog-tiles](https://c2sp.org/tlog-tiles) tile files
+*progressively* (optionally dropping already-tiled leaves from memory) and for
+retrieving inclusion and consistency proofs from those tiles, from the in-memory
+tree, or from a combination of the two. The hashing is unchanged: tiles and tile-derived proofs are templated on
+the tree's existing hash function, so a tile-derived inclusion proof is
+byte-identical to one from `merkle::Tree::path()` and verifies with the same
+`merkle::Path::verify()`.
+
+    #include <merklecpp_tiles.h>
+
+    merkle::tiles::TiledTree::Config cfg;
+    cfg.prefix = "/var/log/mylog";       // tile files live here
+    cfg.retention_margin = 1024;         // keep the most recent leaves in memory
+    cfg.compact_on_flush = true;         // opt in to dropping already-tiled leaves
+
+    merkle::tiles::TiledTree log(cfg);
+    for (const auto& leaf_hash : batch)
+      log.append(leaf_hash);
+
+    // Write newly-complete tiles. With compaction enabled
+    // this also drops from memory the leaves already covered by a full tile;
+    // otherwise the tree keeps every leaf and you can call log.compact() later.
+    log.flush();
+
+    // Proofs are served from tiles + the resident tree, even for flushed leaves.
+    auto inclusion = log.inclusion_proof(/*index=*/0, log.size());
+    assert(inclusion->verify(log.root()));
+
+    auto consistency = log.consistency_proof(/*m=*/100, /*n=*/log.size());
+
+`TiledTree` creates a new tiled tree: the configured directory may exist, but
+its `tile` subdirectory must be absent or empty. It deliberately rejects
+existing tile data because tile files alone do not identify or restore the
+tree that produced them. Applications with externally persisted tree state can
+use the lower-level `TileStore` and `TileWriter` APIs to resume a store.
+
+See the [tiled storage guide](doc/tiles-guide.md) for a how-to covering
+flushing, compaction, rollback, proofs, and the lower-level building blocks,
+and [doc/design/tlog-tiles.md](doc/design/tlog-tiles.md) for the full design,
+file/directory layout, and the proof algorithms.
+
+
+## Building and testing
+
+Enable the test suite with CMake's `TESTS` option:
+
+    cmake -S . -B build -DTESTS=ON
+    cmake --build build
+    ctest --test-dir build
+
+Some tile coverage is intentionally long-running. `LONG_TESTS` is off by
+default for local builds; turn it on when you want the full tile stress suite,
+including level-2 tile coverage and tile proof timing:
+
+    cmake -S . -B build -DTESTS=ON -DLONG_TESTS=ON
+
+The repository CI enables `LONG_TESTS` so pull requests continue to exercise the
+full tiled-storage matrix.
+
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
