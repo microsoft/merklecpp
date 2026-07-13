@@ -117,6 +117,30 @@ A tiled log exposes the Merkle tree as a set of static resources:
   - merklecpp has **no** classic two-size consistency proof today; this design
     adds one (built from the same combiner, so it reconciles `past_root`s).
 
+### 2.3 Compatibility statement
+
+The tile geometry, path encoding, and the inclusion / consistency proof
+**algorithms** are exactly those of tlog-tiles / RFC 6962. The implementation
+emits only immutable full tiles.
+The **hash values stored in tiles** are produced by the tree's existing
+`HASH_FUNCTION`. Because
+
+1. merklecpp's tree shape equals the RFC 6962 left-balanced shape, and
+2. tile entries and proof building blocks are *perfect-subtree roots* combined
+   with the **same** `HASH_FUNCTION` the tree already uses,
+
+a tile entry at level `L`, index `g` equals the in-memory full node of height
+`8L+1` over leaves `[g·256^L, (g+1)·256^L)`, and a proof assembled from tiles is
+**byte-identical** to the one `Tree::path()` / `Tree::past_path()` would emit.
+Tile-derived proofs therefore verify with the unchanged `PathT::verify()`.
+
+> External RFC 6962 interop would additionally require RFC 6962 domain
+> separation (`SHA256(0x00‖entry)` leaves, `SHA256(0x01‖l‖r)` nodes). merklecpp
+> already lets a consumer pass such a `HASH_FUNCTION`; doing so is **optional and
+> out of scope**. This design never assumes it.
+
+---
+
 ## 3. Tile ↔ merklecpp mapping (the math)
 
 Let `TILE_HEIGHT = 8` and `TILE_WIDTH = 256 = 2^8`. All combiners below are the
@@ -284,6 +308,32 @@ and it only ever combines two `HASH_SIZE`-byte hashes — so the default
 `sha256_compress` single-block path is sufficient and **no OpenSSL dependency is
 introduced**.
 
+### 6.2 Optional core accessor (non-hashing)
+
+To let proofs be served partly from the resident tree, add one small read-only
+method to `TreeT`. It performs **no hashing changes**: it navigates to an
+existing node and returns its already-computed hash.
+
+```cpp
+// In TreeT (merklecpp.h). Returns true and sets `out` to MTH(D[j<<level:(j+1)<<level])
+// iff that perfect subtree is fully present and resident in memory.
+bool subtree_root(uint8_t level, uint64_t index, Hash& out);
+```
+
+Implementation sketch (reuses `walk_to`/descent; calls `hash()` only to realise
+an already-defined node hash, exactly as `root()`/`path()` already do):
+
+- require `(index << level)` ≥ `min_index()` and `((index+1) << level)` ≤
+  `num_leaves()`; otherwise return `false`;
+- descend to the node at the target position whose `height == level + 1`;
+- if that node `is_full()`, ensure its hash is computed and return it; else
+  (right-frontier non-perfect node) return `false`.
+
+If maintainers prefer **zero** core changes, `MemoryHashSource` can instead be
+derived from `past_path(...)` (a path already carries sibling subtree roots), at
+the cost of extra walks. The accessor is the cleaner primitive and is
+recommended; both options keep hashing untouched.
+
 ### 6.3 `TileStoreT` — disk I/O
 
 ```cpp
@@ -374,6 +424,102 @@ If `write_up_to` throws, `immutable_size` remains advanced because a full tile
 may already be visible, while `flushed_size` remains at its previous successful
 boundary. The in-memory tree is not compacted. The caller fixes the I/O error
 and retries with the same tree state; existing finalized tiles are reused.
+
+### 6.5 `HashSource` — tiles, memory, or both
+
+```cpp
+struct HashSource {                       // concept (duck-typed or virtual)
+  // MTH(D[index<<level : (index+1)<<level]) for a perfect, aligned subtree.
+  virtual bool subtree_root(uint8_t level, uint64_t index, Hash& out) const = 0;
+  // Optional fast path for level-0 leaves (frontier).
+  virtual bool leaf(uint64_t i, Hash& out) const { return subtree_root(0,i,out); }
+};
+```
+
+- `TileHashSource{store, size}` — resolves from **full tiles** using the
+  `subtree_root` formula in [§3](#3-tile--merklecpp-mapping-the-math) (`size` is
+  rounded down to a whole number of full tiles); returns `false` when the
+  requested subtree reaches into the un-tiled frontier.
+- `MemoryHashSource{tree}` — `tree.subtree_root(level,index,out)` (or the
+  `past_path`-derived fallback); resolves only resident, full subtrees
+  (`≥ min_index`).
+- `CombinedHashSource{mem, tiles}` — try memory first (no I/O), then tiles
+  (configurable order). This is the "combination of tiles and in-memory tree".
+- `TileHashSource` mutates its LRU cache during `const` reads. It and every
+  `ProofEngine` that refers to it require caller-provided synchronization when
+  shared between threads.
+- `TiledTreeT` constructs these sources for each proof call, so its cache lasts
+  for one call. A caller that wants cross-call caching can retain a lower-level
+  `TileHashSource`.
+
+### 6.6 `ProofEngineT` — inclusion & consistency
+
+All three proof building blocks reduce to `mth_range` over a `HashSource`.
+Returned `PathT` objects are byte-identical to `Tree::path` / `Tree::past_path`.
+
+```cpp
+class ProofEngineT {
+public:
+  explicit ProofEngineT(const HashSource& src);
+
+  Hash root(uint64_t size) const;                 // = mth_range(0, size)
+
+  // Inclusion path for leaf `index` in the tree of `size` leaves.
+  // Equivalent to Tree::path(index) when size==num_leaves(),
+  // and to Tree::past_path(index, size-1) otherwise.
+  std::shared_ptr<Path> inclusion_proof(uint64_t index, uint64_t size) const;
+
+  // RFC 6962 consistency proof that size `m` is a prefix of size `n` (m<=n).
+  std::vector<Hash> consistency_proof(uint64_t m, uint64_t n) const;
+  std::vector<Hash> consistency_proof_from_indices(
+    uint64_t first_index, uint64_t second_index) const;
+
+  // Verifier (consistency is new to merklecpp; inclusion reuses PathT::verify).
+  static bool verify_consistency(uint64_t m, uint64_t n,
+                                 const Hash& old_root, const Hash& new_root,
+                                 const std::vector<Hash>& proof);
+};
+```
+
+Inclusion (top-down; element order/`direction` chosen to match `Tree::path`):
+
+```
+elements = []                         # leaf→root order via push_front
+lo = 0, hi = size, idx = index
+while hi - lo > 1:
+    k = largest_pow2_lt(hi - lo)      # split at lo+k
+    if idx - lo < k:                  # target in left ⇒ sibling on the RIGHT
+        sib = mth_range(lo+k, hi);  dir = PATH_RIGHT;  hi = lo + k
+    else:                             # target in right ⇒ sibling on the LEFT
+        sib = mth_range(lo, lo+k);  dir = PATH_LEFT;   lo = lo + k
+    elements.push_front({sib, dir})
+leaf = src.leaf(index)
+return Path(leaf, index, elements, max_index = size - 1)
+```
+
+Consistency (RFC 6962 `SUBPROOF`):
+
+```
+consistency_proof(m, n):              # 0 < m <= n
+    if m == n: return []
+    subproof(m, lo=0, hi=n, complete=true)
+
+subproof(m, lo, hi, complete):
+    if m == hi - lo:
+        if not complete: proof.push_back(mth_range(lo, hi))
+        return
+    k = largest_pow2_lt(hi - lo)
+    if m <= k:
+        subproof(m, lo, lo+k, complete)
+        proof.push_back(mth_range(lo+k, hi))
+    else:
+        subproof(m-k, lo+k, hi, false)
+        proof.push_back(mth_range(lo, lo+k))
+```
+
+Because every emitted hash is an `mth_range` computed with `HASH_FUNCTION`, the
+consistency proof reconciles `Tree::past_root(m-1)` with
+`Tree::past_root(n-1)` — i.e. it is consistent with the existing library.
 
 ### 6.8 Entry bundles (optional)
 
