@@ -40,7 +40,8 @@ static void expect_eq(
   }
 }
 
-static std::string rel(const merkle::tiles::TileStore& store, const fs::path& p)
+template <typename Store>
+static std::string rel(const Store& store, const fs::path& p)
 {
   return p.lexically_relative(store.root()).generic_string();
 }
@@ -155,6 +156,10 @@ int main()
 
     // 2. Resource path layout (full tiles and bundles only).
     expect_eq(
+      store.root().lexically_relative(dir).generic_string(),
+      "sha256-256w",
+      "SHA256 storage directory");
+    expect_eq(
       rel(store, store.tile_path(TileRef{0, 0})),
       "tile/0/000",
       "tile_path L0 N0");
@@ -164,6 +169,54 @@ int main()
       "tile_path L1 big index");
     expect_eq(
       rel(store, store.entries_path(5)), "tile/entries/005", "entries full");
+    expect_eq(
+      merkle::tiles::TileStore::storage_directory_name("sha384"),
+      "sha384-256w",
+      "SHA384 retains 256-hash tile width");
+    bool mismatched_hash_size_threw = false;
+    try
+    {
+      (void)merkle::tiles::TileStore(dir, "sha384");
+    }
+    catch (const std::exception&)
+    {
+      mismatched_hash_size_threw = true;
+    }
+    expect(
+      mismatched_hash_size_threw,
+      "algorithm short name must match hash output size");
+
+#ifdef HAVE_OPENSSL
+    {
+      using TileStore384 =
+        merkle::tiles::TileStoreT<48, merkle::sha384_openssl>;
+      TileStore384 store384(dir);
+      const auto full384 = make_hashesT<48>(merkle::tiles::TILE_WIDTH);
+      expect_eq(
+        store384.root().lexically_relative(dir).generic_string(),
+        "sha384-256w",
+        "SHA384 storage directory");
+      store384.write_tile(TileRef{0, 0}, full384);
+      expect(
+        fs::file_size(store384.tile_path(TileRef{0, 0})) ==
+          (uintmax_t)merkle::tiles::TILE_WIDTH * 48,
+        "SHA384 full tile remains 256 hashes wide");
+
+      using TileStore512 =
+        merkle::tiles::TileStoreT<64, merkle::sha512_openssl>;
+      TileStore512 store512(dir);
+      const auto full512 = make_hashesT<64>(merkle::tiles::TILE_WIDTH);
+      expect_eq(
+        store512.root().lexically_relative(dir).generic_string(),
+        "sha512-256w",
+        "SHA512 storage directory");
+      store512.write_tile(TileRef{0, 0}, full512);
+      expect(
+        fs::file_size(store512.tile_path(TileRef{0, 0})) ==
+          (uintmax_t)merkle::tiles::TILE_WIDTH * 64,
+        "SHA512 full tile remains 256 hashes wide");
+    }
+#endif
 
     // 2b. Production writes sync each directory link and the destination
     // directory in order.
@@ -173,7 +226,12 @@ int main()
       FaultInjectingTileStore durable_store(prefix, fault);
       durable_store.write_tile(TileRef{1, 0}, full);
       const std::vector<fs::path> expected = {
-        dir.parent_path(), dir, prefix, prefix / "tile", prefix / "tile" / "1"};
+        dir.parent_path(),
+        dir,
+        prefix,
+        prefix / "sha256-256w",
+        prefix / "sha256-256w" / "tile",
+        prefix / "sha256-256w" / "tile" / "1"};
       expect(
         fault->calls.size() >= expected.size() &&
           std::equal(

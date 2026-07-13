@@ -2,10 +2,12 @@
 
 Status: Proposal / Draft
 Audience: merklecpp maintainers and contributors
-Scope: Extend the header-only library to (a) persist the Merkle tree as
-[tlog-tiles](https://c2sp.org/tlog-tiles) tile files progressively (on
-compaction), and (b) serve **inclusion** and **consistency** proofs from those
-tiles, from the in-memory tree, or from a combination of the two.
+Scope: Extend the header-only library to (a) persist the Merkle tree
+progressively (on compaction) using the
+[tlog-tiles](https://c2sp.org/tlog-tiles) SHA-256 format and an explicitly
+namespaced extension for other SHA output sizes, and (b) serve **inclusion**
+and **consistency** proofs from those tiles, from the in-memory tree, or from a
+combination of the two.
 
 ---
 
@@ -14,10 +16,12 @@ tiles, from the in-memory tree, or from a combination of the two.
 ### Goals
 
 1. Write the tree to disk as a set of immutable, cacheable **tile files** using
-   the [tlog-tiles](https://c2sp.org/tlog-tiles) file/directory layout and tile
-   geometry (256-wide tiles, 8 tree levels per tile, path encoding). Only
-   **full, balanced** tiles are produced. The remaining frontier stays in the
-   in-memory tree until it crosses the next full-tile boundary.
+   the [tlog-tiles](https://c2sp.org/tlog-tiles) payload, path encoding, and
+   geometry (256 hashes per tile and 8 tree levels per tile). SHA-256 follows
+   the C2SP format; SHA-384 and SHA-512 retain the same 256-hash width as
+   merklecpp extensions. Only **full, balanced** tiles are produced. The
+   remaining frontier stays in the in-memory tree until it crosses the next
+   full-tile boundary.
 2. Produce tiles **progressively**: each batch/flush writes only the newly
    completed tiles, and the write integrates with the existing `flush_to()`
    "compaction" so that flushed (evicted) subtrees are durably persisted before
@@ -57,10 +61,11 @@ reader/writer coordination are deliberately left to the application.
 
 ### Non-goals
 
-- Byte-level interoperability with *external* RFC 6962 / Go-ecosystem tlog
-  clients. See [§2.3](#23-compatibility-statement): such interop is only
-  possible if the consumer instantiates `TreeT` with an RFC 6962 combiner, which
-  is **out of scope** here and not required by this design.
+- Making the SHA-384 or SHA-512 extension a C2SP standard. C2SP currently
+  specifies SHA-256 only; the additional namespaces are merklecpp formats.
+- Supplying RFC 6962 leaf hashing or domain separation. Exact external tlog
+  interoperability requires the consumer to instantiate `TreeT` with
+  compatible leaf and node hashing; this design does not alter hashing.
 - An HTTP server. We define the on-disk layout and the read/write/proof APIs;
   serving the static files is an application concern.
 
@@ -77,8 +82,9 @@ A tiled log exposes the Merkle tree as a set of static resources:
   - `<N>` = tile index within the level, encoded as zero-padded 3-digit path
     elements where **all but the last element are prefixed with `x`**. Example:
     `1234067` → `x001/x234/067`.
-- A **full tile** is exactly **256 hashes** wide (`256 * HASH_SIZE` bytes). The
-  spec fixes `HASH_SIZE = 32` (SHA-256); here it is the template parameter.
+- A **full tile** is exactly **256 SHA-256 hashes**, or **8,192 bytes**. C2SP
+  fixes both the algorithm and width. merklecpp keeps the width at 256 and
+  makes the hash size a template parameter.
 - Level 0 hashes are **leaf hashes**. At level `L ≥ 1`, each hash is the Merkle
   Tree Hash of a *full* tile at level `L-1`. A tile spans **8 tree levels**: its
   256 entries are the leaves of a height-8 perfect subtree, and intra-tile
@@ -116,6 +122,27 @@ A tiled log exposes the Merkle tree as a set of static resources:
   - `PathT::verify(root)` / `PathT::root()` — verification via `HASH_FUNCTION`.
   - merklecpp has **no** classic two-size consistency proof today; this design
     adds one (built from the same combiner, so it reconciles `past_root`s).
+
+### 2.3 Compatibility statement
+
+C2SP `tlog-tiles` normatively specifies SHA-256, 32-byte hashes, and 256 hashes
+per full tile. The SHA-256 merklecpp layout adopts that tile payload and the
+`tile/<L>/<N>` resource tree. Exact proof interoperability additionally requires
+RFC 6962-compatible leaf and node hashing; merklecpp deliberately continues to
+use the caller's existing `HASH_FUNCTION`.
+
+For SHA-384 and SHA-512, merklecpp extends the payload by concatenating 48-byte
+or 64-byte hashes respectively. **The tile width remains 256 hashes for every
+algorithm**, so full tiles are 12,288 bytes for SHA-384 and 16,384 bytes for
+SHA-512. These wider-hash payloads are not currently defined by C2SP.
+
+Each format gets a separate root named
+`<hash-algorithm-short-name>-<tile-width>w`: `sha256-256w`, `sha384-256w`, or
+`sha512-256w`. Beneath that root, the C2SP `tile/...` paths are unchanged. This
+prevents files with different hash sizes from sharing a tile namespace while
+preserving the C2SP layout for each format. Built-in SHA functions select their
+short name automatically; explicit custom names must be lowercase path-safe
+short names, and recognized SHA names are checked against `HASH_SIZE`.
 
 ## 3. Tile ↔ merklecpp mapping (the math)
 
@@ -173,20 +200,24 @@ pieces (see the [combined-source invariant](#7-progressive-production--compactio
 
 ## 4. File and directory layout
 
-Rooted at a configurable `prefix` directory on local disk:
+Rooted below a configurable `prefix` directory on local disk:
 
 ```
 <prefix>/
-  tile/
-    0/                            # level 0 (leaf hashes), full tiles only
-      000  001 ... 255            # full tiles (8192 B each for HASH_SIZE=32)
-      x001/
-        000 ... 255
-    1/                            # level 1 (roll-ups of level-0 full tiles)
-      000 ...
-    .../
-    entries/                      # optional raw entry bundles (full only)
-      000  001 ...
+  sha256-256w/                    # algorithm + fixed 256-hash width
+    tile/
+      0/                          # level 0 (leaf hashes), full tiles only
+        000  001 ... 255          # 8192 B per SHA-256 full tile
+        x001/
+          000 ... 255
+      1/                          # level 1 (roll-ups of level-0 full tiles)
+        000 ...
+      .../
+      entries/                    # optional raw entry bundles (full only)
+        000  001 ...
+  sha384-256w/                    # optional; same width, 12288 B full tiles
+    tile/
+      ...
 ```
 
 ### Index encoding (`encode_tile_index`)
@@ -204,12 +235,16 @@ Examples: `5 → "005"`, `255 → "255"`, `1000 → "x001/000"`,
 
 Resource paths:
 
-- Full tile: `tile/<L>/<encode_tile_index(N)>` (the only tiles this
-  implementation writes)
-- Entry bundle: `tile/entries/<encode_tile_index(N)>` (full bundles only)
+- Full tile:
+  `<prefix>/<algorithm>-256w/tile/<L>/<encode_tile_index(N)>` (the only tiles
+  this implementation writes)
+- Entry bundle:
+  `<prefix>/<algorithm>-256w/tile/entries/<encode_tile_index(N)>` (full bundles
+  only)
 
 Tile byte format: the 256 entries concatenated, each `HASH_SIZE` raw bytes
-(`HashT::bytes`); a full tile is `256 * HASH_SIZE` bytes.
+(`HashT::bytes`); a full tile is `256 * HASH_SIZE` bytes. The `256w` suffix
+counts hashes, not bytes, and therefore does not change for SHA-384 or SHA-512.
 
 ---
 
@@ -291,9 +326,13 @@ struct TileRef { uint8_t level; uint64_t index; }; // full tiles only
 
 class TileStoreT {
 public:
+  // Built-in SHA functions select sha256, sha384, or sha512.
   explicit TileStoreT(std::filesystem::path prefix);
+  TileStoreT(std::filesystem::path prefix,
+             const std::string& hash_algorithm_short_name);
 
   // Path helpers (pure)
+  static std::string storage_directory_name(const std::string& algorithm);
   static std::string encode_index(uint64_t n);
   std::filesystem::path tile_path(const TileRef&) const;
   std::filesystem::path entries_path(uint64_t n) const;
@@ -313,7 +352,7 @@ public:
   visible. A wrong-size tile is not treated as a durable full tile and is
   rewritten by the writer.
 - Full tiles are written once and never rewritten (immutability), so every file
-  under `tile/<L>/` is write-once.
+  under `<algorithm>-256w/tile/<L>/` is write-once.
 - A small in-process cache of recently read tiles avoids repeated I/O during
   proof generation.
 - `TileStoreT` does not synchronize access. Callers must serialize all
@@ -324,8 +363,8 @@ public:
 merklecpp never sees raw entries (callers insert pre-computed leaf hashes), so
 entry bundles are an **application-owned** add-on, included for completeness:
 
-- `tile/entries/<N>` stores big-endian `uint16` length-prefixed entries,
-  256 per full bundle (full bundles only).
+- `<algorithm>-256w/tile/entries/<N>` stores big-endian `uint16`
+  length-prefixed entries, 256 per full bundle (full bundles only).
 - The application is responsible for the leaf-hash derivation it uses (e.g.
   `leaf_hash = H(entry)`); merklecpp stores whatever leaf hash is inserted.
 ## 10. Implementation plan
@@ -338,7 +377,8 @@ group in `test/CMakeLists.txt` following `add_merklecpp_test`.
 
 **Phase 1 — Coordinates & store.** `TileCoord`/`encode_index`, `TileRef`,
 `TileStoreT` (path building, atomic `write_tile`, `read_tile`). *Tests:*
-index-encoding vectors; tile byte round-trip.
+index-encoding vectors; algorithm-qualified roots; SHA-256 and SHA-384 both use
+256-hash tiles; tile byte round-trip.
 
 **Phase 2 — Write path.** `TileWriterT::write_up_to` (level-0 from `leaf_at`,
 roll-ups, incremental cursor; full tiles only — the frontier is never tiled).
@@ -365,4 +405,3 @@ Deliverables: `merklecpp_tiles.h`; `test/tiles_*.cpp`; CMake wiring; optional
 one-method core addition; README/docs updates.
 
 ---
-

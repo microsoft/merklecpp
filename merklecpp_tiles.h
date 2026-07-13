@@ -34,11 +34,14 @@
 #  include <unistd.h>
 #endif
 
-// Tiled storage for merklecpp trees, following the full-tile geometry and path
-// encoding of the C2SP tlog-tiles layout (https://c2sp.org/tlog-tiles). Only
-// complete, immutable tiles are stored. Their hash values are produced by the
-// tree's existing HASH_FUNCTION, so tile-derived proofs are byte-identical to
-// those produced by merkle::TreeT (see doc/design/tlog-tiles.md).
+// Tiled storage for merklecpp trees, following the full-tile geometry, payload,
+// and path encoding of the C2SP tlog-tiles layout
+// (https://c2sp.org/tlog-tiles). C2SP defines SHA-256; merklecpp preserves the
+// 256-hash tile width for other SHA output sizes and separates each format
+// under an algorithm-qualified directory such as sha256-256w or sha384-256w.
+// Only complete, immutable tiles are stored. Their hash values are produced by
+// the tree's existing HASH_FUNCTION, so tile-derived proofs are byte-identical
+// to those produced by merkle::TreeT (see doc/design/tlog-tiles.md).
 //
 // Thread safety: types in this header do not synchronize access internally.
 // Callers must serialize all operations on shared objects and store prefixes,
@@ -144,16 +147,37 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief The type of hashes stored in tiles.
       using Hash = HashT<HASH_SIZE>;
 
-      /// @brief Constructs a tile store rooted at @p prefix.
-      /// @param prefix The directory under which the tiles live.
+      /// @brief Constructs a tile store below an algorithm-qualified directory
+      /// under @p prefix.
+      /// @param prefix The directory under which the format directory lives
+      /// @note Built-in SHA functions select sha256, sha384, or sha512.
       explicit TileStoreT(std::filesystem::path prefix) :
-        prefix(std::move(prefix))
+        TileStoreT(std::move(prefix), default_hash_algorithm_short_name())
       {}
 
-      /// @brief The root directory of the store.
+      /// @brief Constructs a tile store for an explicitly named hash algorithm.
+      /// @param prefix The directory under which the format directory lives
+      /// @param hash_algorithm_short_name Lowercase algorithm short name
+      TileStoreT(
+        std::filesystem::path prefix,
+        const std::string& hash_algorithm_short_name) :
+        prefix(storage_root(std::move(prefix), hash_algorithm_short_name))
+      {}
+
+      /// @brief The algorithm-qualified root directory of the store.
       [[nodiscard]] const std::filesystem::path& root() const
       {
         return prefix;
+      }
+
+      /// @brief The format directory for @p hash_algorithm_short_name.
+      /// @note TILE_WIDTH is fixed at 256 for every hash output size.
+      static std::string storage_directory_name(
+        const std::string& hash_algorithm_short_name)
+      {
+        validate_hash_algorithm_short_name(hash_algorithm_short_name);
+        return hash_algorithm_short_name + "-" + std::to_string(TILE_WIDTH) +
+          "w";
       }
 
       /// @brief Encodes a tile index (see encode_tile_index).
@@ -331,15 +355,96 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       using DirectorySync = std::function<void(const std::filesystem::path&)>;
 
       TileStoreT(std::filesystem::path prefix, DirectorySync directory_sync) :
-        prefix(std::move(prefix)), directory_sync(std::move(directory_sync))
+        TileStoreT(
+          std::move(prefix),
+          default_hash_algorithm_short_name(),
+          std::move(directory_sync))
       {}
 
-      /// @brief The root directory of the store.
+      TileStoreT(
+        std::filesystem::path prefix,
+        const std::string& hash_algorithm_short_name,
+        DirectorySync directory_sync) :
+        prefix(storage_root(std::move(prefix), hash_algorithm_short_name)),
+        directory_sync(std::move(directory_sync))
+      {}
+
+      /// @brief The algorithm-qualified root directory of the store.
       std::filesystem::path prefix;
 
       DirectorySync directory_sync;
       std::set<std::filesystem::path> durable_directory_entries;
       std::set<std::filesystem::path> durable_directory_contents;
+
+      static std::string default_hash_algorithm_short_name()
+      {
+        if constexpr (HASH_SIZE == 32)
+        {
+          if constexpr (HASH_FUNCTION == sha256_compress)
+          {
+            return "sha256";
+          }
+#ifdef HAVE_OPENSSL
+          if constexpr (HASH_FUNCTION == sha256_openssl)
+          {
+            return "sha256";
+          }
+#endif
+        }
+#ifdef HAVE_OPENSSL
+        else if constexpr (HASH_SIZE == 48)
+        {
+          if constexpr (HASH_FUNCTION == sha384_openssl)
+          {
+            return "sha384";
+          }
+        }
+        else if constexpr (HASH_SIZE == 64)
+        {
+          if constexpr (HASH_FUNCTION == sha512_openssl)
+          {
+            return "sha512";
+          }
+        }
+#endif
+        throw std::runtime_error(
+          "TileStoreT requires a hash algorithm short name");
+      }
+
+      static void validate_hash_algorithm_short_name(
+        const std::string& hash_algorithm_short_name)
+      {
+        if (
+          hash_algorithm_short_name.empty() ||
+          hash_algorithm_short_name.front() == '-' ||
+          hash_algorithm_short_name.back() == '-')
+        {
+          throw std::runtime_error("invalid hash algorithm short name");
+        }
+        for (const char c : hash_algorithm_short_name)
+        {
+          if ((c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-')
+          {
+            throw std::runtime_error("invalid hash algorithm short name");
+          }
+        }
+      }
+
+      static std::filesystem::path storage_root(
+        std::filesystem::path prefix,
+        const std::string& hash_algorithm_short_name)
+      {
+        if (
+          (hash_algorithm_short_name == "sha256" && HASH_SIZE != 32) ||
+          (hash_algorithm_short_name == "sha384" && HASH_SIZE != 48) ||
+          (hash_algorithm_short_name == "sha512" && HASH_SIZE != 64))
+        {
+          throw std::runtime_error(
+            "hash algorithm short name does not match hash size");
+        }
+        prefix /= storage_directory_name(hash_algorithm_short_name);
+        return prefix;
+      }
 
       [[nodiscard]] bool confirm_full_tile(uint8_t level, uint64_t index)
       {
