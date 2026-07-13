@@ -32,7 +32,12 @@ add_merklecpp_test(coverage coverage.cpp)
 add_merklecpp_test(tiles_store tiles_store.cpp)
 add_merklecpp_test(tiles_writer tiles_writer.cpp)
 add_merklecpp_test(tiles_proofs tiles_proofs.cpp)
+add_merklecpp_test(tiles_tree tiles_tree.cpp)
 add_merklecpp_test(tiles_entries tiles_entries.cpp)
+
+if(OPENSSL)
+  add_merklecpp_test(tiles_hashes tiles_hashes.cpp)
+endif()
 
 if(LONG_TESTS)
   add_merklecpp_test(tiles_level2 tiles_level2.cpp)
