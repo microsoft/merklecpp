@@ -731,9 +731,314 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @endcond
     };
 
+    /// @brief Computes the Merkle Tree Hash of a perfect (balanced) subtree.
+    /// @param leaves The subtree's leaves; the count MUST be a power of two.
+    /// @return The subtree root, computed with the tree's HASH_FUNCTION.
+    /// @note This is exactly a merkle::TreeT full-node hash, which is why tile
+    /// entries (such roots) are immutable: an unbalanced subtree would still
+    /// change as leaves are added and must therefore never be tiled.
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    inline HashT<HASH_SIZE> perfect_root(
+      const std::vector<HashT<HASH_SIZE>>& leaves)
+    {
+      if (leaves.empty())
+      {
+        throw std::runtime_error("perfect_root requires at least one leaf");
+      }
+      if ((leaves.size() & (leaves.size() - 1)) != 0)
+      {
+        throw std::runtime_error(
+          "perfect_root requires a power-of-two number of leaves");
+      }
+
+      std::vector<HashT<HASH_SIZE>> level = leaves;
+      while (level.size() > 1)
+      {
+        std::vector<HashT<HASH_SIZE>> next;
+        next.reserve(level.size() / 2);
+        for (size_t i = 0; i + 1 < level.size(); i += 2)
+        {
+          HashT<HASH_SIZE> h;
+          HASH_FUNCTION(level[i], level[i + 1], h);
+          next.push_back(h);
+        }
+        level.swap(next);
+      }
+      return level.front();
+    }
+
+    /// @brief Computes and persists tlog-tiles tiles for a growing tree.
+    /// @tparam HASH_SIZE Size of each hash in bytes
+    /// @tparam HASH_FUNCTION The tree's node hash function
+    /// @note Only balanced subtrees are tiled: a level-L entry is the root of a
+    /// complete 2**(8L)-leaf subtree. Only full tiles (256 such entries) are
+    /// written; they are therefore immutable and written exactly once. Entries
+    /// beyond the last full-tile boundary remain in memory until a later flush
+    /// completes the next tile.
+    /// @warning No internal synchronization is provided. Callers must serialize
+    /// access to a writer and its store.
+    /// @warning A writer trusts existing full tiles as output from the same
+    /// tree and hash function. Callers resuming a store must establish that
+    /// ownership and restore the matching tree state.
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class TileWriterT
+    {
+    public:
+      /// @brief The type of hashes stored in tiles.
+      using Hash = HashT<HASH_SIZE>;
+
+      /// @brief The associated tile store type.
+      using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
+
+      /// @brief Supplies the level-0 leaf hash for a given leaf index.
+      using LeafFn = std::function<const Hash&(uint64_t)>;
+
+      /// @brief Counts of work performed by a write_up_to call.
+      struct Stats
+      {
+        /// @brief Number of full tiles written.
+        uint64_t full_written = 0;
+      };
+
+      /// @brief Constructs a writer over @p store.
+      explicit TileWriterT(Store& store) : store(store) {}
+
+      /// @brief Writes all newly-complete full tiles for a tree of @p size
+      /// leaves.
+      /// @param size The current tree size
+      /// @param leaf_at Returns the level-0 leaf hash for a leaf index in
+      /// [0, size); only ever queried for leaves of complete subtrees.
+      /// @return Counts of tiles written
+      /// @note Incremental: full tiles already on disk are immutable and are
+      /// never rewritten once validated and confirmed durable. Malformed files
+      /// are replaced. Entries that do not complete a tile are not written.
+      /// Tiles are always rolled up at every level (0..63), so the on-disk set
+      /// always contains the higher-level roll-ups that proof generation relies
+      /// on.
+      Stats write_up_to(uint64_t size, const LeafFn& leaf_at)
+      {
+        Stats stats;
+        store.begin_write_attempt();
+
+        // tlog-tiles defines levels 0..63; the loop stops early once a level
+        // has no complete entries (see the entries == 0 break below).
+        for (uint8_t level = 0; level <= 63; level++)
+        {
+          // Number of complete (balanced) level-L entries available; this
+          // deliberately excludes the incomplete frontier subtree.
+          const uint64_t entries = entries_at_level(size, level);
+          if (entries == 0)
+          {
+            break;
+          }
+          ensure_level(level);
+
+          const uint64_t full_tiles = entries / TILE_WIDTH;
+
+          if (cursor_inited[level] == 0)
+          {
+            next_full[level] = full_prefix_length(level, full_tiles);
+            cursor_inited[level] = 1;
+          }
+
+          for (uint64_t n = next_full[level]; n < full_tiles; n++)
+          {
+            if (store.confirm_full_tile(level, n))
+            {
+              continue; // immutable: never rewrite an existing full tile
+            }
+            store.write_tile(
+              TileRef{level, n},
+              collect(level, n * TILE_WIDTH, TILE_WIDTH, leaf_at));
+            stats.full_written++;
+          }
+          if (full_tiles > next_full[level])
+          {
+            next_full[level] = full_tiles;
+          }
+        }
+
+        return stats;
+      }
+
+    protected:
+      /// @brief The tile store written to.
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
+      Store& store;
+
+      /// @brief Per-level index of the next full tile to write.
+      std::vector<uint64_t> next_full;
+
+      /// @brief Per-level flag indicating next_full has been initialised.
+      std::vector<uint8_t> cursor_inited;
+
+      /// @brief Number of complete level-@p level entries for a tree of @p
+      /// size.
+      static uint64_t entries_at_level(uint64_t size, uint8_t level)
+      {
+        const unsigned shift = 8U * (unsigned)level;
+        return shift >= 64 ? 0 : (size >> shift);
+      }
+
+      /// @brief Ensures per-level bookkeeping vectors cover @p level.
+      void ensure_level(uint8_t level)
+      {
+        const size_t needed = (size_t)level + 1;
+        if (next_full.size() < needed)
+        {
+          next_full.resize(needed, 0);
+          cursor_inited.resize(needed, 0);
+        }
+      }
+
+      /// @brief Length of the confirmed contiguous prefix, bounded by @p limit.
+      [[nodiscard]] uint64_t full_prefix_length(uint8_t level, uint64_t limit)
+      {
+        return detail::contiguous_prefix_length(limit, [&](uint64_t index) {
+          return store.confirm_full_tile(level, index);
+        });
+      }
+
+      /// @brief Collects @p count consecutive level-@p level entries, each the
+      /// root of a complete (balanced) subtree.
+      std::vector<Hash> collect(
+        uint8_t level,
+        uint64_t first_entry,
+        uint64_t count,
+        const LeafFn& leaf_at)
+      {
+        std::vector<Hash> out;
+        out.reserve(count);
+        for (uint64_t i = 0; i < count; i++)
+        {
+          const uint64_t g = first_entry + i;
+          if (level == 0)
+          {
+            out.push_back(leaf_at(g));
+          }
+          else
+          {
+            // Roll up the complete child full tile (256 complete entries).
+            out.push_back(
+              perfect_root<HASH_SIZE, HASH_FUNCTION>(
+                store.read_tile(TileRef{(uint8_t)(level - 1), g})));
+          }
+        }
+        return out;
+      }
+    };
+
+    /// @brief Writes tlog-tiles entry bundles (raw log entries) for a growing
+    /// log.
+    /// @note Entry bundles are level-0 only and application-owned: merklecpp
+    /// stores leaf hashes, while the raw entries (and the leaf-hash derivation
+    /// linking each entry to its level-0 tile hash) are the application's
+    /// responsibility. Only full bundles (TILE_WIDTH entries) are written; they
+    /// are immutable and written exactly once. The incomplete tail stays with
+    /// the application until it grows into a full bundle, mirroring the
+    /// un-tiled Merkle frontier.
+    /// @warning No internal synchronization is provided. Callers must serialize
+    /// access to a writer and its store.
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class EntryBundleWriterT
+    {
+    public:
+      using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
+
+      /// @brief Supplies the raw bytes of the log entry at a given index.
+      using EntryFn = std::function<std::vector<uint8_t>(uint64_t)>;
+
+      /// @brief Counts of work performed by a write_up_to call.
+      struct Stats
+      {
+        /// @brief Number of full bundles written.
+        uint64_t full_written = 0;
+      };
+
+      explicit EntryBundleWriterT(Store& store) : store(store) {}
+
+      /// @brief Writes all newly-complete full bundles for a log of @p size
+      /// entries.
+      /// @param size The current number of entries
+      /// @param entry_at Returns the raw bytes of the entry at an index in
+      /// [0, size); only ever queried for entries of complete bundles.
+      /// @return Counts of bundles written
+      /// @note Incremental: full bundles already on disk are immutable and are
+      /// never rewritten once validated and confirmed durable. Malformed files
+      /// are replaced. The incomplete tail is never bundled.
+      Stats write_up_to(uint64_t size, const EntryFn& entry_at)
+      {
+        Stats stats;
+        store.begin_write_attempt();
+        const uint64_t full = size / TILE_WIDTH;
+
+        if (!cursor_inited)
+        {
+          next_full = full_prefix_length(full);
+          cursor_inited = true;
+        }
+
+        for (uint64_t n = next_full; n < full; n++)
+        {
+          if (store.confirm_entry_bundle(n))
+          {
+            continue; // immutable: never rewrite an existing full bundle
+          }
+          store.write_entry_bundle(
+            n, collect(n * TILE_WIDTH, TILE_WIDTH, entry_at));
+          stats.full_written++;
+        }
+        if (full > next_full)
+        {
+          next_full = full;
+        }
+        return stats;
+      }
+
+    protected:
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-const-or-ref-data-members)
+      Store& store;
+      uint64_t next_full = 0;
+      bool cursor_inited = false;
+
+      std::vector<std::vector<uint8_t>> collect(
+        uint64_t first, uint64_t count, const EntryFn& entry_at)
+      {
+        std::vector<std::vector<uint8_t>> out;
+        out.reserve(count);
+        for (uint64_t i = 0; i < count; i++)
+        {
+          out.push_back(entry_at(first + i));
+        }
+        return out;
+      }
+
+      [[nodiscard]] uint64_t full_prefix_length(uint64_t limit)
+      {
+        return detail::contiguous_prefix_length(limit, [&](uint64_t index) {
+          return store.confirm_entry_bundle(index);
+        });
+      }
+    };
+
     /// @brief Default tile store (SHA256, default hash function).
     using TileStore =
       TileStoreT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
+
+    /// @brief Default tile writer (SHA256, default hash function).
+    using TileWriter = TileWriterT<32, sha256_compress>;
+
+    /// @brief Default entry-bundle writer (SHA256, default hash function).
+    using EntryBundleWriter = EntryBundleWriterT<32, sha256_compress>;
 
   }
 }
