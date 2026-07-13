@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <list>
 #include <memory>
 #include <sstream>
@@ -1314,6 +1315,82 @@ namespace merkle
 
       return std::make_shared<Path>(
         leaf_node(index)->hash, index, std::move(path), as_of);
+    }
+
+    /// @brief Extracts the root hash of a complete subtree resident in memory
+    /// @param level The height of the subtree (it spans 2**level leaves)
+    /// @param index The index of the subtree at that height
+    /// @param out Set to the subtree root hash on success
+    /// @return Whether the subtree is a complete (balanced) subtree fully
+    /// resident in memory
+    /// @note This is read-only and does not change the hashing of the tree: it
+    /// returns an existing node hash (computing it on demand exactly as root()
+    /// and path() do). It returns false if any leaf of the subtree has been
+    /// flushed, if the subtree extends past the last leaf, or if the node at
+    /// that position is not a full subtree. The subtree spans leaf indices
+    /// [index << level, (index + 1) << level).
+    bool subtree_root(uint8_t level, size_t index, Hash& out)
+    {
+      const size_t leaves = num_leaves();
+      if (leaves == 0 || level >= std::numeric_limits<size_t>::digits)
+      {
+        return false;
+      }
+      if (index > (std::numeric_limits<size_t>::max() >> level))
+      {
+        return false;
+      }
+
+      const size_t lo = index << level;
+      const size_t count = (size_t)1 << level;
+
+      if (lo < min_index() || count > leaves || lo > leaves - count)
+      {
+        return false;
+      }
+
+      if (level == 0)
+      {
+        out = leaf(lo);
+        return true;
+      }
+
+      compute_root();
+
+      const uint8_t target_height = level + 1;
+      if (!_root || _root->height < target_height)
+      {
+        return false;
+      }
+
+      Node* cur = _root;
+      size_t it = lo << (sizeof(lo) * 8 - _root->height + 1);
+      for (uint8_t height = _root->height; height > target_height;)
+      {
+        const bool go_right = ((it >> (8 * sizeof(it) - 1)) & 0x01) != 0U;
+        if (cur->height == height)
+        {
+          Node* next = go_right ? cur->right : cur->left;
+          if (!next)
+          {
+            return false; // conflated/flushed: not resident
+          }
+          cur = next;
+        }
+        it <<= 1;
+        height--;
+      }
+
+      if (cur->height != target_height || !cur->is_full())
+      {
+        return false;
+      }
+      if (cur->dirty)
+      {
+        hash(cur);
+      }
+      out = cur->hash;
+      return true;
     }
 
     /// @brief Serialises the tree
