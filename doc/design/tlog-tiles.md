@@ -194,9 +194,9 @@ hashes, not bytes.
 | `ProofEngineT` | Roots, inclusion/consistency proofs, and verification |
 | `TiledTreeT` | `append`, `flush`, proof APIs, and compaction |
 
-The planned `TileHashSource` owns the proof-read LRU cache; `TileStoreT` does
-not cache. A combined source may require one read-only, non-hashing core
-`subtree_root` accessor.
+`TileHashSourceT` owns the proof-read LRU cache; `TileStoreT` does not cache.
+`MemoryHashSourceT` uses the logically read-only, non-hashing
+`TreeT::subtree_root` accessor.
 
 ### 5.1 Types and aliases
 
@@ -297,20 +297,126 @@ stores the supplied leaf hash unchanged. `EntryBundleWriterT` mirrors
 `TileWriterT`: it writes only complete 256-entry bundles, confirms existing
 bundles before reusing them, and leaves the incomplete tail with the application.
 
+### 5.5 `TreeT::subtree_root`
+
+Proofs over the resident frontier use one logically read-only core accessor:
+
+```cpp
+bool subtree_root(uint8_t level, size_t index, Hash& out);
+```
+
+It returns the existing root of the complete subtree spanning
+`[index << level, (index + 1) << level)`. The method rejects overflow, flushed
+or out-of-range leaves, and non-perfect frontier nodes. It may realize a dirty
+node hash exactly as `root()` and `path()` do, but does not change tree shape or
+hashing semantics.
+
+### 5.6 Hash sources
+
+```cpp
+struct HashSourceT {
+  // MTH(D[index<<level : (index+1)<<level]) for a perfect, aligned subtree.
+  virtual bool subtree_root(uint8_t level, uint64_t index, Hash& out) const = 0;
+  virtual bool leaf(uint64_t i, Hash& out) const { return subtree_root(0,i,out); }
+};
+```
+
+- `TileHashSourceT{store, size}` resolves from **full tiles** using the
+  `subtree_root` formula in [section 3](#3-tile-mapping-and-proof-math) (`size` is
+  rounded down to a whole number of full tiles); returns `false` when the
+  requested subtree reaches into the un-tiled frontier.
+- `MemoryHashSourceT{tree}` resolves only resident, full subtrees through
+  `TreeT::subtree_root`.
+- `CombinedHashSourceT{primary, secondary}` tries the primary source first,
+  then falls back to the secondary. Using memory first avoids I/O for the
+  resident frontier.
+- `TileHashSourceT` mutates its LRU cache during `const` reads. It and every
+  `ProofEngineT` that refers to it require caller-provided synchronization when
+  shared between threads.
+
+### 5.7 `ProofEngineT`
+
+All three proof building blocks reduce to `mth_range` over a `HashSource`.
+Returned `PathT` objects are byte-identical to `Tree::path` / `Tree::past_path`.
+
+```cpp
+class ProofEngineT {
+public:
+  explicit ProofEngineT(const HashSource& src);
+
+  Hash root(uint64_t size) const;                 // = mth_range(0, size)
+
+  // Inclusion path for leaf `index` in the tree of `size` leaves.
+  // Equivalent to Tree::path(index) when size==num_leaves(),
+  // and to Tree::past_path(index, size-1) otherwise.
+  std::shared_ptr<Path> inclusion_proof(uint64_t index, uint64_t size) const;
+
+  // RFC 6962 consistency proof that size `m` is a prefix of size `n` (m<=n).
+  std::vector<Hash> consistency_proof(uint64_t m, uint64_t n) const;
+  std::vector<Hash> consistency_proof_from_indices(
+    uint64_t first_index, uint64_t second_index) const;
+
+  // Verifier (consistency is new to merklecpp; inclusion reuses PathT::verify).
+  static bool verify_consistency(uint64_t m, uint64_t n,
+                                 const Hash& old_root, const Hash& new_root,
+                                 const std::vector<Hash>& proof);
+};
+```
+
+Inclusion (top-down; element order/`direction` chosen to match `Tree::path`):
+
+```
+elements = []                         # leaf→root order via push_front
+lo = 0, hi = size, idx = index
+while hi - lo > 1:
+    k = largest_pow2_lt(hi - lo)      # split at lo+k
+    if idx - lo < k:                  # target in left ⇒ sibling on the RIGHT
+        sib = mth_range(lo+k, hi);  dir = PATH_RIGHT;  hi = lo + k
+    else:                             # target in right ⇒ sibling on the LEFT
+        sib = mth_range(lo, lo+k);  dir = PATH_LEFT;   lo = lo + k
+    elements.push_front({sib, dir})
+leaf = src.leaf(index)
+return Path(leaf, index, elements, max_index = size - 1)
+```
+
+Consistency (RFC 6962 `SUBPROOF`):
+
+```
+consistency_proof(m, n):              # 0 < m <= n
+    if m == n: return []
+    subproof(m, lo=0, hi=n, complete=true)
+
+subproof(m, lo, hi, complete):
+    if m == hi - lo:
+        if not complete: proof.push_back(mth_range(lo, hi))
+        return
+    k = largest_pow2_lt(hi - lo)
+    if m <= k:
+        subproof(m, lo, lo+k, complete)
+        proof.push_back(mth_range(lo+k, hi))
+    else:
+        subproof(m-k, lo+k, hi, false)
+        proof.push_back(mth_range(lo, lo+k))
+```
+
+Because every emitted hash is an `mth_range` computed with `HASH_FUNCTION`, the
+consistency proof reconciles `Tree::past_root(m-1)` with
+`Tree::past_root(n-1)` — i.e. it is consistent with the existing library.
+
 ## 6. Delivery plan
 
-Phases 0-2 now deliver the storage primitives plus incremental tile and
-entry-bundle writers. Later PRs deliver the remaining independently testable
-phases; phase 3 needs no further core changes, while phase 4 may add one
-non-hashing accessor.
+Phases 0-3 now deliver the storage primitives, incremental tile and entry-bundle
+writers, hash sources, proof engine, and the only required core accessor. Later
+PRs deliver the lifecycle wrapper, user documentation, and performance coverage;
+no further core changes are planned.
 
 | Phase | Scope | Key tests |
 |---|---|---|
 | 0. Scaffolding | Headers, PAL, namespace, geometry, aliases, and CMake test wiring | Public-header and build integration |
 | 1. Coordinates/store | `TileRef`, index/path encoding, `TileStoreT`, durable atomic I/O, entry-bundle primitives | Encoding vectors; algorithm roots; 256-hash SHA-256/384 tiles; round trips; file/symlink collisions |
 | 2. Writers | Incremental `TileWriterT::write_up_to` from `leaf_at`, roll-ups, and `EntryBundleWriterT`; full resources only | Sizes 256 and 70,000 produce the exact tile set; repeated writes preserve immutability |
-| 3. Proof engine | `TileHashSource`, `mth_range`, roots, inclusion/consistency proofs, and verification | Tile roots equal tree roots; inclusion equals `path()` / `past_path()` and verifies; consistency reconciles `past_root()` values |
-| 4. Combined tree | Optional `subtree_root`; memory/combined sources; `TiledTreeT` append, flush, proof, and compaction APIs | Prove flushed and resident leaves against a non-flushed reference; consistency across a flush boundary |
+| 3. Proof engine | `TreeT::subtree_root`; tile, memory, and combined hash sources; roots; inclusion/consistency proofs and verification | Tile roots equal tree roots; inclusion equals `path()` / `past_path()` and verifies; consistency reconciles `past_root()` values |
+| 4. Combined tree | `TiledTreeT` append, flush, proof, and compaction APIs | Prove flushed and resident leaves against a non-flushed reference; consistency across a flush boundary |
 | 5. Documentation/performance | README usage, design link, and tile-backed benchmarks | Documentation and benchmark coverage |
 
 Deliverables are `merklecpp_tiles.h`, `merklecpp_pal.h`, `test/tiles_*.cpp`,

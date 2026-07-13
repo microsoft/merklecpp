@@ -53,10 +53,17 @@ jobs:
       shell: bash
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       run: |
+        long_tests=OFF
+        if [ "$RUNNER_OS" == "Linux" ] &&
+           [ "${{ matrix.compiler }}" == "g++" ] &&
+           [ "${{ matrix.build_type }}" == "Release" ] &&
+           [ "${{ matrix.openssl }}" == "OFF" ]; then
+          long_tests=ON
+        fi
         if [ "$RUNNER_OS" == "Linux" ]; then
-          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=${{ matrix.openssl }} -DCLANG_TIDY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DLONG_TESTS=$long_tests -DOPENSSL=${{ matrix.openssl }} -DCLANG_TIDY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         else
-          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=${{ matrix.openssl }}
+          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DLONG_TESTS=$long_tests -DOPENSSL=${{ matrix.openssl }}
         fi
 
     - name: Build
