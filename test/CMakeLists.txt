@@ -3,16 +3,22 @@
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+include(FetchContent)
+FetchContent_Declare(
+  doctest
+  GIT_REPOSITORY https://github.com/doctest/doctest.git
+  GIT_TAG ae7a13539fb71f270b87eb2e874fbac80bc8dda2 # v2.4.11
+)
+FetchContent_MakeAvailable(doctest)
+
 function(add_merklecpp_test target source)
   add_unit_test(${MERKLECPP_TEST_PREFIX}${target} ${source})
+  target_link_libraries(
+    ${MERKLECPP_TEST_PREFIX}${target} PRIVATE doctest::doctest
+  )
   set_tests_properties(
     ${MERKLECPP_TEST_PREFIX}${target} PROPERTIES LABELS "merklecpp"
   )
-  if (DOCTEST_DIR)
-    target_include_directories(
-      ${MERKLECPP_TEST_PREFIX}${target} PRIVATE ${DOCTEST_DIR}
-    )
-  endif()
   if (WIN32)
     target_compile_definitions(${MERKLECPP_TEST_PREFIX}${target} PRIVATE _CRT_SECURE_NO_WARNINGS)
   endif()
@@ -40,9 +46,5 @@ if(OPENSSL
   add_merklecpp_test(compare_hash_functions compare_hash_functions.cpp)
 endif()
 
-find_path(DOCTEST_DIR doctest.h)
-
-if(DOCTEST_DIR)
-  add_merklecpp_test(tiles_store tiles_store.cpp)
-  add_merklecpp_test(unit_tests unit_tests.cpp)
-endif()
+add_merklecpp_test(tiles_store tiles_store.cpp)
+add_merklecpp_test(unit_tests unit_tests.cpp)

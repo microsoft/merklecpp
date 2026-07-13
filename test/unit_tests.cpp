@@ -4,7 +4,7 @@
 #include "util.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include <doctest.h>
+#include <doctest/doctest.h>
 #include <merklecpp.h>
 
 TEST_CASE("HashT constructors and error paths")

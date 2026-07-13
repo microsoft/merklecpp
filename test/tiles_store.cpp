@@ -9,7 +9,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
-#include <doctest.h>
+#include <doctest/doctest.h>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -217,9 +217,9 @@ TEST_CASE("Tile geometry, references, and index encoding")
 TEST_CASE("Tile store paths and hash namespaces")
 {
   // 2. Resource path layout (full tiles and bundles only).
-  TemporaryDirectory temporary_directory;
+  const TemporaryDirectory temporary_directory;
   const fs::path& dir = temporary_directory.path();
-  merkle::tiles::TileStore store(dir);
+  const merkle::tiles::TileStore store(dir);
 
   CHECK(store.root().lexically_relative(dir).generic_string() == "sha256-256w");
   CHECK(rel(store, store.tile_path(TileRef{0, 0})) == "tile/0/000");
@@ -229,7 +229,7 @@ TEST_CASE("Tile store paths and hash namespaces")
     rel(store, store.tile_path(TileRef{merkle::tiles::MAX_TILE_LEVEL, 0})) ==
     "tile/63/000");
   CHECK_THROWS_AS(
-    (store.tile_path(
+    ((void)store.tile_path(
       TileRef{static_cast<uint8_t>(merkle::tiles::MAX_TILE_LEVEL + 1), 0})),
     std::runtime_error);
   CHECK(rel(store, store.entries_path(5)) == "tile/entries/005");
@@ -316,7 +316,7 @@ TEST_CASE("Tile writes sync directory links in order")
 {
   // 2b. Production writes sync each directory link and the destination
   // directory in order.
-  TemporaryDirectory temporary_directory;
+  const TemporaryDirectory temporary_directory;
   const fs::path& dir = temporary_directory.path();
   const fs::path prefix = dir / "durable";
   const auto fault = std::make_shared<SyncFault>();
@@ -341,7 +341,7 @@ TEST_CASE("Failed directory-link sync is retried")
 {
   // 2c. A failed directory-link sync is retried even when the directory
   // created before the failure is already visible.
-  TemporaryDirectory temporary_directory;
+  const TemporaryDirectory temporary_directory;
   const fs::path prefix = temporary_directory.path() / "directory_retry";
   const auto fault = std::make_shared<SyncFault>();
   fault->fail_path = prefix;
@@ -361,7 +361,7 @@ TEST_CASE("Visible publication can be confirmed after sync failure")
 {
   // 2d. A failure syncing the destination directory leaves a complete,
   // visible file that can be re-confirmed on the next write attempt.
-  TemporaryDirectory temporary_directory;
+  const TemporaryDirectory temporary_directory;
   const fs::path prefix = temporary_directory.path() / "publication_retry";
   const auto fault = std::make_shared<SyncFault>();
   FaultInjectingTileStore store(prefix, fault);
@@ -391,7 +391,7 @@ TEST_CASE("Replacement and directory conflicts clean up temporary files")
 {
   // 2e. Failures before atomic replacement clean up temporary files, and a
   // non-directory in the destination path is rejected.
-  TemporaryDirectory temporary_directory;
+  const TemporaryDirectory temporary_directory;
   const fs::path& dir = temporary_directory.path();
   const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
 
@@ -416,7 +416,7 @@ TEST_CASE("Exclusive file creation rejects file and symlink collisions")
 {
   // 2f. Unique temporary-file creation must fail rather than overwrite an
   // existing path, including a pre-created symlink on POSIX.
-  TemporaryDirectory temporary_directory;
+  const TemporaryDirectory temporary_directory;
   const fs::path& dir = temporary_directory.path();
   fs::create_directories(dir);
   const fs::path existing_path = dir / "preexisting-temp";
@@ -491,7 +491,7 @@ TEST_CASE("Interrupted sync operations are retried")
 TEST_CASE("Full tiles use raw bytes and round-trip")
 {
   // 3a. Full tile byte round-trip.
-  TemporaryDirectory temporary_directory;
+  const TemporaryDirectory temporary_directory;
   merkle::tiles::TileStore store(temporary_directory.path());
   const size_t hash_size = Hash().size();
   const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
@@ -500,7 +500,7 @@ TEST_CASE("Full tiles use raw bytes and round-trip")
   store.write_tile(full_ref, full);
   CHECK(store.has_full_tile(0, 0));
   CHECK_FALSE(store.has_full_tile(0, 5));
-  CHECK_THROWS_AS((store.read_tile(TileRef{0, 5})), std::runtime_error);
+  CHECK_THROWS_AS((void)store.read_tile(TileRef{0, 5}), std::runtime_error);
   CHECK(
     fs::file_size(store.tile_path(full_ref)) ==
     (uintmax_t)merkle::tiles::TILE_WIDTH * hash_size);
@@ -567,7 +567,7 @@ TEST_CASE("Entry encoding enforces bounds and round-trips")
 
 TEST_CASE("Entry bundle storage validates and confirms publications")
 {
-  TemporaryDirectory temporary_directory;
+  const TemporaryDirectory temporary_directory;
   const fs::path& dir = temporary_directory.path();
   merkle::tiles::TileStore store(dir);
   const auto entries = make_entries();
@@ -575,7 +575,7 @@ TEST_CASE("Entry bundle storage validates and confirms publications")
     merkle::tiles::TileStore::encode_entries(entries);
 
   CHECK_FALSE(store.has_entry_bundle(17));
-  CHECK_THROWS_AS(store.read_entry_bundle(17), std::runtime_error);
+  CHECK_THROWS_AS((void)store.read_entry_bundle(17), std::runtime_error);
   const std::vector<std::vector<uint8_t>> short_bundle(
     entries.begin(), entries.end() - 1);
   CHECK_THROWS_AS(
@@ -612,7 +612,7 @@ TEST_CASE("Corrupt tiles and entry bundles are rejected")
 {
   // 5. Corrupt / truncated files are rejected on read (integrity check), so
   // a torn write can never be served as a valid tile or bundle.
-  TemporaryDirectory temporary_directory;
+  const TemporaryDirectory temporary_directory;
   merkle::tiles::TileStore store(temporary_directory.path());
   const size_t hash_size = Hash().size();
   const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
@@ -622,7 +622,7 @@ TEST_CASE("Corrupt tiles and entry bundles are rejected")
 
   overwrite_file(store.tile_path(full_ref), std::vector<uint8_t>(hash_size, 0));
   CHECK_FALSE(store.has_full_tile(0, 0));
-  CHECK_THROWS_AS(store.read_tile(full_ref), std::runtime_error);
+  CHECK_THROWS_AS((void)store.read_tile(full_ref), std::runtime_error);
   store.write_tile(full_ref, full);
   CHECK(store.has_full_tile(0, 0));
   CHECK(store.read_tile(full_ref) == full);
@@ -631,20 +631,20 @@ TEST_CASE("Corrupt tiles and entry bundles are rejected")
     store.tile_path(full_ref),
     std::vector<uint8_t>((merkle::tiles::TILE_WIDTH + 1) * hash_size, 0));
   CHECK_FALSE(store.has_full_tile(0, 0));
-  CHECK_THROWS_AS(store.read_tile(full_ref), std::runtime_error);
+  CHECK_THROWS_AS((void)store.read_tile(full_ref), std::runtime_error);
 
   store.write_entry_bundle(0, entries);
   CHECK(store.has_entry_bundle(0));
   CHECK(store.read_entry_bundle(0) == entries);
   overwrite_file(store.entries_path(0), {0x00, 0x05, 0x01});
   CHECK_FALSE(store.has_entry_bundle(0));
-  CHECK_THROWS_AS(store.read_entry_bundle(0), std::runtime_error);
+  CHECK_THROWS_AS((void)store.read_entry_bundle(0), std::runtime_error);
 
   auto encoded = merkle::tiles::TileStore::encode_entries(entries);
   encoded.push_back(0xFF);
   overwrite_file(store.entries_path(0), encoded);
   CHECK_FALSE(store.has_entry_bundle(0));
-  CHECK_THROWS_AS(store.read_entry_bundle(0), std::runtime_error);
+  CHECK_THROWS_AS((void)store.read_entry_bundle(0), std::runtime_error);
 
   CHECK_THROWS_AS(
     (merkle::tiles::TileStore::decode_entries({0xFF, 0xFF, 0x00}, 1)),
@@ -664,9 +664,9 @@ TEST_CASE("Concurrent same-tile writes leave a valid tile")
   // 6. Concurrent same-tile writes use unique temp files and leave no
   // temporary files behind after success. Each thread owns its store object;
   // sharing one object requires caller-provided synchronization.
-  TemporaryDirectory temporary_directory;
+  const TemporaryDirectory temporary_directory;
   const fs::path& dir = temporary_directory.path();
-  merkle::tiles::TileStore store(dir);
+  const merkle::tiles::TileStore store(dir);
   const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
   const TileRef concurrent_ref{0, 42};
   std::atomic<bool> ok{true};
