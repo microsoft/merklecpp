@@ -41,8 +41,10 @@ endif()
 
 if(LONG_TESTS)
   add_merklecpp_test(tiles_level2 tiles_level2.cpp)
+  add_merklecpp_test(time_tiles time_tiles.cpp)
   set_tests_properties(
     ${MERKLECPP_TEST_PREFIX}tiles_level2
+    ${MERKLECPP_TEST_PREFIX}time_tiles
     PROPERTIES TIMEOUT 900
   )
 endif()
