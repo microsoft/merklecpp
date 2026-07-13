@@ -783,4 +783,3 @@ compatible":
   hashing and does not alter any existing code path.
 - **CMake.** Add a `tiles` test group guarded like the others; no changes to the
   `merklecpp` INTERFACE target are required for consumers that don't use tiles.
-```
