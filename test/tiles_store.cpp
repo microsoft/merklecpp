@@ -3,16 +3,16 @@
 
 #include "util.h"
 
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
+#include <doctest.h>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <functional>
-#include <iostream>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -28,52 +28,39 @@ namespace fs = std::filesystem;
 using merkle::Hash;
 using merkle::tiles::TileRef;
 
-static void expect(bool cond, const std::string& what)
+class TemporaryDirectory
 {
-  if (!cond)
-  {
-    throw std::runtime_error(std::format("check failed: {}", what));
-  }
-}
+private:
+  fs::path path_;
 
-static void expect_eq(
-  const std::string& got, const std::string& expected, const std::string& what)
-{
-  if (got != expected)
+public:
+  TemporaryDirectory()
   {
-    throw std::runtime_error(
-      std::format("{}: got '{}', expected '{}'", what, got, expected));
+    static std::atomic<uint64_t> sequence = 0;
+    const auto nonce =
+      std::chrono::steady_clock::now().time_since_epoch().count();
+    path_ = fs::temp_directory_path() /
+      std::format(
+              "merklecpp_tiles_{}_{}_{}",
+              merkle::pal::process_id(),
+              nonce,
+              sequence++);
   }
-}
 
-static void expect_throws(
-  const std::function<void()>& fn, const std::string& what)
-{
-  bool threw = false;
-  try
+  ~TemporaryDirectory()
   {
-    fn();
+    std::error_code ec;
+    fs::remove_all(path_, ec);
   }
-  catch (const std::runtime_error&)
-  {
-    threw = true;
-  }
-  expect(threw, what);
-}
 
-static std::string expect_throws_message(
-  const std::function<void()>& fn, const std::string& what)
-{
-  try
+  TemporaryDirectory(const TemporaryDirectory&) = delete;
+  TemporaryDirectory& operator=(const TemporaryDirectory&) = delete;
+
+  [[nodiscard]] const fs::path& path() const
   {
-    fn();
+    return path_;
   }
-  catch (const std::runtime_error& ex)
-  {
-    return ex.what();
-  }
-  throw std::runtime_error(std::format("check failed: {}", what));
-}
+};
 
 static void custom_hash(const Hash& lhs, const Hash& rhs, Hash& out)
 {
@@ -158,7 +145,6 @@ public:
   }
 };
 
-// Overwrites a file with exactly the given bytes (to simulate corruption).
 static void overwrite_file(const fs::path& p, const std::vector<uint8_t>& bytes)
 {
   std::ofstream f(p, std::ios::binary | std::ios::trunc);
@@ -177,631 +163,535 @@ static std::vector<uint8_t> read_file(const fs::path& p)
   return {std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
 }
 
-int main()
+static std::vector<std::vector<uint8_t>> make_entries()
 {
-  const auto nonce =
-    std::chrono::steady_clock::now().time_since_epoch().count();
-  const fs::path dir = fs::temp_directory_path() /
-    std::format("merklecpp_tiles_{}_{}", merkle::pal::process_id(), nonce);
-
-  try
+  std::vector<std::vector<uint8_t>> entries(merkle::tiles::TILE_WIDTH);
+  entries[1] = {0xA5};
+  entries[2] = std::vector<uint8_t>(256, 0x5A);
+  for (size_t i = 3; i < entries.size(); i++)
   {
-    // 1. Tile geometry, references, and index encoding.
-    expect(
-      merkle::tiles::TILE_WIDTH == (1U << merkle::tiles::TILE_HEIGHT),
-      "tile width matches tile height");
-    const TileRef default_ref;
-    expect(
-      default_ref.level == 0 && default_ref.index == 0,
-      "TileRef defaults to the first leaf tile");
+    entries[i] = {(uint8_t)i, 0x7F};
+  }
+  return entries;
+}
 
-    size_t prefix_probes = 0;
-    const auto prefix_length =
-      merkle::tiles::detail::contiguous_prefix_length(10, [&](uint64_t index) {
-        prefix_probes++;
-        return index < 3;
-      });
-    expect(
-      prefix_length == 3 && prefix_probes == 4,
-      "contiguous prefix stops at the first gap");
-    prefix_probes = 0;
-    const auto empty_prefix_length =
-      merkle::tiles::detail::contiguous_prefix_length(0, [&](uint64_t) {
-        prefix_probes++;
-        return true;
-      });
-    expect(
-      empty_prefix_length == 0 && prefix_probes == 0,
-      "empty contiguous prefix performs no probes");
+TEST_CASE("Tile geometry, references, and index encoding")
+{
+  // 1. Tile geometry, references, and index encoding.
+  CHECK(merkle::tiles::TILE_WIDTH == (1U << merkle::tiles::TILE_HEIGHT));
 
-    expect_eq(merkle::tiles::encode_tile_index(0), "000", "encode 0");
-    expect_eq(merkle::tiles::encode_tile_index(5), "005", "encode 5");
-    expect_eq(merkle::tiles::encode_tile_index(255), "255", "encode 255");
-    expect_eq(merkle::tiles::encode_tile_index(999), "999", "encode 999");
-    expect_eq(
-      merkle::tiles::encode_tile_index(1000), "x001/000", "encode 1000");
-    expect_eq(
-      merkle::tiles::encode_tile_index(1234067),
-      "x001/x234/067",
-      "encode 1234067");
-    expect_eq(
-      merkle::tiles::encode_tile_index(std::numeric_limits<uint64_t>::max()),
-      "x018/x446/x744/x073/x709/x551/615",
-      "encode uint64 max");
-    expect_eq(
-      merkle::tiles::TileStore::encode_index(1000),
-      "x001/000",
-      "store index encoder");
+  const TileRef default_ref;
+  CHECK(default_ref.level == 0);
+  CHECK(default_ref.index == 0);
 
-    merkle::tiles::TileStore store(dir);
-    const size_t hsz = Hash().size();
-    const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  size_t prefix_probes = 0;
+  const auto prefix_length =
+    merkle::tiles::detail::contiguous_prefix_length(10, [&](uint64_t index) {
+      prefix_probes++;
+      return index < 3;
+    });
+  CHECK(prefix_length == 3);
+  CHECK(prefix_probes == 4);
 
-    // 2. Resource path layout (full tiles and bundles only).
-    expect_eq(
-      store.root().lexically_relative(dir).generic_string(),
-      "sha256-256w",
-      "SHA256 storage directory");
-    expect_eq(
-      rel(store, store.tile_path(TileRef{0, 0})),
-      "tile/0/000",
-      "tile_path L0 N0");
-    expect_eq(
-      rel(store, store.tile_path(TileRef{1, 1234067})),
-      "tile/1/x001/x234/067",
-      "tile_path L1 big index");
-    expect_eq(
-      rel(
-        store,
-        store.tile_path(TileRef{merkle::tiles::MAX_TILE_LEVEL, 0})),
-      "tile/63/000",
-      "maximum tile level");
-    expect_throws(
-      [&] {
-        (void)store.tile_path(TileRef{
-          static_cast<uint8_t>(merkle::tiles::MAX_TILE_LEVEL + 1), 0});
-      },
-      "tile level above 63 rejected");
-    expect_eq(
-      rel(store, store.entries_path(5)), "tile/entries/005", "entries full");
-    expect_eq(
-      merkle::tiles::TileStore::storage_directory_name("sha384"),
-      "sha384-256w",
-      "SHA384 retains 256-hash tile width");
-    expect_eq(
-      merkle::tiles::TileStore::storage_directory_name("sha3-256"),
-      "sha3-256-256w",
-      "custom algorithm storage directory");
-    for (const std::string& invalid_name :
-         {"", "-sha256", "sha256-", "SHA256", "sha_256", "sha/256"})
-    {
-      expect_throws(
-        [&] {
-          (void)merkle::tiles::TileStore::storage_directory_name(invalid_name);
-        },
-        "invalid algorithm short name rejected");
-    }
-    for (const std::string& mismatched_name : {"sha384", "sha512"})
-    {
-      expect_throws(
-        [&] { (void)merkle::tiles::TileStore(dir, mismatched_name); },
-        "algorithm short name must match hash output size");
-    }
+  prefix_probes = 0;
+  const auto empty_prefix_length =
+    merkle::tiles::detail::contiguous_prefix_length(0, [&](uint64_t) {
+      prefix_probes++;
+      return true;
+    });
+  CHECK(empty_prefix_length == 0);
+  CHECK(prefix_probes == 0);
 
-    using CustomStore =
-      merkle::tiles::TileStoreT<merkle::Hash::size_bytes, custom_hash>;
-    expect_throws(
-      [&] { (void)CustomStore(dir); },
-      "custom hash requires an explicit algorithm name");
-    const CustomStore custom_store(dir, "custom-hash");
-    expect_eq(
-      custom_store.root().lexically_relative(dir).generic_string(),
-      "custom-hash-256w",
-      "explicit custom hash storage directory");
+  CHECK(merkle::tiles::encode_tile_index(0) == "000");
+  CHECK(merkle::tiles::encode_tile_index(5) == "005");
+  CHECK(merkle::tiles::encode_tile_index(255) == "255");
+  CHECK(merkle::tiles::encode_tile_index(999) == "999");
+  CHECK(merkle::tiles::encode_tile_index(1000) == "x001/000");
+  CHECK(merkle::tiles::encode_tile_index(1234067) == "x001/x234/067");
+  CHECK(
+    merkle::tiles::encode_tile_index(std::numeric_limits<uint64_t>::max()) ==
+    "x018/x446/x744/x073/x709/x551/615");
+  CHECK(merkle::tiles::TileStore::encode_index(1000) == "x001/000");
+}
+
+TEST_CASE("Tile store paths and hash namespaces")
+{
+  // 2. Resource path layout (full tiles and bundles only).
+  TemporaryDirectory temporary_directory;
+  const fs::path& dir = temporary_directory.path();
+  merkle::tiles::TileStore store(dir);
+
+  CHECK(store.root().lexically_relative(dir).generic_string() == "sha256-256w");
+  CHECK(rel(store, store.tile_path(TileRef{0, 0})) == "tile/0/000");
+  CHECK(
+    rel(store, store.tile_path(TileRef{1, 1234067})) == "tile/1/x001/x234/067");
+  CHECK(
+    rel(store, store.tile_path(TileRef{merkle::tiles::MAX_TILE_LEVEL, 0})) ==
+    "tile/63/000");
+  CHECK_THROWS_AS(
+    (store.tile_path(
+      TileRef{static_cast<uint8_t>(merkle::tiles::MAX_TILE_LEVEL + 1), 0})),
+    std::runtime_error);
+  CHECK(rel(store, store.entries_path(5)) == "tile/entries/005");
+  CHECK(
+    merkle::tiles::TileStore::storage_directory_name("sha384") ==
+    "sha384-256w");
+  CHECK(
+    merkle::tiles::TileStore::storage_directory_name("sha3-256") ==
+    "sha3-256-256w");
+
+  for (const std::string& invalid_name :
+       {"", "-sha256", "sha256-", "SHA256", "sha_256", "sha/256"})
+  {
+    CAPTURE(invalid_name);
+    CHECK_THROWS_AS(
+      merkle::tiles::TileStore::storage_directory_name(invalid_name),
+      std::runtime_error);
+  }
+  for (const std::string& mismatched_name : {"sha384", "sha512"})
+  {
+    CAPTURE(mismatched_name);
+    CHECK_THROWS_AS(
+      (merkle::tiles::TileStore(dir, mismatched_name)), std::runtime_error);
+  }
+
+  using CustomStore =
+    merkle::tiles::TileStoreT<merkle::Hash::size_bytes, custom_hash>;
+  CHECK_THROWS_AS((void)CustomStore(dir), std::runtime_error);
+  const CustomStore custom_store(dir, "custom-hash");
+  CHECK(
+    custom_store.root().lexically_relative(dir).generic_string() ==
+    "custom-hash-256w");
 
 #ifdef HAVE_OPENSSL
-    {
-      using TileStore256 = merkle::tiles::
-        TileStoreT<merkle::Hash::size_bytes, merkle::sha256_openssl>;
-      const TileStore256 store256(dir);
-      expect_eq(
-        store256.root().lexically_relative(dir).generic_string(),
-        "sha256-256w",
-        "OpenSSL SHA256 storage directory");
+  using TileStore256 =
+    merkle::tiles::TileStoreT<merkle::Hash::size_bytes, merkle::sha256_openssl>;
+  const TileStore256 store256(dir);
+  CHECK(
+    store256.root().lexically_relative(dir).generic_string() == "sha256-256w");
 
-      using TileStore384 = merkle::tiles::TileStoreT<
-        merkle::Tree384::Hash::size_bytes,
-        merkle::Tree384::hash_function>;
-      for (const std::string& mismatched_name : {"sha256", "sha512"})
-      {
-        expect_throws(
-          [&] { (void)TileStore384(dir, mismatched_name); },
-          "SHA384 store rejects mismatched algorithm names");
-      }
-      TileStore384 store384(dir);
-      const auto full384 = make_hashesT<merkle::Tree384::Hash::size_bytes>(
-        merkle::tiles::TILE_WIDTH);
-      expect_eq(
-        store384.root().lexically_relative(dir).generic_string(),
-        "sha384-256w",
-        "SHA384 storage directory");
-      store384.write_tile(TileRef{0, 0}, full384);
-      expect(
-        fs::file_size(store384.tile_path(TileRef{0, 0})) ==
-          (uintmax_t)merkle::tiles::TILE_WIDTH *
-            merkle::Tree384::Hash::size_bytes,
-        "SHA384 full tile remains 256 hashes wide");
-      expect(
-        store384.has_full_tile(0, 0) &&
-          store384.read_tile(TileRef{0, 0}) == full384,
-        "SHA384 tile round-trip");
+  using TileStore384 = merkle::tiles::TileStoreT<
+    merkle::Tree384::Hash::size_bytes,
+    merkle::Tree384::hash_function>;
+  for (const std::string& mismatched_name : {"sha256", "sha512"})
+  {
+    CAPTURE(mismatched_name);
+    CHECK_THROWS_AS((TileStore384(dir, mismatched_name)), std::runtime_error);
+  }
+  TileStore384 store384(dir);
+  const auto full384 =
+    make_hashesT<merkle::Tree384::Hash::size_bytes>(merkle::tiles::TILE_WIDTH);
+  CHECK(
+    store384.root().lexically_relative(dir).generic_string() == "sha384-256w");
+  store384.write_tile(TileRef{0, 0}, full384);
+  CHECK(
+    fs::file_size(store384.tile_path(TileRef{0, 0})) ==
+    (uintmax_t)merkle::tiles::TILE_WIDTH * merkle::Tree384::Hash::size_bytes);
+  CHECK(store384.has_full_tile(0, 0));
+  CHECK(store384.read_tile(TileRef{0, 0}) == full384);
 
-      using TileStore512 = merkle::tiles::TileStoreT<
-        merkle::Tree512::Hash::size_bytes,
-        merkle::Tree512::hash_function>;
-      for (const std::string& mismatched_name : {"sha256", "sha384"})
-      {
-        expect_throws(
-          [&] { (void)TileStore512(dir, mismatched_name); },
-          "SHA512 store rejects mismatched algorithm names");
-      }
-      TileStore512 store512(dir);
-      const auto full512 = make_hashesT<merkle::Tree512::Hash::size_bytes>(
-        merkle::tiles::TILE_WIDTH);
-      expect_eq(
-        store512.root().lexically_relative(dir).generic_string(),
-        "sha512-256w",
-        "SHA512 storage directory");
-      store512.write_tile(TileRef{0, 0}, full512);
-      expect(
-        fs::file_size(store512.tile_path(TileRef{0, 0})) ==
-          (uintmax_t)merkle::tiles::TILE_WIDTH *
-            merkle::Tree512::Hash::size_bytes,
-        "SHA512 full tile remains 256 hashes wide");
-      expect(
-        store512.has_full_tile(0, 0) &&
-          store512.read_tile(TileRef{0, 0}) == full512,
-        "SHA512 tile round-trip");
-    }
+  using TileStore512 = merkle::tiles::TileStoreT<
+    merkle::Tree512::Hash::size_bytes,
+    merkle::Tree512::hash_function>;
+  for (const std::string& mismatched_name : {"sha256", "sha384"})
+  {
+    CAPTURE(mismatched_name);
+    CHECK_THROWS_AS((TileStore512(dir, mismatched_name)), std::runtime_error);
+  }
+  TileStore512 store512(dir);
+  const auto full512 =
+    make_hashesT<merkle::Tree512::Hash::size_bytes>(merkle::tiles::TILE_WIDTH);
+  CHECK(
+    store512.root().lexically_relative(dir).generic_string() == "sha512-256w");
+  store512.write_tile(TileRef{0, 0}, full512);
+  CHECK(
+    fs::file_size(store512.tile_path(TileRef{0, 0})) ==
+    (uintmax_t)merkle::tiles::TILE_WIDTH * merkle::Tree512::Hash::size_bytes);
+  CHECK(store512.has_full_tile(0, 0));
+  CHECK(store512.read_tile(TileRef{0, 0}) == full512);
 #endif
+}
 
-    // 2b. Production writes sync each directory link and the destination
-    // directory in order.
-    {
-      const fs::path prefix = dir / "durable";
-      const auto fault = std::make_shared<SyncFault>();
-      FaultInjectingTileStore durable_store(prefix, fault);
-      durable_store.write_tile(TileRef{1, 0}, full);
-      const std::vector<fs::path> expected = {
-        dir.parent_path(),
-        dir,
-        prefix,
-        prefix / "sha256-256w",
-        prefix / "sha256-256w" / "tile",
-        prefix / "sha256-256w" / "tile" / "1"};
-      expect(
-        fault->calls.size() >= expected.size() &&
-          std::equal(
-            expected.begin(),
-            expected.end(),
-            fault->calls.end() - (std::ptrdiff_t)expected.size()),
-        "directory parents and destination synced in order");
-    }
+TEST_CASE("Tile writes sync directory links in order")
+{
+  // 2b. Production writes sync each directory link and the destination
+  // directory in order.
+  TemporaryDirectory temporary_directory;
+  const fs::path& dir = temporary_directory.path();
+  const fs::path prefix = dir / "durable";
+  const auto fault = std::make_shared<SyncFault>();
+  FaultInjectingTileStore store(prefix, fault);
+  store.write_tile(TileRef{1, 0}, make_hashes(merkle::tiles::TILE_WIDTH));
 
-    // 2c. A failed directory-link sync is retried even when the directory
-    // created before the failure is already visible.
-    {
-      const fs::path prefix = dir / "directory_retry";
-      const auto fault = std::make_shared<SyncFault>();
-      fault->fail_path = prefix;
-      fault->failures_remaining = 1;
-      FaultInjectingTileStore retry_store(prefix, fault);
-      const TileRef retry_ref{2, 7};
-      expect_throws(
-        [&] { retry_store.write_tile(retry_ref, full); },
-        "directory sync failure propagated");
-      expect(
-        !retry_store.has_full_tile(retry_ref.level, retry_ref.index),
-        "tile not published before directory chain is durable");
-      retry_store.write_tile(retry_ref, full);
-      expect(
-        retry_store.read_tile(retry_ref) == full,
-        "write succeeds after directory sync retry");
-      expect(
-        fault->call_count(prefix) == 2, "failed directory link sync retried");
-    }
+  const std::vector<fs::path> expected = {
+    dir.parent_path(),
+    dir,
+    prefix,
+    prefix / "sha256-256w",
+    prefix / "sha256-256w" / "tile",
+    prefix / "sha256-256w" / "tile" / "1"};
+  REQUIRE(fault->calls.size() >= expected.size());
+  CHECK(std::equal(
+    expected.begin(),
+    expected.end(),
+    fault->calls.end() - (std::ptrdiff_t)expected.size()));
+}
 
-    // 2d. A failure syncing the destination directory leaves a complete,
-    // visible file that can be re-confirmed on the next write attempt.
-    {
-      const fs::path prefix = dir / "publication_retry";
-      const auto fault = std::make_shared<SyncFault>();
-      FaultInjectingTileStore retry_store(prefix, fault);
-      const TileRef retry_ref{3, 9};
-      const auto tile_directory =
-        retry_store.tile_path(retry_ref).parent_path();
-      fault->fail_path = tile_directory;
-      fault->failures_remaining = 1;
-      expect_throws(
-        [&] { retry_store.write_tile(retry_ref, full); },
-        "publication directory sync failure propagated");
-      expect(
-        retry_store.has_full_tile(retry_ref.level, retry_ref.index) &&
-          retry_store.read_tile(retry_ref) == full,
-        "complete tile remains visible after publication sync failure");
-      expect(
-        !any_tmp_files(prefix),
-        "publication sync failure leaves no temporary file");
+TEST_CASE("Failed directory-link sync is retried")
+{
+  // 2c. A failed directory-link sync is retried even when the directory
+  // created before the failure is already visible.
+  TemporaryDirectory temporary_directory;
+  const fs::path prefix = temporary_directory.path() / "directory_retry";
+  const auto fault = std::make_shared<SyncFault>();
+  fault->fail_path = prefix;
+  fault->failures_remaining = 1;
+  FaultInjectingTileStore store(prefix, fault);
+  const TileRef ref{2, 7};
+  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
 
-      const size_t calls_before_confirm = fault->call_count(tile_directory);
-      retry_store.begin_attempt();
-      expect(
-        retry_store.confirm_tile(retry_ref.level, retry_ref.index),
-        "visible tile durability re-confirmed");
-      expect(
-        fault->call_count(tile_directory) == calls_before_confirm + 1,
-        "destination directory sync retried");
-      expect(
-        retry_store.confirm_tile(retry_ref.level, retry_ref.index),
-        "confirmed tile remains reusable");
-      expect(
-        fault->call_count(tile_directory) == calls_before_confirm + 1,
-        "directory sync cached within one attempt");
+  CHECK_THROWS_AS((store.write_tile(ref, full)), std::runtime_error);
+  CHECK_FALSE(store.has_full_tile(ref.level, ref.index));
+  store.write_tile(ref, full);
+  CHECK(store.read_tile(ref) == full);
+  CHECK(fault->call_count(prefix) == 2);
+}
 
-      retry_store.begin_attempt();
-      expect(
-        !retry_store.confirm_tile(retry_ref.level, retry_ref.index + 1),
-        "missing tile cannot be confirmed");
-    }
+TEST_CASE("Visible publication can be confirmed after sync failure")
+{
+  // 2d. A failure syncing the destination directory leaves a complete,
+  // visible file that can be re-confirmed on the next write attempt.
+  TemporaryDirectory temporary_directory;
+  const fs::path prefix = temporary_directory.path() / "publication_retry";
+  const auto fault = std::make_shared<SyncFault>();
+  FaultInjectingTileStore store(prefix, fault);
+  const TileRef ref{3, 9};
+  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  const auto tile_directory = store.tile_path(ref).parent_path();
+  fault->fail_path = tile_directory;
+  fault->failures_remaining = 1;
 
-    // 2e. Failures before atomic replacement clean up temporary files, and a
-    // non-directory in the destination path is rejected.
-    {
-      const fs::path prefix = dir / "replacement_failure";
-      merkle::tiles::TileStore failure_store(prefix);
-      const TileRef blocked_ref{0, 1};
-      fs::create_directories(failure_store.tile_path(blocked_ref));
-      expect_throws(
-        [&] { failure_store.write_tile(blocked_ref, full); },
-        "replacement of a directory rejected");
-      expect(
-        !any_tmp_files(prefix),
-        "failed atomic replacement cleans up temporary file");
-    }
-    {
-      const fs::path prefix = dir / "directory_conflict";
-      fs::create_directories(prefix);
-      overwrite_file(prefix / "sha256-256w", {0x00});
-      merkle::tiles::TileStore failure_store(prefix);
-      expect_throws(
-        [&] { failure_store.write_tile(TileRef{0, 0}, full); },
-        "non-directory storage root rejected");
-      expect(
-        !any_tmp_files(prefix),
-        "directory creation failure leaves no temporary file");
-    }
+  CHECK_THROWS_AS((store.write_tile(ref, full)), std::runtime_error);
+  CHECK(store.has_full_tile(ref.level, ref.index));
+  CHECK(store.read_tile(ref) == full);
+  CHECK_FALSE(any_tmp_files(prefix));
 
-    // 2f. Unique temporary-file creation must fail rather than overwrite an
-    // existing path, including a pre-created symlink on POSIX.
-    {
-      const fs::path existing_path = dir / "preexisting-temp";
-      const std::vector<uint8_t> original = {0x11, 0x22, 0x33};
-      overwrite_file(existing_path, original);
-      const auto collision_error = expect_throws_message(
-        [&] { merkle::pal::write_and_sync_file(existing_path, {0xAA}); },
-        "exclusive temporary-file creation rejects collisions");
-      expect(
-        collision_error.find(existing_path.string()) != std::string::npos,
-        "temporary-file collision identifies the path");
+  const size_t calls_before_confirm = fault->call_count(tile_directory);
+  store.begin_attempt();
+  CHECK(store.confirm_tile(ref.level, ref.index));
+  CHECK(fault->call_count(tile_directory) == calls_before_confirm + 1);
+  CHECK(store.confirm_tile(ref.level, ref.index));
+  CHECK(fault->call_count(tile_directory) == calls_before_confirm + 1);
+
+  store.begin_attempt();
+  CHECK_FALSE(store.confirm_tile(ref.level, ref.index + 1));
+}
+
+TEST_CASE("Replacement and directory conflicts clean up temporary files")
+{
+  // 2e. Failures before atomic replacement clean up temporary files, and a
+  // non-directory in the destination path is rejected.
+  TemporaryDirectory temporary_directory;
+  const fs::path& dir = temporary_directory.path();
+  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+
+  const fs::path replacement_prefix = dir / "replacement_failure";
+  merkle::tiles::TileStore replacement_store(replacement_prefix);
+  const TileRef blocked_ref{0, 1};
+  fs::create_directories(replacement_store.tile_path(blocked_ref));
+  CHECK_THROWS_AS(
+    (replacement_store.write_tile(blocked_ref, full)), std::runtime_error);
+  CHECK_FALSE(any_tmp_files(replacement_prefix));
+
+  const fs::path conflict_prefix = dir / "directory_conflict";
+  fs::create_directories(conflict_prefix);
+  overwrite_file(conflict_prefix / "sha256-256w", {0x00});
+  merkle::tiles::TileStore conflict_store(conflict_prefix);
+  CHECK_THROWS_AS(
+    (conflict_store.write_tile(TileRef{0, 0}, full)), std::runtime_error);
+  CHECK_FALSE(any_tmp_files(conflict_prefix));
+}
+
+TEST_CASE("Exclusive file creation rejects file and symlink collisions")
+{
+  // 2f. Unique temporary-file creation must fail rather than overwrite an
+  // existing path, including a pre-created symlink on POSIX.
+  TemporaryDirectory temporary_directory;
+  const fs::path& dir = temporary_directory.path();
+  fs::create_directories(dir);
+  const fs::path existing_path = dir / "preexisting-temp";
+  const std::vector<uint8_t> original = {0x11, 0x22, 0x33};
+  overwrite_file(existing_path, original);
+
+  std::string collision_error;
+  try
+  {
+    merkle::pal::write_and_sync_file(existing_path, {0xAA});
+  }
+  catch (const std::runtime_error& ex)
+  {
+    collision_error = ex.what();
+  }
+  REQUIRE_FALSE(collision_error.empty());
+  CHECK(collision_error.find(existing_path.string()) != std::string::npos);
 #ifdef _WIN32
-      expect(
-        collision_error.find(": error ") != std::string::npos,
-        "temporary-file collision includes the Windows system error");
+  CHECK(collision_error.find(": error ") != std::string::npos);
 #endif
-      expect(
-        read_file(existing_path) == original,
-        "temporary-file collision does not clobber existing content");
-#ifndef _WIN32
-      const fs::path symlink_path = dir / "preexisting-temp-symlink";
-      fs::create_symlink(existing_path, symlink_path);
-      expect_throws(
-        [&] { merkle::pal::write_and_sync_file(symlink_path, {0xBB}); },
-        "exclusive temporary-file creation rejects symlinks");
-      expect(
-        read_file(existing_path) == original,
-        "temporary-file symlink does not clobber its target");
-#endif
-    }
-
-    // 2g. A successful write must make progress. This shared guard prevents
-    // the Windows WriteFile loop from spinning if it reports zero bytes.
-    {
-      expect_throws(
-        [] { merkle::pal::require_write_progress(0, "test"); },
-        "zero-byte write rejected");
-      merkle::pal::require_write_progress(1, "test");
-    }
+  CHECK(read_file(existing_path) == original);
 
 #ifndef _WIN32
-    // 2h. Interrupted sync operations are retried, while other failures are
-    // returned immediately with errno intact.
-    {
-      size_t attempts = 0;
-      const int retry_result = merkle::pal::detail::retry_on_eintr([&]() {
-        attempts++;
-        if (attempts == 1)
-        {
-          errno = EINTR;
-          return -1;
-        }
-        return 0;
-      });
-      expect(
-        retry_result == 0 && attempts == 2,
-        "interrupted sync operation retried");
+  const fs::path symlink_path = dir / "preexisting-temp-symlink";
+  fs::create_symlink(existing_path, symlink_path);
+  CHECK_THROWS_AS(
+    (merkle::pal::write_and_sync_file(symlink_path, {0xBB})),
+    std::runtime_error);
+  CHECK(read_file(existing_path) == original);
+#endif
+}
 
-      attempts = 0;
-      const int error_result = merkle::pal::detail::retry_on_eintr([&]() {
-        attempts++;
-        errno = EIO;
-        return -1;
-      });
-      expect(
-        error_result == -1 && attempts == 1 && errno == EIO,
-        "non-interrupted sync failure preserved");
+TEST_CASE("Successful writes must make progress")
+{
+  // 2g. A successful write must make progress. This shared guard prevents
+  // the Windows WriteFile loop from spinning if it reports zero bytes.
+  CHECK_THROWS_AS(
+    merkle::pal::require_write_progress(0, "test"), std::runtime_error);
+  CHECK_NOTHROW(merkle::pal::require_write_progress(1, "test"));
+}
+
+#ifndef _WIN32
+TEST_CASE("Interrupted sync operations are retried")
+{
+  // 2h. Interrupted sync operations are retried, while other failures are
+  // returned immediately with errno intact.
+  size_t attempts = 0;
+  const int retry_result = merkle::pal::detail::retry_on_eintr([&]() {
+    attempts++;
+    if (attempts == 1)
+    {
+      errno = EINTR;
+      return -1;
     }
+    return 0;
+  });
+  CHECK(retry_result == 0);
+  CHECK(attempts == 2);
+
+  attempts = 0;
+  const int error_result = merkle::pal::detail::retry_on_eintr([&]() {
+    attempts++;
+    errno = EIO;
+    return -1;
+  });
+  CHECK(error_result == -1);
+  CHECK(attempts == 1);
+  CHECK(errno == EIO);
+}
 #endif
 
-    // 3a. Full tile byte round-trip.
-    const TileRef full_ref{0, 0};
-    store.write_tile(full_ref, full);
-    expect(store.has_full_tile(0, 0), "has_full_tile after write");
-    expect(!store.has_full_tile(0, 5), "missing full tile");
-    expect_throws(
-      [&] { (void)store.read_tile(TileRef{0, 5}); },
-      "missing tile read rejected");
-    expect(
-      fs::file_size(store.tile_path(full_ref)) ==
-        (uintmax_t)merkle::tiles::TILE_WIDTH * hsz,
-      "full tile file size");
-    std::vector<uint8_t> expected_tile_bytes;
-    expected_tile_bytes.reserve(full.size() * hsz);
-    for (const auto& hash : full)
-    {
-      hash.serialise(expected_tile_bytes);
-    }
-    expect(
-      read_file(store.tile_path(full_ref)) == expected_tile_bytes,
-      "tile file contains concatenated raw hashes");
-    const auto full_rt = store.read_tile(full_ref);
-    expect(full_rt.size() == full.size(), "full tile width round-trip");
-    for (size_t i = 0; i < full.size(); i++)
-    {
-      expect(full_rt[i] == full[i], "full tile hash round-trip");
-    }
+TEST_CASE("Full tiles use raw bytes and round-trip")
+{
+  // 3a. Full tile byte round-trip.
+  TemporaryDirectory temporary_directory;
+  merkle::tiles::TileStore store(temporary_directory.path());
+  const size_t hash_size = Hash().size();
+  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  const TileRef full_ref{0, 0};
 
-    // 3b. Wrong-width writes are rejected (only 256-wide tiles are valid).
-    const std::vector<Hash> three(full.begin(), full.begin() + 3);
-    expect_throws(
-      [&] { store.write_tile(TileRef{0, 2}, three); },
-      "width mismatch rejected");
+  store.write_tile(full_ref, full);
+  CHECK(store.has_full_tile(0, 0));
+  CHECK_FALSE(store.has_full_tile(0, 5));
+  CHECK_THROWS_AS((store.read_tile(TileRef{0, 5})), std::runtime_error);
+  CHECK(
+    fs::file_size(store.tile_path(full_ref)) ==
+    (uintmax_t)merkle::tiles::TILE_WIDTH * hash_size);
 
-    // 4. Entry bundles preserve empty, short, and multi-byte-length entries,
-    // enforce their width and uint16 length limits, and can be re-confirmed.
-    std::vector<std::vector<uint8_t>> entries(merkle::tiles::TILE_WIDTH);
-    entries[1] = {0xA5};
-    entries[2] = std::vector<uint8_t>(256, 0x5A);
-    for (size_t i = 3; i < entries.size(); i++)
-    {
-      entries[i] = {(uint8_t)i, 0x7F};
-    }
-    const auto encoded_entries =
-      merkle::tiles::TileStore::encode_entries(entries);
-    expect(
-      encoded_entries.size() > 7 && encoded_entries[0] == 0x00 &&
-        encoded_entries[1] == 0x00 && encoded_entries[2] == 0x00 &&
-        encoded_entries[3] == 0x01 && encoded_entries[4] == 0xA5 &&
-        encoded_entries[5] == 0x01 && encoded_entries[6] == 0x00,
-      "entry lengths use big-endian uint16 prefixes");
-    expect(
-      merkle::tiles::TileStore::decode_entries(
-        encoded_entries, merkle::tiles::TILE_WIDTH) == entries,
-      "entry codec round-trip");
-    expect(
-      merkle::tiles::TileStore::decode_entries({}, 0).empty(),
-      "empty entry sequence round-trip");
-    expect_throws(
-      [] {
-        (void)merkle::tiles::TileStore::decode_entries(
-          {}, std::numeric_limits<size_t>::max());
-      },
-      "impossible entry count rejected before allocation");
+  std::vector<uint8_t> expected_tile_bytes;
+  expected_tile_bytes.reserve(full.size() * hash_size);
+  for (const auto& hash : full)
+  {
+    hash.serialise(expected_tile_bytes);
+  }
+  CHECK(read_file(store.tile_path(full_ref)) == expected_tile_bytes);
 
-    const std::vector<uint8_t> maximum_entry(0xFFFF, 0xC3);
-    const auto maximum_encoded =
-      merkle::tiles::TileStore::encode_entries({maximum_entry});
-    const auto maximum_decoded =
-      merkle::tiles::TileStore::decode_entries(maximum_encoded, 1);
-    expect(
-      maximum_encoded.size() == maximum_entry.size() + 2 &&
-        maximum_encoded[0] == 0xFF && maximum_encoded[1] == 0xFF &&
-        maximum_decoded.size() == 1 && maximum_decoded[0] == maximum_entry,
-      "maximum uint16-sized entry round-trip");
-    expect_throws(
-      [] {
-        (void)merkle::tiles::TileStore::encode_entries(
-          {std::vector<uint8_t>(0x10000)});
-      },
-      "oversized entry rejected");
+  const auto full_roundtrip = store.read_tile(full_ref);
+  REQUIRE(full_roundtrip.size() == full.size());
+  for (size_t i = 0; i < full.size(); i++)
+  {
+    CAPTURE(i);
+    CHECK(full_roundtrip[i] == full[i]);
+  }
 
-    expect(!store.has_entry_bundle(17), "missing entry bundle");
-    expect_throws(
-      [&] { (void)store.read_entry_bundle(17); },
-      "missing entry bundle read rejected");
-    const std::vector<std::vector<uint8_t>> short_bundle(
-      entries.begin(), entries.end() - 1);
-    expect_throws(
-      [&] { store.write_entry_bundle(1, short_bundle); },
-      "short entry bundle rejected");
-    auto oversized_bundle = entries;
-    oversized_bundle[0].resize(0x10000);
-    expect_throws(
-      [&] { store.write_entry_bundle(2, oversized_bundle); },
-      "entry bundle containing oversized entry rejected");
-    expect(
-      !fs::exists(store.entries_path(1)) && !fs::exists(store.entries_path(2)),
-      "invalid entry bundles are not published");
+  // 3b. Wrong-width writes are rejected (only 256-wide tiles are valid).
+  const std::vector<Hash> three(full.begin(), full.begin() + 3);
+  CHECK_THROWS_AS((store.write_tile(TileRef{0, 2}, three)), std::runtime_error);
+}
 
-    store.write_entry_bundle(0, entries);
-    expect(store.has_entry_bundle(0), "full entry bundle exists");
-    expect(
-      store.read_entry_bundle(0) == entries,
-      "full entry bundle byte round-trip");
-    expect(
-      fs::file_size(store.entries_path(0)) == encoded_entries.size(),
-      "entry bundle file size");
-    expect(
-      read_file(store.entries_path(0)) == encoded_entries,
-      "entry bundle file uses the encoded wire format");
+TEST_CASE("Entry encoding enforces bounds and round-trips")
+{
+  // 4. Entry bundles preserve empty, short, and multi-byte-length entries,
+  // enforce their width and uint16 length limits, and can be re-confirmed.
+  const auto entries = make_entries();
+  const auto encoded_entries =
+    merkle::tiles::TileStore::encode_entries(entries);
+  REQUIRE(encoded_entries.size() > 7);
+  CHECK(encoded_entries[0] == 0x00);
+  CHECK(encoded_entries[1] == 0x00);
+  CHECK(encoded_entries[2] == 0x00);
+  CHECK(encoded_entries[3] == 0x01);
+  CHECK(encoded_entries[4] == 0xA5);
+  CHECK(encoded_entries[5] == 0x01);
+  CHECK(encoded_entries[6] == 0x00);
+  CHECK(
+    merkle::tiles::TileStore::decode_entries(
+      encoded_entries, merkle::tiles::TILE_WIDTH) == entries);
+  CHECK(merkle::tiles::TileStore::decode_entries({}, 0).empty());
+  CHECK_THROWS_AS(
+    (merkle::tiles::TileStore::decode_entries(
+      {}, std::numeric_limits<size_t>::max())),
+    std::runtime_error);
 
-    {
-      const fs::path prefix = dir / "bundle_confirmation";
-      const auto fault = std::make_shared<SyncFault>();
-      FaultInjectingTileStore confirming_store(prefix, fault);
-      confirming_store.write_entry_bundle(4, entries);
-      const auto entries_directory =
-        confirming_store.entries_path(4).parent_path();
-      const size_t calls_before_confirm = fault->call_count(entries_directory);
-      confirming_store.begin_attempt();
-      expect(
-        confirming_store.confirm_bundle(4),
-        "visible entry bundle durability confirmed");
-      expect(
-        fault->call_count(entries_directory) == calls_before_confirm + 1,
-        "entry bundle directory synced for new attempt");
-      expect(
-        confirming_store.confirm_bundle(4),
-        "confirmed entry bundle remains reusable");
-      expect(
-        fault->call_count(entries_directory) == calls_before_confirm + 1,
-        "entry bundle sync cached within one attempt");
-      confirming_store.begin_attempt();
-      expect(
-        !confirming_store.confirm_bundle(5),
-        "missing entry bundle cannot be confirmed");
-    }
+  const std::vector<uint8_t> maximum_entry(0xFFFF, 0xC3);
+  const auto maximum_encoded =
+    merkle::tiles::TileStore::encode_entries({maximum_entry});
+  const auto maximum_decoded =
+    merkle::tiles::TileStore::decode_entries(maximum_encoded, 1);
+  CHECK(maximum_encoded.size() == maximum_entry.size() + 2);
+  CHECK(maximum_encoded[0] == 0xFF);
+  CHECK(maximum_encoded[1] == 0xFF);
+  REQUIRE(maximum_decoded.size() == 1);
+  CHECK(maximum_decoded[0] == maximum_entry);
+  CHECK_THROWS_AS(
+    (merkle::tiles::TileStore::encode_entries({std::vector<uint8_t>(0x10000)})),
+    std::runtime_error);
+}
 
-    // 5. Corrupt / truncated files are rejected on read (integrity check), so
-    // a torn write can never be served as a valid tile or bundle.
-    {
-      // Truncated tile: fewer bytes than a full tile.
-      overwrite_file(store.tile_path(full_ref), std::vector<uint8_t>(hsz, 0));
-      expect(!store.has_full_tile(0, 0), "truncated tile is not durable");
-      expect_throws(
-        [&] { (void)store.read_tile(full_ref); }, "truncated tile rejected");
-      store.write_tile(full_ref, full);
-      expect(store.has_full_tile(0, 0), "truncated tile rewritten");
-      expect(store.read_tile(full_ref) == full, "rewritten tile round-trip");
+TEST_CASE("Entry bundle storage validates and confirms publications")
+{
+  TemporaryDirectory temporary_directory;
+  const fs::path& dir = temporary_directory.path();
+  merkle::tiles::TileStore store(dir);
+  const auto entries = make_entries();
+  const auto encoded_entries =
+    merkle::tiles::TileStore::encode_entries(entries);
 
-      // Oversized tile: more bytes than a full tile.
-      overwrite_file(
-        store.tile_path(full_ref),
-        std::vector<uint8_t>((merkle::tiles::TILE_WIDTH + 1) * hsz, 0));
-      expect(!store.has_full_tile(0, 0), "oversized tile is not durable");
-      expect_throws(
-        [&] { (void)store.read_tile(full_ref); }, "oversized tile rejected");
+  CHECK_FALSE(store.has_entry_bundle(17));
+  CHECK_THROWS_AS(store.read_entry_bundle(17), std::runtime_error);
+  const std::vector<std::vector<uint8_t>> short_bundle(
+    entries.begin(), entries.end() - 1);
+  CHECK_THROWS_AS(
+    (store.write_entry_bundle(1, short_bundle)), std::runtime_error);
+  auto oversized_bundle = entries;
+  oversized_bundle[0].resize(0x10000);
+  CHECK_THROWS_AS(
+    (store.write_entry_bundle(2, oversized_bundle)), std::runtime_error);
+  CHECK_FALSE(fs::exists(store.entries_path(1)));
+  CHECK_FALSE(fs::exists(store.entries_path(2)));
 
-      // A valid full entry bundle whose file is then cut short.
-      store.write_entry_bundle(0, entries);
-      expect(store.has_entry_bundle(0), "bundle durable before truncation");
-      expect(
-        store.read_entry_bundle(0) == entries,
-        "bundle valid before truncation");
-      // Claims a 5-byte entry but supplies only one trailing byte.
-      overwrite_file(store.entries_path(0), {0x00, 0x05, 0x01});
-      expect(!store.has_entry_bundle(0), "truncated bundle is not durable");
-      expect_throws(
-        [&] { (void)store.read_entry_bundle(0); },
-        "truncated entry bundle rejected");
+  store.write_entry_bundle(0, entries);
+  CHECK(store.has_entry_bundle(0));
+  CHECK(store.read_entry_bundle(0) == entries);
+  CHECK(fs::file_size(store.entries_path(0)) == encoded_entries.size());
+  CHECK(read_file(store.entries_path(0)) == encoded_entries);
 
-      // A syntactically complete bundle with trailing bytes is not durable.
-      auto encoded = merkle::tiles::TileStore::encode_entries(entries);
-      encoded.push_back(0xFF);
-      overwrite_file(store.entries_path(0), encoded);
-      expect(!store.has_entry_bundle(0), "trailing bundle is not durable");
-      expect_throws(
-        [&] { (void)store.read_entry_bundle(0); },
-        "trailing entry bundle rejected");
+  const fs::path prefix = dir / "bundle_confirmation";
+  const auto fault = std::make_shared<SyncFault>();
+  FaultInjectingTileStore confirming_store(prefix, fault);
+  confirming_store.write_entry_bundle(4, entries);
+  const auto entries_directory = confirming_store.entries_path(4).parent_path();
+  const size_t calls_before_confirm = fault->call_count(entries_directory);
+  confirming_store.begin_attempt();
+  CHECK(confirming_store.confirm_bundle(4));
+  CHECK(fault->call_count(entries_directory) == calls_before_confirm + 1);
+  CHECK(confirming_store.confirm_bundle(4));
+  CHECK(fault->call_count(entries_directory) == calls_before_confirm + 1);
+  confirming_store.begin_attempt();
+  CHECK_FALSE(confirming_store.confirm_bundle(5));
+}
 
-      // decode_entries directly: a length prefix that overruns the buffer.
-      expect_throws(
-        [] {
-          (void)merkle::tiles::TileStore::decode_entries({0xFF, 0xFF, 0x00}, 1);
-        },
-        "decode_entries oversized length rejected");
-      expect_throws(
-        [] { (void)merkle::tiles::TileStore::decode_entries({}, 1); },
-        "decode_entries missing length prefix rejected");
-      expect_throws(
-        [] {
-          (void)merkle::tiles::TileStore::decode_entries({0x00, 0x00, 0xFF}, 1);
-        },
-        "decode_entries trailing bytes rejected");
-    }
+TEST_CASE("Corrupt tiles and entry bundles are rejected")
+{
+  // 5. Corrupt / truncated files are rejected on read (integrity check), so
+  // a torn write can never be served as a valid tile or bundle.
+  TemporaryDirectory temporary_directory;
+  merkle::tiles::TileStore store(temporary_directory.path());
+  const size_t hash_size = Hash().size();
+  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  const TileRef full_ref{0, 0};
+  const auto entries = make_entries();
+  store.write_tile(full_ref, full);
+
+  overwrite_file(store.tile_path(full_ref), std::vector<uint8_t>(hash_size, 0));
+  CHECK_FALSE(store.has_full_tile(0, 0));
+  CHECK_THROWS_AS(store.read_tile(full_ref), std::runtime_error);
+  store.write_tile(full_ref, full);
+  CHECK(store.has_full_tile(0, 0));
+  CHECK(store.read_tile(full_ref) == full);
+
+  overwrite_file(
+    store.tile_path(full_ref),
+    std::vector<uint8_t>((merkle::tiles::TILE_WIDTH + 1) * hash_size, 0));
+  CHECK_FALSE(store.has_full_tile(0, 0));
+  CHECK_THROWS_AS(store.read_tile(full_ref), std::runtime_error);
+
+  store.write_entry_bundle(0, entries);
+  CHECK(store.has_entry_bundle(0));
+  CHECK(store.read_entry_bundle(0) == entries);
+  overwrite_file(store.entries_path(0), {0x00, 0x05, 0x01});
+  CHECK_FALSE(store.has_entry_bundle(0));
+  CHECK_THROWS_AS(store.read_entry_bundle(0), std::runtime_error);
+
+  auto encoded = merkle::tiles::TileStore::encode_entries(entries);
+  encoded.push_back(0xFF);
+  overwrite_file(store.entries_path(0), encoded);
+  CHECK_FALSE(store.has_entry_bundle(0));
+  CHECK_THROWS_AS(store.read_entry_bundle(0), std::runtime_error);
+
+  CHECK_THROWS_AS(
+    (merkle::tiles::TileStore::decode_entries({0xFF, 0xFF, 0x00}, 1)),
+    std::runtime_error);
+  CHECK_THROWS_AS(
+    (merkle::tiles::TileStore::decode_entries({}, 1)), std::runtime_error);
+  CHECK_THROWS_AS(
+    (merkle::tiles::TileStore::decode_entries({0x00, 0x00, 0xFF}, 1)),
+    std::runtime_error);
+}
 
 // Windows file replacement semantics can reject racing same-path replaces even
 // when the final tile remains valid, so keep this stress check POSIX-only.
 #ifndef _WIN32
-    // 6. Concurrent same-tile writes use unique temp files and leave no
-    // temporary files behind after success. Each thread owns its store object;
-    // sharing one object requires caller-provided synchronization.
-    {
-      const TileRef concurrent_ref{0, 42};
-      std::atomic<bool> ok{true};
-      std::vector<std::thread> threads;
-      for (size_t i = 0; i < 8; i++)
-      {
-        threads.emplace_back([&] {
-          try
-          {
-            merkle::tiles::TileStore thread_store(dir);
-            thread_store.write_tile(concurrent_ref, full);
-          }
-          catch (...)
-          {
-            ok = false;
-          }
-        });
-      }
-      for (auto& thread : threads)
-      {
-        thread.join();
-      }
-      expect(ok, "concurrent writes succeeded");
-      expect(store.read_tile(concurrent_ref) == full, "concurrent tile valid");
-      expect(!any_tmp_files(dir), "no temp files left after writes");
-    }
-#endif
-
-    std::cout << "tiles_store: OK" << '\n';
-
-    std::error_code ec;
-    fs::remove_all(dir, ec);
-  }
-  catch (std::exception& ex)
+TEST_CASE("Concurrent same-tile writes leave a valid tile")
+{
+  // 6. Concurrent same-tile writes use unique temp files and leave no
+  // temporary files behind after success. Each thread owns its store object;
+  // sharing one object requires caller-provided synchronization.
+  TemporaryDirectory temporary_directory;
+  const fs::path& dir = temporary_directory.path();
+  merkle::tiles::TileStore store(dir);
+  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  const TileRef concurrent_ref{0, 42};
+  std::atomic<bool> ok{true};
+  std::vector<std::thread> threads;
+  for (size_t i = 0; i < 8; i++)
   {
-    std::cout << "Error: " << ex.what() << '\n';
-    std::error_code ec;
-    fs::remove_all(dir, ec);
-    return 1;
+    threads.emplace_back([&] {
+      try
+      {
+        merkle::tiles::TileStore thread_store(dir);
+        thread_store.write_tile(concurrent_ref, full);
+      }
+      catch (...)
+      {
+        ok = false;
+      }
+    });
   }
-  catch (...)
+  for (auto& thread : threads)
   {
-    std::cout << "Error" << '\n';
-    std::error_code ec;
-    fs::remove_all(dir, ec);
-    return 1;
+    thread.join();
   }
 
-  return 0;
+  CHECK(ok.load());
+  CHECK(store.read_tile(concurrent_ref) == full);
+  CHECK_FALSE(any_tmp_files(dir));
 }
+#endif
