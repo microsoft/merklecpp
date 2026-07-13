@@ -31,7 +31,7 @@ serving the static resources.
 |---|---|
 | Tile | `<prefix>/<algorithm>-256w/tile/<L>/<N>`, `application/octet-stream`; `L` is decimal `0..63` without leading zeros, and `N` uses the grouped encoding in [section 4](#4-storage-layout-and-publication). |
 | Full tile | 256 hashes. Level 0 stores leaf hashes; each level-`L` entry for `L >= 1` is the Merkle Tree Hash of one complete level-`L-1` tile. |
-| Entry bundle | `<prefix>/<algorithm>-256w/tile/entries/<N>`; 256 raw entries encoded as big-endian `uint16` length-prefixed values. See [section 5.3](#53-entry-bundles-optional). |
+| Entry bundle | `<prefix>/<algorithm>-256w/tile/entries/<N>`; 256 raw entries encoded as big-endian `uint16` length-prefixed values. See [section 5.4](#54-entry-bundles-optional). |
 | Pruning | Tiles or bundles ending at or before a log's minimum index may be denied, matching `flush_to()` / `min_index()`. |
 
 A tile spans eight tree levels. Tile `n` at level `l` contains, for
@@ -192,7 +192,7 @@ hashes, not bytes.
 | `TileWriterT` | Persist newly completed full tiles |
 | Hash sources | Resolve subtree roots from memory, tiles, or both |
 | `ProofEngineT` | Roots, inclusion/consistency proofs, and verification |
-| `TiledTreeT` (planned) | `append`, `flush`, proof APIs, and compaction |
+| `TiledTreeT` | `append`, `flush`, proof APIs, and compaction |
 
 `TileHashSourceT` owns the proof-read LRU cache; `TileStoreT` does not cache.
 `MemoryHashSourceT` uses the `TreeT::subtree_root` accessor.
@@ -214,8 +214,10 @@ class TileStoreT;
 
 using TileStore =
   TileStoreT<Tree::Hash::size_bytes, Tree::hash_function>;
-// Hash-source and proof-engine aliases follow the same pattern.
-// The TiledTree alias arrives with the phase-4 lifecycle wrapper.
+using TiledTree =
+  TiledTreeT<Tree::Hash::size_bytes, Tree::hash_function>;
+// Writer, hash-source, proof-engine, and entry-bundle aliases follow the same
+// template pattern.
 
 }
 ```
@@ -403,12 +405,129 @@ Because every emitted hash is an `mth_range` computed with `HASH_FUNCTION`, the
 consistency proof reconciles `Tree::past_root(m-1)` with
 `Tree::past_root(n-1)` — i.e. it is consistent with the existing library.
 
-## 6. Delivery plan
+### 5.8 `TiledTreeT` - convenience wrapper
 
-Phases 0-3 now deliver the storage primitives, incremental tile and entry-bundle
-writers, hash sources, proof engine, and the only required core accessor. Later
-PRs deliver the lifecycle wrapper, user documentation, and performance coverage;
-no further core changes are planned.
+```cpp
+class TiledTreeT {
+public:
+  struct Config {
+    std::filesystem::path prefix;
+    uint64_t retention_margin = 0;       // keep at least this many resident
+    bool compact_on_flush = false;       // opt in to dropping tiled leaves
+  };
+  explicit TiledTreeT(Config);
+  TiledTreeT(Config, const std::string& hash_algorithm_short_name);
+
+  void append(const Hash& leaf_hash);                 // tree.insert
+  uint64_t size() const;                              // tree.num_leaves
+  Hash root();                                        // tree.root
+  uint64_t flushed_size() const;                      // successful tile boundary
+  uint64_t immutable_size() const;                    // rollback boundary
+
+  // Write newly-complete full tiles. Compaction (dropping already-tiled
+  // leaves from memory) happens only if compact_on_flush.
+  Stats flush();
+
+  // Drop from memory the leaves already covered by a full tile (opt-in); the
+  // un-tiled frontier is always retained, and proofs for dropped leaves remain
+  // available from the tiles.
+  uint64_t compact();
+
+  // Roll back only beyond immutable_size().
+  void retract_to(size_t index);
+
+  // Proofs over tiles ∪ resident tree (works for flushed indices).
+  std::shared_ptr<Path> inclusion_proof(uint64_t index, uint64_t size);
+  std::vector<Hash>     consistency_proof(uint64_t m, uint64_t n);
+  std::vector<Hash>     consistency_proof_from_indices(uint64_t i, uint64_t j);
+
+  Tree&  tree_ref();                                  // mutable escape hatch
+  Store& store_ref();                                 // mutable escape hatch
+};
+```
+
+`TiledTreeT` performs no internal locking. The caller must serialize every
+operation on a shared instance, including proof calls.
+
+Callers with their own storage can construct a `TileWriterT` and call
+`write_up_to`, then build a `ProofEngineT` on a `CombinedHashSource`, so the
+wrapper is optional sugar.
+
+## 6. Progressive production and compaction
+
+The pairing of tile writing with `flush_to` gives two central correctness
+invariants:
+
+> **Compaction invariant.** Retain the final leaf of the last fully successful
+> flush: `flushed_size == 0 || min_index() < flushed_size`.
+>
+> **Immutability invariant.** Never roll back below a full-tile boundary that a
+> flush may have published: `size >= immutable_size`.
+
+`TiledTreeT` is fresh-only: its configured directory may exist, but the
+algorithm-qualified `tile` subdirectory must be absent. Construction atomically
+creates that directory to claim exclusive ownership. Tile files do not carry
+the size, root, hash identity, or ownership information needed to reopen or
+share a tree safely. The lower-level `TileWriterT` supports resume for
+applications that persist and validate the matching tree state themselves.
+
+Per flush:
+
+1. Append new leaf hashes and compute the root as needed.
+2. Compute `covered = floor(size / 256) * 256` and advance `immutable_size` to
+   `covered` before any write can publish a full tile.
+3. Call `write_up_to(size, leaf_at)` to persist newly complete full tiles at all
+   levels.
+4. After every level succeeds, set `flushed_size = covered`.
+5. Optionally, `compact()` computes an aligned retention target capped below
+  nonzero `covered`, then calls `flush_to(target)`. This reclaims memory only
+  when `compact_on_flush` is set or `compact()` is called explicitly. It keeps
+  at least `retention_margin` recent leaves; alignment can retain up to 255
+  additional tiled leaves, and a zero margin keeps the final tiled leaf. The
+  entire un-tiled frontier always remains resident.
+
+If tile writing fails, the final two steps do not run. `immutable_size` stays
+advanced to prevent stale-tile rollback, while `flushed_size` stays at the last
+complete all-level write so proofs and compaction do not trust an incomplete
+flush.
+
+Given these invariants, every leaf and every perfect subtree is resolvable:
+
+- A leaf below `covered` is in a full level-0 tile; a leaf at or above
+  `min_index` is resident. Since `min_index <= covered`, every leaf is in tiles,
+  memory, or both. The frontier `[covered, size)` is always resident because
+  compaction never flushes past `covered`.
+- `mth_range` resolves a perfect subtree directly when it lies wholly in tiles
+  (`end <= covered`) or wholly in memory (`start >= min_index`). Otherwise it
+  splits and recurses until each piece is resolvable. A subtree within
+  `covered` whose level has no completed full tile descends to the highest
+  available full tile.
+
+Inclusion and consistency proofs therefore remain available after compaction,
+from full tiles for the tiled prefix, memory for the resident frontier, or the
+combination. A flush costs `O(new full tiles)`; higher-level tiles are roll-ups
+of 256 child hashes. Proof generation performs `O(log(size))` range operations,
+with repeated tile reads served from the per-source cache.
+
+## 7. Pruning and minimum index
+
+tlog-tiles pruning maps directly onto merklecpp:
+
+- The log's minimum index is `tree.min_index()` (equal to `num_flushed`).
+- A serving layer can deny tiles or bundles whose end index is at or below the
+  minimum index. On-disk tiles may instead be retained so historical proofs
+  remain producible.
+- The unpruned default is `min_index() == 0` (no `flush_to`).
+
+`flush_to` provides the mechanism; the application owns the retention policy,
+as in the tlog-tiles ecosystem.
+
+## 8. Delivery plan
+
+Phases 0-4 now deliver the storage primitives, incremental tile and entry-bundle
+writers, hash sources, proof engine, the only required core accessor, and the
+lifecycle wrapper. Later PRs deliver user documentation and performance
+coverage; no further core changes are planned.
 
 | Phase | Scope | Key tests |
 |---|---|---|
@@ -419,5 +538,39 @@ no further core changes are planned.
 | 4. Combined tree | `TiledTreeT` append, flush, proof, and compaction APIs | Prove flushed and resident leaves against a non-flushed reference; consistency across a flush boundary |
 | 5. Documentation/performance | README usage, design link, and tile-backed benchmarks | Documentation and benchmark coverage |
 
-Delivered through phase 3 are `merklecpp_tiles.h`, `merklecpp_pal.h`,
-`test/tiles_*.cpp`, CMake wiring, the core accessor, and design updates.
+Delivered through phase 4 are `merklecpp_tiles.h`, `merklecpp_pal.h`,
+`test/tiles_*.cpp`, CMake wiring, the core accessor, the lifecycle wrapper, and
+design updates.
+
+## 9. Risks and edge cases
+
+- **External interop (by design, no).** With the default combiner the tiles are
+  not byte-compatible with RFC 6962 tooling. See
+  [section 2.3](#23-algorithms-and-namespaces); opting into a compatible
+  `HASH_FUNCTION` is the consumer's choice and out of scope.
+- **Filesystem dependency.** Tile I/O needs `<filesystem>`/`<fstream>`; isolated
+  in the companion header so the core stays dependency-free.
+- **Immutable full tiles.** A tile is emitted only after all of its entries are
+  final, and every emitted tile is write-once. A stand-alone tile reader cannot
+  serve the frontier; that is the in-memory tree's job (or the application must
+  keep it elsewhere).
+- **`flush_to` alignment.** Compaction normally flushes to a 256-multiple
+  derived from retention. When that target equals `flushed_size`, it stops one
+  leaf earlier so `TreeT` can still retract to exactly that size. This one-leaf
+  overlap is enforced inside `TiledTreeT::compact`.
+- **Rollback vs. immutable tiles.** Tiles are write-once, so rolling the tree
+  back (`retract_to`) over a range that a flush may have published would leave
+  stale, never-rewritten tiles. `TiledTreeT::retract_to` therefore throws if the
+  resulting size is below `immutable_size()`. A failed flush may advance
+  `immutable_size()` without advancing `flushed_size()`; retry with the same
+  tree state. Retracting the underlying tree directly via `tree_ref()` bypasses
+  this guard, can make the size boundaries inconsistent or non-monotonic, and
+  must be avoided. Files written through `store_ref()` are trusted without
+  checking that they match the tree and can invalidate proofs after compaction.
+- **No internal synchronization.** Every tiled-storage object and shared store
+  prefix requires external serialization. This includes `const` proof reads,
+  which update the tile cache.
+- **Very large indices.** Index math uses `uint64_t`; encoding handles
+  multi-group indices. Level bound `<= 63` per spec (8 suffices for `2^64`).
+  Resume scans are bounded by the requested tree size and cannot follow sparse
+  files beyond that range.
