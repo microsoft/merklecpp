@@ -40,7 +40,7 @@ if(OPENSSL
   add_merklecpp_test(compare_hash_functions compare_hash_functions.cpp)
 endif()
 
-find_path(DOCTEST_DIR doctest.h PATH_SUFFIXES doctest)
+find_path(DOCTEST_DIR doctest.h)
 
 if(DOCTEST_DIR)
   add_merklecpp_test(tiles_store tiles_store.cpp)
