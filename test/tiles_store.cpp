@@ -5,9 +5,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
-#include <cstdlib>
-#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -69,6 +68,11 @@ public:
   {
     Store::require_write_progress(written, "test");
   }
+
+  static uint64_t current_process_id()
+  {
+    return Store::process_id();
+  }
 };
 
 struct SyncFault
@@ -123,13 +127,13 @@ static void overwrite_file(const fs::path& p, const std::vector<uint8_t>& bytes)
 
 int main()
 {
-  const auto seed = std::time(nullptr);
-  std::srand((unsigned)seed);
-  std::cout << "seed=" << seed << '\n';
-
+  const auto nonce =
+    std::chrono::steady_clock::now().time_since_epoch().count();
   const fs::path dir = fs::temp_directory_path() /
-    ("merklecpp_tiles_" + std::to_string((unsigned long long)seed) + "_" +
-     std::to_string(std::rand()));
+    ("merklecpp_tiles_" +
+     std::to_string(
+       static_cast<unsigned long long>(TileStoreProbe::current_process_id())) +
+     "_" + std::to_string(static_cast<unsigned long long>(nonce)));
 
   try
   {

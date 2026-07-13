@@ -595,12 +595,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
             throw std::runtime_error(
               system_error_message("error syncing file " + path.string()));
           }
-          close_handle = false;
           if (!CloseHandle(handle))
           {
             throw std::runtime_error(
               system_error_message("error closing file " + path.string()));
           }
+          close_handle = false;
         }
         catch (...)
         {
