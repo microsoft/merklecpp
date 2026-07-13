@@ -9,6 +9,8 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/doctest/doctest.git
   GIT_TAG 2d0a9359a60c51affe2a9bebb1be1dca47868151 # v2.5.3
 )
+set(DOCTEST_NO_INSTALL ON)
+set(DOCTEST_WITH_MAIN_IN_STATIC_LIB OFF)
 FetchContent_MakeAvailable(doctest)
 
 function(add_merklecpp_test target source)

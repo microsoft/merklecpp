@@ -6,6 +6,7 @@
 #include "merklecpp.h"
 #include "merklecpp_pal.h"
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -52,6 +53,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       static constexpr std::string_view SHA256_ALGORITHM_SHORT_NAME = "sha256";
       static constexpr std::string_view SHA384_ALGORITHM_SHORT_NAME = "sha384";
       static constexpr std::string_view SHA512_ALGORITHM_SHORT_NAME = "sha512";
+      static constexpr size_t ENTRY_LENGTH_PREFIX_SIZE = 2;
+      static constexpr size_t MAX_ENTRY_SIZE = 0xFFFF;
+      static constexpr size_t MAX_ENTRY_BUNDLE_SIZE =
+        TILE_WIDTH * (ENTRY_LENGTH_PREFIX_SIZE + MAX_ENTRY_SIZE);
 
       template <typename Present>
       uint64_t contiguous_prefix_length(uint64_t limit, const Present& present)
@@ -237,8 +242,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @return The tile's hashes (TILE_WIDTH of them)
       [[nodiscard]] std::vector<Hash> read_tile(const TileRef& ref) const
       {
-        std::vector<uint8_t> bytes = read_file(tile_path(ref));
         const size_t expected = (size_t)TILE_WIDTH * HASH_SIZE;
+        std::vector<uint8_t> bytes = read_file(tile_path(ref), expected);
         if (bytes.size() != expected)
         {
           throw std::runtime_error("unexpected tile size");
@@ -265,7 +270,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         }
         try
         {
-          (void)decode_entries(read_file(path), TILE_WIDTH);
+          (void)decode_entries(
+            read_file(path, detail::MAX_ENTRY_BUNDLE_SIZE), TILE_WIDTH);
           return true;
         }
         catch (const std::runtime_error&)
@@ -295,7 +301,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       [[nodiscard]] std::vector<std::vector<uint8_t>> read_entry_bundle(
         uint64_t index) const
       {
-        return decode_entries(read_file(entries_path(index)), TILE_WIDTH);
+        return decode_entries(
+          read_file(entries_path(index), detail::MAX_ENTRY_BUNDLE_SIZE),
+          TILE_WIDTH);
       }
 
       /// @brief Encodes log entries into the tlog-tiles entry-bundle format.
@@ -305,7 +313,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         std::vector<uint8_t> bytes;
         for (const auto& e : entries)
         {
-          if (e.size() > 0xFFFF)
+          if (e.size() > detail::MAX_ENTRY_SIZE)
           {
             throw std::runtime_error(
               "entry too large for uint16 length prefix");
@@ -321,7 +329,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       static std::vector<std::vector<uint8_t>> decode_entries(
         const std::vector<uint8_t>& bytes, size_t count)
       {
-        if (count > bytes.size() / 2)
+        if (count > bytes.size() / detail::ENTRY_LENGTH_PREFIX_SIZE)
         {
           throw std::runtime_error("truncated entry bundle");
         }
@@ -480,7 +488,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       }
 
       /// @brief Reads an entire file into a byte vector.
-      static std::vector<uint8_t> read_file(const std::filesystem::path& path)
+      static std::vector<uint8_t> read_file(
+        const std::filesystem::path& path, size_t max_size)
       {
         std::ifstream f(path, std::ios::binary);
         if (!f.good())
@@ -488,8 +497,35 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           throw std::runtime_error(
             std::format("cannot open file: {}", path.string()));
         }
-        return {
-          std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
+
+        std::vector<uint8_t> bytes;
+        std::array<uint8_t, 4096> buffer{};
+        while (f)
+        {
+          const size_t remaining = max_size - bytes.size();
+          const size_t request =
+            remaining < buffer.size() ? remaining + 1 : buffer.size();
+          f.read(
+            reinterpret_cast<char*>(buffer.data()),
+            static_cast<std::streamsize>(request));
+          const auto count = static_cast<size_t>(f.gcount());
+          if (count == 0)
+          {
+            break;
+          }
+          if (count > remaining)
+          {
+            throw std::runtime_error(
+              std::format("file exceeds maximum size: {}", path.string()));
+          }
+          bytes.insert(bytes.end(), buffer.begin(), buffer.begin() + count);
+        }
+        if (f.bad())
+        {
+          throw std::runtime_error(
+            std::format("error reading file: {}", path.string()));
+        }
+        return bytes;
       }
 
       /// @brief Writes a file atomically via a synced temporary file.

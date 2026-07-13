@@ -1,6 +1,5 @@
 # Design: Tiled storage and tile-backed proofs for merklecpp
 
-
 **Scope:** Persist trees progressively during compaction using
 [tlog-tiles](https://c2sp.org/tlog-tiles), then serve inclusion and consistency
 proofs from tiles, memory, or both.
@@ -31,7 +30,7 @@ responsible for compatible hashing and for serving the static resources.
 |---|---|
 | Tile | `<prefix>/<algorithm>-256w/tile/<L>/<N>`, `application/octet-stream`; `L` is decimal `0..63` without leading zeros, and `N` uses the grouped encoding in [section 4](#4-storage-layout-and-publication). |
 | Full tile | 256 hashes. Level 0 stores leaf hashes; each level-`L` entry for `L >= 1` is the Merkle Tree Hash of one complete level-`L-1` tile. |
-| Entry bundle | `<prefix>/tile/entries/<N>`; 256 raw entries encoded as big-endian `uint16` length-prefixed values. See [section 5.3](#53-entry-bundles-optional). |
+| Entry bundle | `<prefix>/<algorithm>-256w/tile/entries/<N>`; 256 raw entries encoded as big-endian `uint16` length-prefixed values. See [section 5.3](#53-entry-bundles-optional). |
 | Pruning | Tiles or bundles ending at or before a log's minimum index may be denied, matching `flush_to()` / `min_index()`. |
 
 A tile spans eight tree levels. Tile `n` at level `l` contains, for
