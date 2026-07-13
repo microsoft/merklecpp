@@ -105,7 +105,7 @@ TEST_CASE("HashT methods")
   REQUIRE_THROWS_AS((void)h2.to_string(33), std::out_of_range);
 
   // operator== and operator!=
-  merkle::Hash ha;
+  const merkle::Hash ha;
   merkle::Hash hb;
   REQUIRE(ha == hb);
   REQUIRE_FALSE(ha != hb);
