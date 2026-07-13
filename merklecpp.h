@@ -116,6 +116,9 @@ namespace merkle
   template <size_t SIZE>
   struct HashT
   {
+    /// Size of the hash in bytes.
+    static constexpr size_t size_bytes = SIZE;
+
     /// Holds the hash bytes
     uint8_t bytes[SIZE];
 
@@ -186,7 +189,7 @@ namespace merkle
     /// @brief The size of the hash (in number of bytes)
     [[nodiscard]] size_t size() const
     {
-      return SIZE;
+      return size_bytes;
     }
 
     /// @brief zeros out all bytes in the hash
@@ -198,7 +201,7 @@ namespace merkle
     /// @brief The size of the serialisation of the hash (in number of bytes)
     [[nodiscard]] size_t serialised_size() const
     {
-      return SIZE;
+      return size_bytes;
     }
 
     /// @brief Convert a hash to a hex-encoded string
@@ -736,6 +739,9 @@ namespace merkle
     };
 
   public:
+    /// @brief Hash function used to combine tree nodes.
+    static constexpr auto hash_function = HASH_FUNCTION;
+
     /// @brief The type of hashes in the tree
     using Hash = HashT<HASH_SIZE>;
 
@@ -2162,17 +2168,11 @@ namespace merkle
     }
   }
 
-  /// @brief Type of hashes in the SHA384 tree type
-  using Hash384 = HashT<48>;
-
   /// @brief Type of paths in the SHA384 tree type
   using Path384 = PathT<48, sha384_openssl>;
 
   /// @brief SHA384 tree with OpenSSL hash function
   using Tree384 = TreeT<48, sha384_openssl>;
-
-  /// @brief Type of hashes in the SHA512 tree type
-  using Hash512 = HashT<64>;
 
   /// @brief Type of paths in the SHA512 tree type
   using Path512 = PathT<64, sha512_openssl>;
@@ -2180,6 +2180,12 @@ namespace merkle
   /// @brief SHA512 tree with OpenSSL hash function
   using Tree512 = TreeT<64, sha512_openssl>;
 #endif
+
+  /// @brief Type of SHA384-sized hashes
+  using Hash384 = HashT<48>;
+
+  /// @brief Type of SHA512-sized hashes
+  using Hash512 = HashT<64>;
 
   /// @brief Type of hashes in the default tree type
   using Hash = HashT<32>;

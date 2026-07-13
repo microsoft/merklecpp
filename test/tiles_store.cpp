@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -15,6 +16,7 @@
 #include <limits>
 #include <memory>
 #include <merklecpp.h>
+#include <merklecpp_pal.h>
 #include <merklecpp_tiles.h>
 #include <string>
 #include <thread>
@@ -28,7 +30,7 @@ static void expect(bool cond, const std::string& what)
 {
   if (!cond)
   {
-    throw std::runtime_error("check failed: " + what);
+    throw std::runtime_error(std::format("check failed: {}", what));
   }
 }
 
@@ -38,7 +40,7 @@ static void expect_eq(
   if (got != expected)
   {
     throw std::runtime_error(
-      what + ": got '" + got + "', expected '" + expected + "'");
+      std::format("{}: got '{}', expected '{}'", what, got, expected));
   }
 }
 
@@ -55,6 +57,20 @@ static void expect_throws(
     threw = true;
   }
   expect(threw, what);
+}
+
+static std::string expect_throws_message(
+  const std::function<void()>& fn, const std::string& what)
+{
+  try
+  {
+    fn();
+  }
+  catch (const std::exception& ex)
+  {
+    return ex.what();
+  }
+  throw std::runtime_error(std::format("check failed: {}", what));
 }
 
 static void custom_hash(const Hash& lhs, const Hash& rhs, Hash& out)
@@ -82,22 +98,6 @@ static bool any_tmp_files(const fs::path& dir)
       return entry.path().filename().string().find(".tmp") != std::string::npos;
     });
 }
-
-class TileStoreProbe : public merkle::tiles::TileStore
-{
-public:
-  using Store = merkle::tiles::TileStore;
-
-  static void check_write_progress(size_t written)
-  {
-    Store::require_write_progress(written, "test");
-  }
-
-  static uint64_t current_process_id()
-  {
-    return Store::process_id();
-  }
-};
 
 struct SyncFault
 {
@@ -169,7 +169,8 @@ static std::vector<uint8_t> read_file(const fs::path& p)
   std::ifstream f(p, std::ios::binary);
   if (!f.good())
   {
-    throw std::runtime_error("cannot open test file: " + p.string());
+    throw std::runtime_error(
+      std::format("cannot open test file: {}", p.string()));
   }
   return {std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>()};
 }
@@ -179,10 +180,7 @@ int main()
   const auto nonce =
     std::chrono::steady_clock::now().time_since_epoch().count();
   const fs::path dir = fs::temp_directory_path() /
-    ("merklecpp_tiles_" +
-     std::to_string(
-       static_cast<unsigned long long>(TileStoreProbe::current_process_id())) +
-     "_" + std::to_string(static_cast<unsigned long long>(nonce)));
+    std::format("merklecpp_tiles_{}_{}", merkle::pal::process_id(), nonce);
 
   try
   {
@@ -276,7 +274,8 @@ int main()
         "algorithm short name must match hash output size");
     }
 
-    using CustomStore = merkle::tiles::TileStoreT<32, custom_hash>;
+    using CustomStore =
+      merkle::tiles::TileStoreT<merkle::Hash::size_bytes, custom_hash>;
     expect_throws(
       [&] { (void)CustomStore(dir); },
       "custom hash requires an explicit algorithm name");
@@ -288,18 +287,20 @@ int main()
 
 #ifdef HAVE_OPENSSL
     {
-      using TileStore256 =
-        merkle::tiles::TileStoreT<32, merkle::sha256_openssl>;
+      using TileStore256 = merkle::tiles::
+        TileStoreT<merkle::Hash::size_bytes, merkle::sha256_openssl>;
       const TileStore256 store256(dir);
       expect_eq(
         store256.root().lexically_relative(dir).generic_string(),
         "sha256-256w",
         "OpenSSL SHA256 storage directory");
 
-      using TileStore384 =
-        merkle::tiles::TileStoreT<48, merkle::sha384_openssl>;
+      using TileStore384 = merkle::tiles::TileStoreT<
+        merkle::Tree384::Hash::size_bytes,
+        merkle::Tree384::hash_function>;
       TileStore384 store384(dir);
-      const auto full384 = make_hashesT<48>(merkle::tiles::TILE_WIDTH);
+      const auto full384 = make_hashesT<merkle::Tree384::Hash::size_bytes>(
+        merkle::tiles::TILE_WIDTH);
       expect_eq(
         store384.root().lexically_relative(dir).generic_string(),
         "sha384-256w",
@@ -307,17 +308,20 @@ int main()
       store384.write_tile(TileRef{0, 0}, full384);
       expect(
         fs::file_size(store384.tile_path(TileRef{0, 0})) ==
-          (uintmax_t)merkle::tiles::TILE_WIDTH * 48,
+          (uintmax_t)merkle::tiles::TILE_WIDTH *
+            merkle::Tree384::Hash::size_bytes,
         "SHA384 full tile remains 256 hashes wide");
       expect(
         store384.has_full_tile(0, 0) &&
           store384.read_tile(TileRef{0, 0}) == full384,
         "SHA384 tile round-trip");
 
-      using TileStore512 =
-        merkle::tiles::TileStoreT<64, merkle::sha512_openssl>;
+      using TileStore512 = merkle::tiles::TileStoreT<
+        merkle::Tree512::Hash::size_bytes,
+        merkle::Tree512::hash_function>;
       TileStore512 store512(dir);
-      const auto full512 = make_hashesT<64>(merkle::tiles::TILE_WIDTH);
+      const auto full512 = make_hashesT<merkle::Tree512::Hash::size_bytes>(
+        merkle::tiles::TILE_WIDTH);
       expect_eq(
         store512.root().lexically_relative(dir).generic_string(),
         "sha512-256w",
@@ -325,7 +329,8 @@ int main()
       store512.write_tile(TileRef{0, 0}, full512);
       expect(
         fs::file_size(store512.tile_path(TileRef{0, 0})) ==
-          (uintmax_t)merkle::tiles::TILE_WIDTH * 64,
+          (uintmax_t)merkle::tiles::TILE_WIDTH *
+            merkle::Tree512::Hash::size_bytes,
         "SHA512 full tile remains 256 hashes wide");
       expect(
         store512.has_full_tile(0, 0) &&
@@ -450,13 +455,45 @@ int main()
         "directory creation failure leaves no temporary file");
     }
 
-    // 2f. A successful write must make progress. This shared guard prevents
+    // 2f. Unique temporary-file creation must fail rather than overwrite an
+    // existing path, including a pre-created symlink on POSIX.
+    {
+      const fs::path existing_path = dir / "preexisting-temp";
+      const std::vector<uint8_t> original = {0x11, 0x22, 0x33};
+      overwrite_file(existing_path, original);
+      const auto collision_error = expect_throws_message(
+        [&] { merkle::pal::write_and_sync_file(existing_path, {0xAA}); },
+        "exclusive temporary-file creation rejects collisions");
+      expect(
+        collision_error.find(existing_path.string()) != std::string::npos,
+        "temporary-file collision identifies the path");
+#ifdef _WIN32
+      expect(
+        collision_error.find(": error ") != std::string::npos,
+        "temporary-file collision includes the Windows system error");
+#endif
+      expect(
+        read_file(existing_path) == original,
+        "temporary-file collision does not clobber existing content");
+#ifndef _WIN32
+      const fs::path symlink_path = dir / "preexisting-temp-symlink";
+      fs::create_symlink(existing_path, symlink_path);
+      expect_throws(
+        [&] { merkle::pal::write_and_sync_file(symlink_path, {0xBB}); },
+        "exclusive temporary-file creation rejects symlinks");
+      expect(
+        read_file(existing_path) == original,
+        "temporary-file symlink does not clobber its target");
+#endif
+    }
+
+    // 2g. A successful write must make progress. This shared guard prevents
     // the Windows WriteFile loop from spinning if it reports zero bytes.
     {
       expect_throws(
-        [] { TileStoreProbe::check_write_progress(0); },
+        [] { merkle::pal::require_write_progress(0, "test"); },
         "zero-byte write rejected");
-      TileStoreProbe::check_write_progress(1);
+      merkle::pal::require_write_progress(1, "test");
     }
 
     // 3a. Full tile byte round-trip.

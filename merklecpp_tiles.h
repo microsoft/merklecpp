@@ -4,35 +4,22 @@
 #pragma once
 
 #include "merklecpp.h"
+#include "merklecpp_pal.h"
 
-#include <algorithm>
 #include <atomic>
-#include <cerrno>
 #include <chrono>
 #include <cstdint>
-#include <cstring>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <functional>
 #include <iterator>
-#include <limits>
 #include <set>
 #include <stdexcept>
 #include <string>
-#include <thread>
+#include <string_view>
 #include <utility>
 #include <vector>
-
-#ifdef _WIN32
-#  ifndef NOMINMAX
-#    define NOMINMAX
-#  endif
-#  include <windows.h>
-#else
-#  include <fcntl.h>
-#  include <unistd.h>
-#endif
 
 // Tiled storage for merklecpp trees, following the full-tile geometry, payload,
 // and path encoding of the C2SP tlog-tiles layout
@@ -59,6 +46,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
     namespace detail
     {
+      static constexpr std::string_view SHA256_ALGORITHM_SHORT_NAME = "sha256";
+      static constexpr std::string_view SHA384_ALGORITHM_SHORT_NAME = "sha384";
+      static constexpr std::string_view SHA512_ALGORITHM_SHORT_NAME = "sha512";
+
       template <typename Present>
       uint64_t contiguous_prefix_length(uint64_t limit, const Present& present)
       {
@@ -377,32 +368,32 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
       static std::string default_hash_algorithm_short_name()
       {
-        if constexpr (HASH_SIZE == 32)
+        if constexpr (HASH_SIZE == merkle::Tree::Hash::size_bytes)
         {
-          if constexpr (HASH_FUNCTION == sha256_compress)
+          if constexpr (HASH_FUNCTION == merkle::Tree::hash_function)
           {
-            return "sha256";
+            return std::string(detail::SHA256_ALGORITHM_SHORT_NAME);
           }
 #ifdef HAVE_OPENSSL
           if constexpr (HASH_FUNCTION == sha256_openssl)
           {
-            return "sha256";
+            return std::string(detail::SHA256_ALGORITHM_SHORT_NAME);
           }
 #endif
         }
 #ifdef HAVE_OPENSSL
-        else if constexpr (HASH_SIZE == 48)
+        else if constexpr (HASH_SIZE == merkle::Tree384::Hash::size_bytes)
         {
-          if constexpr (HASH_FUNCTION == sha384_openssl)
+          if constexpr (HASH_FUNCTION == merkle::Tree384::hash_function)
           {
-            return "sha384";
+            return std::string(detail::SHA384_ALGORITHM_SHORT_NAME);
           }
         }
-        else if constexpr (HASH_SIZE == 64)
+        else if constexpr (HASH_SIZE == merkle::Tree512::Hash::size_bytes)
         {
-          if constexpr (HASH_FUNCTION == sha512_openssl)
+          if constexpr (HASH_FUNCTION == merkle::Tree512::hash_function)
           {
-            return "sha512";
+            return std::string(detail::SHA512_ALGORITHM_SHORT_NAME);
           }
         }
 #endif
@@ -434,9 +425,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         const std::string& hash_algorithm_short_name)
       {
         if (
-          (hash_algorithm_short_name == "sha256" && HASH_SIZE != 32) ||
-          (hash_algorithm_short_name == "sha384" && HASH_SIZE != 48) ||
-          (hash_algorithm_short_name == "sha512" && HASH_SIZE != 64))
+          (hash_algorithm_short_name == detail::SHA256_ALGORITHM_SHORT_NAME &&
+           HASH_SIZE != merkle::Hash::size_bytes) ||
+          (hash_algorithm_short_name == detail::SHA384_ALGORITHM_SHORT_NAME &&
+           HASH_SIZE != merkle::Hash384::size_bytes) ||
+          (hash_algorithm_short_name == detail::SHA512_ALGORITHM_SHORT_NAME &&
+           HASH_SIZE != merkle::Hash512::size_bytes))
         {
           throw std::runtime_error(
             "hash algorithm short name does not match hash size");
@@ -498,10 +492,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
         const std::filesystem::path tmp = temp_path(path);
         TempFileGuard guard(tmp);
-        write_and_sync_file(tmp, bytes);
+        merkle::pal::write_and_sync_file(tmp, bytes);
+        guard.arm();
         const auto parent = directory_or_dot(path.parent_path());
         durable_directory_contents.erase(parent);
-        replace_file(tmp, path);
+        merkle::pal::replace_file(tmp, path);
         sync_directory_contents(parent);
         guard.dismiss();
       }
@@ -618,6 +613,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           }
         }
 
+        void arm()
+        {
+          active = true;
+        }
+
         void dismiss()
         {
           active = false;
@@ -625,7 +625,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
       private:
         std::filesystem::path path;
-        bool active = true;
+        bool active = false;
       };
 
       static std::filesystem::path temp_path(const std::filesystem::path& path)
@@ -636,188 +636,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         std::filesystem::path tmp = path;
         tmp += std::format(
           ".tmp.{}.{}.{}",
-          process_id(),
+          merkle::pal::process_id(),
           (uint64_t)stamp,
           counter.fetch_add(1, std::memory_order_relaxed));
         return tmp;
-      }
-
-      static uint64_t process_id()
-      {
-#ifdef _WIN32
-        return (uint64_t)GetCurrentProcessId();
-#else
-        return (uint64_t)::getpid();
-#endif
-      }
-
-      template <typename... Args>
-      static std::string system_error_message(
-        std::format_string<Args...> format_string, Args&&... args)
-      {
-#ifdef _WIN32
-        const auto error = GetLastError();
-#else
-        const auto error = errno;
-#endif
-        std::string message;
-        std::format_to(
-          std::back_inserter(message),
-          format_string,
-          std::forward<Args>(args)...);
-#ifdef _WIN32
-        std::format_to(std::back_inserter(message), ": error {}", error);
-#else
-        std::format_to(
-          std::back_inserter(message), ": {}", std::strerror(error));
-#endif
-        return message;
-      }
-
-      static void require_write_progress(
-        size_t written, const std::filesystem::path& path)
-      {
-        if (written == 0)
-        {
-          throw std::runtime_error(
-            std::format("short write: {}", path.string()));
-        }
-      }
-
-      static void write_and_sync_file(
-        const std::filesystem::path& path, const std::vector<uint8_t>& bytes)
-      {
-#ifdef _WIN32
-        HANDLE handle = CreateFileW(
-          path.wstring().c_str(),
-          GENERIC_WRITE,
-          0,
-          nullptr,
-          CREATE_ALWAYS,
-          FILE_ATTRIBUTE_NORMAL,
-          nullptr);
-        if (handle == INVALID_HANDLE_VALUE)
-        {
-          throw std::runtime_error(
-            std::format("cannot open file: {}", path.string()));
-        }
-        bool close_handle = true;
-        try
-        {
-          size_t written = 0;
-          while (written < bytes.size())
-          {
-            const auto remaining = bytes.size() - written;
-            const auto chunk = (DWORD)std::min<size_t>(
-              remaining, (size_t)std::numeric_limits<DWORD>::max());
-            DWORD done = 0;
-            if (!WriteFile(
-                  handle, bytes.data() + written, chunk, &done, nullptr))
-            {
-              throw std::runtime_error(
-                system_error_message("error writing file {}", path.string()));
-            }
-            require_write_progress((size_t)done, path);
-            written += done;
-          }
-          if (!FlushFileBuffers(handle))
-          {
-            throw std::runtime_error(
-              system_error_message("error syncing file {}", path.string()));
-          }
-          if (!CloseHandle(handle))
-          {
-            throw std::runtime_error(
-              system_error_message("error closing file {}", path.string()));
-          }
-          close_handle = false;
-        }
-        catch (...)
-        {
-          if (close_handle)
-          {
-            CloseHandle(handle);
-          }
-          throw;
-        }
-#else
-        int flags = O_WRONLY | O_CREAT | O_TRUNC;
-#  ifdef O_CLOEXEC
-        flags |= O_CLOEXEC;
-#  endif
-        int fd = ::open(path.c_str(), flags, 0666);
-        if (fd < 0)
-        {
-          throw std::runtime_error(
-            system_error_message("cannot open file {}", path.string()));
-        }
-        try
-        {
-          size_t written = 0;
-          while (written < bytes.size())
-          {
-            const ssize_t done =
-              ::write(fd, bytes.data() + written, bytes.size() - written);
-            if (done < 0)
-            {
-              if (errno == EINTR)
-              {
-                continue;
-              }
-              throw std::runtime_error(
-                system_error_message("error writing file {}", path.string()));
-            }
-            require_write_progress((size_t)done, path);
-            written += (size_t)done;
-          }
-          if (::fsync(fd) != 0)
-          {
-            throw std::runtime_error(
-              system_error_message("error syncing file {}", path.string()));
-          }
-          if (::close(fd) != 0)
-          {
-            fd = -1;
-            throw std::runtime_error(
-              system_error_message("error closing file {}", path.string()));
-          }
-          fd = -1;
-        }
-        catch (...)
-        {
-          if (fd >= 0)
-          {
-            ::close(fd);
-          }
-          throw;
-        }
-#endif
-      }
-
-      static void replace_file(
-        const std::filesystem::path& tmp, const std::filesystem::path& path)
-      {
-#ifdef _WIN32
-        if (!MoveFileExW(
-              tmp.wstring().c_str(),
-              path.wstring().c_str(),
-              MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
-        {
-          throw std::runtime_error(system_error_message(
-            "cannot rename temp file {} to {}", tmp.string(), path.string()));
-        }
-#else
-        std::error_code ec;
-        std::filesystem::rename(tmp, path, ec);
-        if (ec)
-        {
-          throw std::runtime_error(std::format(
-            "cannot rename temp file {} to {}: {}",
-            tmp.string(),
-            path.string(),
-            ec.message()));
-        }
-#endif
       }
 
       void sync_directory_for_durability(const std::filesystem::path& path)
@@ -827,45 +649,13 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           directory_sync(path);
           return;
         }
-        sync_directory_on_disk(path);
-      }
-
-      static void sync_directory_on_disk(const std::filesystem::path& path)
-      {
-#ifndef _WIN32
-        int flags = O_RDONLY;
-#  ifdef O_DIRECTORY
-        flags |= O_DIRECTORY;
-#  endif
-#  ifdef O_CLOEXEC
-        flags |= O_CLOEXEC;
-#  endif
-        const int fd = ::open(path.c_str(), flags);
-        if (fd < 0)
-        {
-          throw std::runtime_error(
-            system_error_message("cannot open directory {}", path.string()));
-        }
-        if (::fsync(fd) != 0)
-        {
-          const std::string message =
-            system_error_message("error syncing directory {}", path.string());
-          ::close(fd);
-          throw std::runtime_error(message);
-        }
-        if (::close(fd) != 0)
-        {
-          throw std::runtime_error(
-            system_error_message("error closing directory {}", path.string()));
-        }
-#else
-        (void)path;
-#endif
+        merkle::pal::sync_directory_on_disk(path);
       }
     };
 
     /// @brief Default tile store (SHA256, default hash function).
-    using TileStore = TileStoreT<32, sha256_compress>;
+    using TileStore =
+      TileStoreT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
 
   }
 }

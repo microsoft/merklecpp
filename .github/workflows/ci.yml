@@ -67,6 +67,7 @@ jobs:
       run: |
         clang-tidy merklecpp.h -p build/${{ matrix.build_type }} --warnings-as-errors='*'
         clang-tidy merklecpp_tiles.h -p build/${{ matrix.build_type }} --warnings-as-errors='*'
+        clang-tidy merklecpp_pal.h -p build/${{ matrix.build_type }} --warnings-as-errors='*'
 
     - name: Test
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}

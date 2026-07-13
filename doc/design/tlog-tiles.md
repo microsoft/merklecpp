@@ -263,12 +263,16 @@ counts hashes, not bytes, and therefore does not change for SHA-384 or SHA-512.
                                           └─ CombinedHashSource
 ```
 
-New, all in a companion header `merklecpp_tiles.h` (includes `merklecpp.h`),
-namespace `merkle::tiles`, every type templated on `<HASH_SIZE, HASH_FUNCTION>`
-with default aliases mirroring the bottom of `merklecpp.h`:
+The public tiled-storage implementation lives in `merklecpp_tiles.h` (which
+includes `merklecpp.h`). Low-level operating-system operations are isolated in
+the internal `merklecpp_pal.h` platform abstraction (`merkle::pal`). Public
+types remain in namespace `merkle::tiles`, templated on
+`<HASH_SIZE, HASH_FUNCTION>`, with default aliases mirroring the bottom of
+`merklecpp.h`:
 
 | Component            | Responsibility                                                        |
 |----------------------|-----------------------------------------------------------------------|
+| PAL helpers          | exclusive file creation, replacement, and durability primitives      |
 | `TileCoord`          | pure index math + path encoding (no I/O)                              |
 | `TileStoreT`         | read/write tile files on a local filesystem                          |
 | `TileWriterT`        | compute & persist newly-complete full tiles (write path)             |
@@ -289,6 +293,7 @@ The **only** (optional) change to the core header is a small, read-only,
 ```cpp
 // merklecpp_tiles.h
 #include "merklecpp.h"
+#include "merklecpp_pal.h" // internal platform abstraction
 #include <filesystem>
 #include <fstream>
 
@@ -306,19 +311,22 @@ template <size_t HASH_SIZE,
 class TileStoreT { /* ... */ };
 // ... TileWriterT, ProofEngineT, TiledTreeT ...
 
-} // namespace tiles
-
 // Convenience aliases (mirror merklecpp.h)
-using TileStore = tiles::TileStoreT<32, sha256_compress>;
-using TiledTree = tiles::TiledTreeT<32, sha256_compress>;
+using TileStore =
+  TileStoreT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
+using TiledTree =
+  TiledTreeT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
 // + 384/512 variants
+
+} // namespace tiles
 } // namespace merkle
 ```
 
 Note the roll-up/proof combiner is the **same** `HASH_FUNCTION` the tree uses,
 and it only ever combines two `HASH_SIZE`-byte hashes — so the default
 `sha256_compress` single-block path is sufficient and **no OpenSSL dependency is
-introduced**.
+introduced**. Convenience aliases derive both template arguments from the core
+tree type, so hash sizes and functions have one source of truth.
 
 ### 6.3 `TileStoreT` — disk I/O
 
@@ -372,14 +380,16 @@ entry bundles are an **application-owned** add-on, included for completeness:
 
 Each phase is independently testable; phases 1–4 require **no** core changes.
 
-**Phase 0 — Scaffolding.** Add `merklecpp_tiles.h` (includes `merklecpp.h`),
-`merkle::tiles` namespace, geometry constants, default aliases. Wire a new test
-group in `test/CMakeLists.txt` following `add_merklecpp_test`.
+**Phase 0 — Scaffolding.** Add `merklecpp_tiles.h` (includes `merklecpp.h`) and
+the internal `merklecpp_pal.h`, `merkle::tiles` namespace, geometry
+constants, default aliases. Wire a new test group in `test/CMakeLists.txt`
+following `add_merklecpp_test`.
 
 **Phase 1 — Coordinates & store.** `TileCoord`/`encode_index`, `TileRef`,
-`TileStoreT` (path building, atomic `write_tile`, `read_tile`). *Tests:*
-index-encoding vectors; algorithm-qualified roots; SHA-256 and SHA-384 both use
-256-hash tiles; tile byte round-trip.
+`TileStoreT` (path building, atomic `write_tile`, `read_tile`) and PAL-backed
+exclusive temporary-file creation. *Tests:* index-encoding vectors;
+algorithm-qualified roots; SHA-256 and SHA-384 both use 256-hash tiles; tile
+byte round-trip; existing-file and symlink collision rejection.
 
 **Phase 2 — Write path.** `TileWriterT::write_up_to` (level-0 from `leaf_at`,
 roll-ups, incremental cursor; full tiles only — the frontier is never tiled).
@@ -400,9 +410,9 @@ inclusion for a **flushed** index and a **resident** index against a non-flushed
 reference tree's root; consistency across a flush boundary.
 
 **Phase 5 — Optional entry bundles** (`BundleWriter`) and docs (README "Usage"
-snippet, link this design doc, add `merklecpp_tiles.h` to Doxygen inputs).
+snippet, link this design doc, add the public and PAL headers to Doxygen inputs).
 
-Deliverables: `merklecpp_tiles.h`; `test/tiles_*.cpp`; CMake wiring; optional
-one-method core addition; README/docs updates.
+Deliverables: `merklecpp_tiles.h`; `merklecpp_pal.h`; `test/tiles_*.cpp`;
+CMake wiring; optional one-method core addition; README/docs updates.
 
 ---
