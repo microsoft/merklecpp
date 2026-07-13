@@ -19,9 +19,6 @@
 #include <vector>
 
 #ifdef _WIN32
-#  ifndef NOMINMAX
-#    define NOMINMAX
-#  endif
 #  include <windows.h>
 #else
 #  include <fcntl.h>
@@ -91,18 +88,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         return result;
       }
 
-      static inline int sync_file_on_disk(int fd)
-      {
-#  ifdef F_FULLFSYNC
-        const int result =
-          retry_on_eintr([fd]() { return ::fcntl(fd, F_FULLFSYNC); });
-        if (result == 0 || (errno != ENOTSUP && errno != EINVAL))
-        {
-          return result;
-        }
-#  endif
-        return retry_on_eintr([fd]() { return ::fsync(fd); });
-      }
     }
 #endif
 
@@ -145,13 +130,16 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       bool close_handle = true;
       try
       {
+        // Parentheses prevent expansion of the Windows max macro.
+        constexpr auto max_write_size =
+          static_cast<size_t>((std::numeric_limits<DWORD>::max)());
         size_t written = 0;
         while (written < bytes.size())
         {
           const auto remaining = bytes.size() - written;
-          const auto chunk = static_cast<DWORD>(std::min<size_t>(
-            remaining,
-            static_cast<size_t>((std::numeric_limits<DWORD>::max)())));
+          // Parentheses prevent expansion of the Windows min macro.
+          const auto chunk =
+            static_cast<DWORD>((std::min)(remaining, max_write_size));
           DWORD done = 0;
           if (!WriteFile(handle, bytes.data() + written, chunk, &done, nullptr))
           {
@@ -217,7 +205,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           require_write_progress(static_cast<size_t>(done), path);
           written += static_cast<size_t>(done);
         }
-        if (detail::sync_file_on_disk(fd) != 0)
+        if (detail::retry_on_eintr([fd]() { return ::fsync(fd); }) != 0)
         {
           const auto error = last_system_error();
           throw std::runtime_error(system_error_message(

@@ -158,9 +158,8 @@ hashes, not bytes.
 
 ### Publication guarantees
 
-- Create a unique temporary file exclusively, sync its contents, and atomically
-  replace the destination. Apple uses `F_FULLFSYNC` when supported and falls
-  back to `fsync`.
+- Create a unique temporary file exclusively, sync its contents with `fsync`,
+  and atomically replace the destination.
 - On POSIX, sync each newly created directory link and the destination
   directory after rename. A higher-level retry rechecks the directory chain and
   destination even when the file is already visible.

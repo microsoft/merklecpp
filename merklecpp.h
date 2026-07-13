@@ -714,6 +714,7 @@ namespace merkle
         if (left && right)
         {
           size = left->size + right->size + 1;
+          // Parentheses prevent expansion of the Windows max macro.
           height = (std::max)(left->height, right->height) + 1;
         }
         else
