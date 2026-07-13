@@ -1,8 +1,5 @@
 # Design: Tiled storage and tile-backed proofs for merklecpp
 
-**Status:** Proposal / Draft
-
-**Audience:** merklecpp maintainers and contributors
 
 **Scope:** Persist trees progressively during compaction using
 [tlog-tiles](https://c2sp.org/tlog-tiles), then serve inclusion and consistency
