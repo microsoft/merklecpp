@@ -19,7 +19,15 @@
 #include <vector>
 
 #ifdef _WIN32
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#    define MERKLECPP_UNDEF_NOMINMAX
+#  endif
 #  include <windows.h>
+#  ifdef MERKLECPP_UNDEF_NOMINMAX
+#    undef MERKLECPP_UNDEF_NOMINMAX
+#    undef NOMINMAX
+#  endif
 #else
 #  include <fcntl.h>
 #  include <unistd.h>
@@ -130,16 +138,14 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       bool close_handle = true;
       try
       {
-        // Parentheses prevent expansion of the Windows max macro.
         constexpr auto max_write_size =
-          static_cast<size_t>((std::numeric_limits<DWORD>::max)());
+          static_cast<size_t>(std::numeric_limits<DWORD>::max());
         size_t written = 0;
         while (written < bytes.size())
         {
           const auto remaining = bytes.size() - written;
-          // Parentheses prevent expansion of the Windows min macro.
           const auto chunk =
-            static_cast<DWORD>((std::min)(remaining, max_write_size));
+            static_cast<DWORD>(std::min(remaining, max_write_size));
           DWORD done = 0;
           if (!WriteFile(handle, bytes.data() + written, chunk, &done, nullptr))
           {

@@ -1,9 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+
+#include <merklecpp_pal.h>
+
 #include "util.h"
 
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
@@ -17,7 +20,6 @@
 #include <limits>
 #include <memory>
 #include <merklecpp.h>
-#include <merklecpp_pal.h>
 #include <merklecpp_tiles.h>
 #include <stdexcept>
 #include <string>
@@ -27,6 +29,9 @@
 namespace fs = std::filesystem;
 using merkle::Hash;
 using merkle::tiles::TileRef;
+
+static_assert(std::min(1, 2) == 1);
+static_assert(std::max(1, 2) == 2);
 
 class TemporaryDirectory
 {
