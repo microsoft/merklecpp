@@ -5,6 +5,8 @@ cmake_minimum_required(VERSION 3.14)
 
 project(merklecpp LANGUAGES CXX C ASM)
 
+include(GNUInstallDirs)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -33,8 +35,10 @@ if(TRACE)
 endif()
 
 install(TARGETS merklecpp)
-
-set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".so")
+install(
+  FILES merklecpp.h merklecpp_pal.h merklecpp_tiles.h
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 
 if(EVERCRYPT)
   if(NOT EVERCRYPT_DIR)
@@ -56,9 +60,9 @@ if(EVERCRYPT)
 endif()
 
 if(OPENSSL)
-  find_package(OpenSSL)
+  find_package(OpenSSL REQUIRED COMPONENTS Crypto)
   target_compile_definitions(merklecpp INTERFACE HAVE_OPENSSL)
-  target_link_libraries(merklecpp INTERFACE crypto)
+  target_link_libraries(merklecpp INTERFACE OpenSSL::Crypto)
 endif()
 
 if(TESTS)

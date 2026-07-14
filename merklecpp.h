@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
@@ -172,7 +173,7 @@ namespace merkle
     /// @param position Position of the first byte in @p bytes
     HashT(const std::vector<uint8_t>& bytes, size_t& position)
     {
-      if (bytes.size() - position < SIZE)
+      if (position > bytes.size() || bytes.size() - position < SIZE)
       {
         throw std::runtime_error("not enough bytes");
       }
@@ -270,7 +271,7 @@ namespace merkle
     void deserialise(const std::vector<uint8_t>& buffer, size_t& position)
     {
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> HashT::deserialise " << std::endl);
-      if (buffer.size() - position < SIZE)
+      if (position > buffer.size() || buffer.size() - position < SIZE)
       {
         throw std::runtime_error("not enough bytes");
       }

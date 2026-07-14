@@ -206,6 +206,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Whether a full tile exists on disk.
       [[nodiscard]] bool has_full_tile(uint8_t level, uint64_t index) const
       {
+        if (level > MAX_TILE_LEVEL)
+        {
+          return false;
+        }
         std::error_code ec;
         const auto path = tile_path(TileRef{level, index});
         if (!std::filesystem::is_regular_file(path, ec) || ec)
@@ -243,10 +247,15 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       [[nodiscard]] std::vector<Hash> read_tile(const TileRef& ref) const
       {
         const size_t expected = (size_t)TILE_WIDTH * HASH_SIZE;
-        std::vector<uint8_t> bytes = read_file(tile_path(ref), expected);
+        const auto path = tile_path(ref);
+        std::vector<uint8_t> bytes = read_file(path, expected);
         if (bytes.size() != expected)
         {
-          throw std::runtime_error("unexpected tile size");
+          throw std::runtime_error(std::format(
+            "unexpected tile size for {}: expected {} bytes, got {}",
+            path.string(),
+            expected,
+            bytes.size()));
         }
 
         std::vector<Hash> hashes;
@@ -301,9 +310,17 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       [[nodiscard]] std::vector<std::vector<uint8_t>> read_entry_bundle(
         uint64_t index) const
       {
-        return decode_entries(
-          read_file(entries_path(index), detail::MAX_ENTRY_BUNDLE_SIZE),
-          TILE_WIDTH);
+        const auto path = entries_path(index);
+        const auto bytes = read_file(path, detail::MAX_ENTRY_BUNDLE_SIZE);
+        try
+        {
+          return decode_entries(bytes, TILE_WIDTH);
+        }
+        catch (const std::runtime_error& error)
+        {
+          throw std::runtime_error(std::format(
+            "invalid entry bundle {}: {}", path.string(), error.what()));
+        }
       }
 
       /// @brief Encodes log entries into the tlog-tiles entry-bundle format.

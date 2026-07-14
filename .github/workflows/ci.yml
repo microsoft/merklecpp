@@ -53,7 +53,7 @@ jobs:
         if [ "$RUNNER_OS" == "Linux" ]; then
           cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON -DCLANG_TIDY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         else
-          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON
+          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON
         fi
 
     - name: Build

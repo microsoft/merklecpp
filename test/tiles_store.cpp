@@ -237,6 +237,8 @@ TEST_CASE("Tile store paths and hash namespaces")
     ((void)store.tile_path(
       TileRef{static_cast<uint8_t>(merkle::tiles::MAX_TILE_LEVEL + 1), 0})),
     std::runtime_error);
+  CHECK_FALSE(store.has_full_tile(
+    static_cast<uint8_t>(merkle::tiles::MAX_TILE_LEVEL + 1), 0));
   CHECK(rel(store, store.entries_path(5)) == "tile/entries/005");
   CHECK(
     merkle::tiles::TileStore::storage_directory_name("sha384") ==
@@ -627,7 +629,15 @@ TEST_CASE("Corrupt tiles and entry bundles are rejected")
 
   overwrite_file(store.tile_path(full_ref), std::vector<uint8_t>(hash_size, 0));
   CHECK_FALSE(store.has_full_tile(0, 0));
-  CHECK_THROWS_AS((void)store.read_tile(full_ref), std::runtime_error);
+  const auto short_tile_error = std::format(
+    "unexpected tile size for {}: expected {} bytes, got {}",
+    store.tile_path(full_ref).string(),
+    merkle::tiles::TILE_WIDTH * hash_size,
+    hash_size);
+  CHECK_THROWS_WITH_AS(
+    (void)store.read_tile(full_ref),
+    short_tile_error.c_str(),
+    std::runtime_error);
   store.write_tile(full_ref, full);
   CHECK(store.has_full_tile(0, 0));
   CHECK(store.read_tile(full_ref) == full);
@@ -643,7 +653,13 @@ TEST_CASE("Corrupt tiles and entry bundles are rejected")
   CHECK(store.read_entry_bundle(0) == entries);
   overwrite_file(store.entries_path(0), {0x00, 0x05, 0x01});
   CHECK_FALSE(store.has_entry_bundle(0));
-  CHECK_THROWS_AS((void)store.read_entry_bundle(0), std::runtime_error);
+  const auto invalid_bundle_error = std::format(
+    "invalid entry bundle {}: truncated entry bundle",
+    store.entries_path(0).string());
+  CHECK_THROWS_WITH_AS(
+    (void)store.read_entry_bundle(0),
+    invalid_bundle_error.c_str(),
+    std::runtime_error);
 
   auto encoded = merkle::tiles::TileStore::encode_entries(entries);
   encoded.push_back(0xFF);

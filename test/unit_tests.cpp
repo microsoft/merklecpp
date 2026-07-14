@@ -72,6 +72,11 @@ TEST_CASE("HashT constructors and error paths")
   size_t pos2 = 10;
   const std::vector<uint8_t> too_short(41, 0); // only 31 bytes from position 10
   REQUIRE_THROWS(merkle::Hash(too_short, pos2));
+
+  // Vector+position constructor: position beyond the buffer throws
+  size_t beyond_end = too_short.size() + 1;
+  REQUIRE_THROWS(merkle::Hash(too_short, beyond_end));
+  REQUIRE(beyond_end == too_short.size() + 1);
 }
 
 TEST_CASE("HashT methods")
@@ -85,6 +90,12 @@ TEST_CASE("HashT methods")
   {
     REQUIRE(b == 0);
   }
+
+  // deserialise: position beyond the buffer throws without advancing
+  const std::vector<uint8_t> empty;
+  size_t beyond_end = 1;
+  REQUIRE_THROWS(h.deserialise(empty, beyond_end));
+  REQUIRE(beyond_end == 1);
 
   // to_string (lower case)
   merkle::Hash h2;
