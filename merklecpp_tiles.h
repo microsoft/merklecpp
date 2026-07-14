@@ -331,7 +331,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       static std::vector<uint8_t> encode_entries(
         const std::vector<std::vector<uint8_t>>& entries)
       {
-        std::vector<uint8_t> bytes;
+        size_t encoded_size = 0;
         for (const auto& e : entries)
         {
           if (e.size() > detail::MAX_ENTRY_SIZE)
@@ -339,6 +339,13 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
             throw std::runtime_error(
               "entry too large for uint16 length prefix");
           }
+          encoded_size += detail::ENTRY_LENGTH_PREFIX_SIZE + e.size();
+        }
+
+        std::vector<uint8_t> bytes;
+        bytes.reserve(encoded_size);
+        for (const auto& e : entries)
+        {
           bytes.push_back((uint8_t)((e.size() >> 8) & 0xFF));
           bytes.push_back((uint8_t)(e.size() & 0xFF));
           bytes.insert(bytes.end(), e.begin(), e.end());
