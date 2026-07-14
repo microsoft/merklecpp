@@ -23,7 +23,6 @@
 #include <merklecpp_tiles.h>
 #include <stdexcept>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -676,43 +675,3 @@ TEST_CASE("Corrupt tiles and entry bundles are rejected")
     (merkle::tiles::TileStore::decode_entries({0x00, 0x00, 0xFF}, 1)),
     std::runtime_error);
 }
-
-// Windows file replacement semantics can reject racing same-path replaces even
-// when the final tile remains valid, so keep this stress check POSIX-only.
-#ifndef _WIN32
-TEST_CASE("Concurrent same-tile writes leave a valid tile")
-{
-  // 6. Concurrent same-tile writes use unique temp files and leave no
-  // temporary files behind after success. Each thread owns its store object;
-  // sharing one object requires caller-provided synchronization.
-  const TemporaryDirectory temporary_directory;
-  const fs::path& dir = temporary_directory.path();
-  const merkle::tiles::TileStore store(dir);
-  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
-  const TileRef concurrent_ref{0, 42};
-  std::atomic<bool> ok{true};
-  std::vector<std::thread> threads;
-  for (size_t i = 0; i < 8; i++)
-  {
-    threads.emplace_back([&] {
-      try
-      {
-        merkle::tiles::TileStore thread_store(dir);
-        thread_store.write_tile(concurrent_ref, full);
-      }
-      catch (...)
-      {
-        ok = false;
-      }
-    });
-  }
-  for (auto& thread : threads)
-  {
-    thread.join();
-  }
-
-  CHECK(ok.load());
-  CHECK(store.read_tile(concurrent_ref) == full);
-  CHECK_FALSE(any_tmp_files(dir));
-}
-#endif

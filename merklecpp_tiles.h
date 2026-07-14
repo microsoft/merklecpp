@@ -32,8 +32,10 @@
 // to those produced by merkle::TreeT (see doc/design/tlog-tiles.md).
 //
 // Thread safety: types in this header do not synchronize access internally.
-// Callers must serialize all operations on shared objects and store prefixes,
-// including const proof operations that update the tile cache.
+// Callers must serialize access to each shared object, including const proof
+// operations that update the tile cache, and all writers sharing a store
+// prefix. Independent store objects may read while the serialized writer
+// publishes tiles atomically.
 
 namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 {
@@ -128,7 +130,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// @tparam HASH_FUNCTION The tree's node hash function (carried for use by
     /// later components; tile I/O itself does not hash).
     /// @warning No internal synchronization is provided. Callers must serialize
-    /// access to a store and to all stores that share its prefix.
+    /// access to each store object and all writers sharing its prefix.
+    /// Independent store objects may read while the serialized writer publishes
+    /// tiles atomically.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(

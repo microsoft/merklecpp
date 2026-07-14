@@ -16,11 +16,12 @@ proofs from tiles, memory, or both.
 | Proofs | Tiled inclusion paths must equal `Tree::path()` / `Tree::past_path()` output and verify against the same `root()` / `past_root()`. Consistency proofs use the same tree and combiner. |
 | Hashing | Leaf handling, node hashing, and `HASH_FUNCTION` are unchanged. |
 | API | The implementation remains header-only and follows the existing `TreeT<HASH_SIZE, HASH_FUNCTION>` template style. |
-| Concurrency | The API performs no synchronization. Callers must serialize access, including across objects sharing a prefix and through `const` proof reads that update the `TileHashSourceT` LRU cache. |
+| Concurrency | The API performs no synchronization. Callers must serialize access to each object, including `const` proof reads that update the `TileHashSourceT` LRU cache, and all writers sharing a prefix. Independent objects may read while the serialized writer publishes tiles atomically. Concurrent writers are out of scope. |
 
 **Non-goals:** standardizing the SHA-384/512 extensions; adding RFC 6962 leaf
-hashing or domain separation; and providing an HTTP server. Applications remain
-responsible for compatible hashing and for serving the static resources.
+hashing or domain separation; coordinating concurrent writers; and providing an
+HTTP server. Applications remain responsible for compatible hashing and for
+serving the static resources.
 
 ## 2. Format and compatibility
 
@@ -155,14 +156,15 @@ hashes, not bytes.
 ### Publication guarantees
 
 - Create a unique temporary file exclusively, sync its contents with `fsync`,
-  and atomically replace the destination.
+  and atomically replace the destination. Independent readers observe a complete
+  old or new resource while the serialized writer publishes.
 - On POSIX, sync each newly created directory link and the destination
   directory after rename. A higher-level retry rechecks the directory chain and
   destination even when the file is already visible.
 - Wrong-size files are not durable full tiles and may be repaired. Higher-level
   writers enforce immutability; the low-level primitive permits replacement for
-  repair or idempotent concurrent publication and trusts callers not to change
-  valid content.
+  repair or idempotent publication and trusts callers not to change valid
+  content.
 
 ## 5. Architecture and API
 
