@@ -22,13 +22,16 @@ jobs:
         os: [ubuntu-latest]
         build_type: [Debug, Release]
         compiler: [g++, clang++]
+        openssl: ['OFF', 'ON']
         include:
           - os: windows-latest
             build_type: Debug
             compiler: msvc
+            openssl: 'OFF'
           - os: windows-latest
             build_type: Release
             compiler: msvc
+            openssl: 'OFF'
 
     steps:
     - name: Install packages
@@ -51,9 +54,9 @@ jobs:
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
-          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON -DCLANG_TIDY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=${{ matrix.openssl }} -DCLANG_TIDY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         else
-          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON
+          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=${{ matrix.openssl }}
         fi
 
     - name: Build

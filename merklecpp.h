@@ -23,7 +23,6 @@
 
 #ifdef HAVE_OPENSSL
 #  include <openssl/evp.h>
-#  include <openssl/sha.h>
 #endif
 
 #ifdef MERKLECPP_TRACE_ENABLED
@@ -148,8 +147,9 @@ namespace merkle
       {
         uint8_t high = 0;
         uint8_t low = 0;
-        if (!decode_hex_digit(s[2 * i], high) ||
-            !decode_hex_digit(s[2 * i + 1], low))
+        if (
+          !decode_hex_digit(s[2 * i], high) ||
+          !decode_hex_digit(s[2 * i + 1], low))
         {
           throw std::runtime_error("invalid hash string");
         }
@@ -471,14 +471,13 @@ namespace merkle
     /// @brief The size of the serialised path in number of bytes
     [[nodiscard]] size_t serialised_size() const
     {
-      return sizeof(_leaf) +
-      sizeof(uint64_t) + // leaf index
-      sizeof(uint64_t) + // max index
-      sizeof(uint64_t) + // number of elements
-      elements.size() * (
-        sizeof(Element::hash) + // hash
-        sizeof(uint8_t) // direction
-      );
+      return sizeof(_leaf) + sizeof(uint64_t) + // leaf index
+        sizeof(uint64_t) + // max index
+        sizeof(uint64_t) + // number of elements
+        elements.size() *
+        (sizeof(Element::hash) + // hash
+         sizeof(uint8_t) // direction
+        );
     }
 
     /// @brief Index of the leaf of the path
@@ -818,9 +817,9 @@ namespace merkle
     /// @param hash Hash to insert
     void insert(const Hash& hash)
     {
-      MERKLECPP_TRACE(MERKLECPP_TOUT << "> insert "
-                                     << hash.to_string(TRACE_HASH_SIZE)
-                                     << std::endl;);
+      MERKLECPP_TRACE(
+        MERKLECPP_TOUT << "> insert " << hash.to_string(TRACE_HASH_SIZE)
+                       << std::endl;);
       uninserted_leaf_nodes.push_back(Node::make(hash));
       statistics.num_insert++;
     }
@@ -862,10 +861,10 @@ namespace merkle
       walk_to(index, false, [this](Node*& n, bool go_right) {
         if (go_right && n->left)
         {
-          MERKLECPP_TRACE(MERKLECPP_TOUT
-                            << " - conflate "
-                            << n->left->hash.to_string(TRACE_HASH_SIZE)
-                            << std::endl;);
+          MERKLECPP_TRACE(
+            MERKLECPP_TOUT << " - conflate "
+                           << n->left->hash.to_string(TRACE_HASH_SIZE)
+                           << std::endl;);
           if (n->left && n->left->dirty)
           {
             hash(n->left);
@@ -920,10 +919,10 @@ namespace merkle
           n->dirty = true;
           if (go_left && n->right)
           {
-            MERKLECPP_TRACE(MERKLECPP_TOUT
-                              << " - eliminate "
-                              << n->right->hash.to_string(TRACE_HASH_SIZE)
-                              << std::endl;);
+            MERKLECPP_TRACE(
+              MERKLECPP_TOUT << " - eliminate "
+                             << n->right->hash.to_string(TRACE_HASH_SIZE)
+                             << std::endl;);
             bool is_root = n == _root;
 
             Node* old_left = n->left;
@@ -943,18 +942,18 @@ namespace merkle
 
             if (is_root)
             {
-              MERKLECPP_TRACE(MERKLECPP_TOUT
-                                << " - new root: "
-                                << n->hash.to_string(TRACE_HASH_SIZE)
-                                << std::endl;);
+              MERKLECPP_TRACE(
+                MERKLECPP_TOUT
+                  << " - new root: " << n->hash.to_string(TRACE_HASH_SIZE)
+                  << std::endl;);
               assert(_root == n);
             }
 
             assert(n->invariant());
 
-            MERKLECPP_TRACE(MERKLECPP_TOUT
-                              << " - after elimination: " << std::endl
-                              << to_string(TRACE_HASH_SIZE) << std::endl;);
+            MERKLECPP_TRACE(
+              MERKLECPP_TOUT << " - after elimination: " << std::endl
+                             << to_string(TRACE_HASH_SIZE) << std::endl;);
             return false;
           }
           return true;
@@ -1027,9 +1026,9 @@ namespace merkle
       statistics.num_root++;
       compute_root();
       assert(_root && !_root->dirty);
-      MERKLECPP_TRACE(MERKLECPP_TOUT
-                        << " - root: " << _root->hash.to_string(TRACE_HASH_SIZE)
-                        << std::endl;);
+      MERKLECPP_TRACE(
+        MERKLECPP_TOUT << " - root: " << _root->hash.to_string(TRACE_HASH_SIZE)
+                       << std::endl;);
       return _root->hash;
     }
 
@@ -1099,12 +1098,12 @@ namespace merkle
         {
           walk_stack.push_back(cur);
         }
-        MERKLECPP_TRACE(MERKLECPP_TOUT
-                          << " - at " << cur->hash.to_string(TRACE_HASH_SIZE)
-                          << " (" << cur->size << "/" << (unsigned)cur->height
-                          << ")"
-                          << " (" << (go_right ? "R" : "L") << ")"
-                          << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << " - at " << cur->hash.to_string(TRACE_HASH_SIZE)
+                         << " (" << cur->size << "/" << (unsigned)cur->height
+                         << ")"
+                         << " (" << (go_right ? "R" : "L") << ")"
+                         << std::endl;);
         if (cur->height == height)
         {
           if (!f(cur, go_right))
@@ -1159,8 +1158,9 @@ namespace merkle
     /// tree to @p as_of and then extracting the path of @p index.
     std::shared_ptr<Path> past_path(size_t index, size_t as_of)
     {
-      MERKLECPP_TRACE(MERKLECPP_TOUT << "> past_path from " << index
-                                     << " as of " << as_of << std::endl;);
+      MERKLECPP_TRACE(
+        MERKLECPP_TOUT << "> past_path from " << index << " as of " << as_of
+                       << std::endl;);
       statistics.num_past_paths++;
 
       if (
@@ -1199,24 +1199,24 @@ namespace merkle
         bool const go_right_i = ((it_i >> (8 * sizeof(it_i) - 1)) & 0x01) != 0U;
         bool const go_right_a = ((it_a >> (8 * sizeof(it_a) - 1)) & 0x01) != 0U;
 
-        MERKLECPP_TRACE(MERKLECPP_TOUT
-                          << " - at " << (unsigned)height << ": "
-                          << cur_i->hash.to_string(TRACE_HASH_SIZE) << " ("
-                          << cur_i->size << "/" << (unsigned)cur_i->height
-                          << "/" << (go_right_i ? "R" : "L") << ")"
-                          << " / " << cur_a->hash.to_string(TRACE_HASH_SIZE)
-                          << " (" << cur_a->size << "/"
-                          << (unsigned)cur_a->height << "/"
-                          << (go_right_a ? "R" : "L") << ")" << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << " - at " << (unsigned)height << ": "
+                         << cur_i->hash.to_string(TRACE_HASH_SIZE) << " ("
+                         << cur_i->size << "/" << (unsigned)cur_i->height << "/"
+                         << (go_right_i ? "R" : "L") << ")"
+                         << " / " << cur_a->hash.to_string(TRACE_HASH_SIZE)
+                         << " (" << cur_a->size << "/"
+                         << (unsigned)cur_a->height << "/"
+                         << (go_right_a ? "R" : "L") << ")" << std::endl;);
 
         if (!fork_node && go_right_i != go_right_a)
         {
           assert(cur_i == cur_a);
           assert(!go_right_i && go_right_a);
-          MERKLECPP_TRACE(MERKLECPP_TOUT
-                            << " - split at "
-                            << cur_i->hash.to_string(TRACE_HASH_SIZE)
-                            << std::endl;);
+          MERKLECPP_TRACE(
+            MERKLECPP_TOUT << " - split at "
+                           << cur_i->hash.to_string(TRACE_HASH_SIZE)
+                           << std::endl;);
           fork_node = cur_i;
         }
 
@@ -1360,8 +1360,8 @@ namespace merkle
 
         compute_root();
 
-        MERKLECPP_TRACE(MERKLECPP_TOUT << to_string(TRACE_HASH_SIZE)
-                                       << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << to_string(TRACE_HASH_SIZE) << std::endl;);
 
         std::vector<Node*> extras;
         walk_to(min_index(), false, [&extras](Node*& n, bool go_right) {
@@ -1385,8 +1385,9 @@ namespace merkle
     /// @param bytes The vector of bytes to serialise to
     void serialise(size_t from, size_t to, std::vector<uint8_t>& bytes)
     {
-      MERKLECPP_TRACE(MERKLECPP_TOUT << "> serialise from " << from << " to "
-                                     << to << std::endl;);
+      MERKLECPP_TRACE(
+        MERKLECPP_TOUT << "> serialise from " << from << " to " << to
+                       << std::endl;);
 
       validate_partial_range(from, to);
 
@@ -1403,8 +1404,8 @@ namespace merkle
 
         compute_root();
 
-        MERKLECPP_TRACE(MERKLECPP_TOUT << to_string(TRACE_HASH_SIZE)
-                                       << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << to_string(TRACE_HASH_SIZE) << std::endl;);
 
         std::vector<Node*> extras;
         walk_to(from, false, [&extras](Node*& n, bool go_right) {
@@ -1468,10 +1469,10 @@ namespace merkle
           level.insert(level.begin(), n);
         }
 
-        MERKLECPP_TRACE(for (auto& n
-                             : level) MERKLECPP_TOUT
-                          << " " << n->hash.to_string(TRACE_HASH_SIZE);
-                        MERKLECPP_TOUT << std::endl;);
+        MERKLECPP_TRACE(
+          for (auto& n : level) MERKLECPP_TOUT
+            << " " << n->hash.to_string(TRACE_HASH_SIZE);
+          MERKLECPP_TOUT << std::endl;);
 
         // Rebuild the level
         for (size_t i = 0; i < level.size(); i += 2)
@@ -1729,8 +1730,7 @@ namespace merkle
   protected:
     void validate_partial_range(size_t from, size_t to) const
     {
-      if (
-        empty() || !(min_index() <= from && from <= to && to <= max_index()))
+      if (empty() || !(min_index() <= from && from <= to && to <= max_index()))
       {
         throw std::runtime_error("invalid leaf indices");
       }
@@ -1897,9 +1897,9 @@ namespace merkle
     {
       while (true)
       {
-        MERKLECPP_TRACE(MERKLECPP_TOUT << "  @ "
-                                       << n->hash.to_string(TRACE_HASH_SIZE)
-                                       << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << "  @ " << n->hash.to_string(TRACE_HASH_SIZE)
+                         << std::endl;);
         assert(n->invariant());
 
         if (n->is_full())
@@ -1972,10 +1972,10 @@ namespace merkle
 
         if (!complete && !result->is_full())
         {
-          MERKLECPP_TRACE(MERKLECPP_TOUT
-                            << "  X save "
-                            << result->hash.to_string(TRACE_HASH_SIZE)
-                            << std::endl;);
+          MERKLECPP_TRACE(
+            MERKLECPP_TOUT << "  X save "
+                           << result->hash.to_string(TRACE_HASH_SIZE)
+                           << std::endl;);
           return result;
         }
       }
@@ -1990,9 +1990,9 @@ namespace merkle
     /// @param n New leaf node to insert
     void insert_leaf(Node*& root, Node* n)
     {
-      MERKLECPP_TRACE(MERKLECPP_TOUT << " - insert_leaf "
-                                     << n->hash.to_string(TRACE_HASH_SIZE)
-                                     << std::endl;);
+      MERKLECPP_TRACE(
+        MERKLECPP_TOUT << " - insert_leaf "
+                       << n->hash.to_string(TRACE_HASH_SIZE) << std::endl;);
       leaf_nodes.push_back(n);
       if (insertion_stack.empty() && !root)
       {
@@ -2012,9 +2012,9 @@ namespace merkle
     {
       if (!uninserted_leaf_nodes.empty())
       {
-        MERKLECPP_TRACE(MERKLECPP_TOUT
-                          << "* insert_leaves " << leaf_nodes.size() << " +"
-                          << uninserted_leaf_nodes.size() << std::endl;);
+        MERKLECPP_TRACE(
+          MERKLECPP_TOUT << "* insert_leaves " << leaf_nodes.size() << " +"
+                         << uninserted_leaf_nodes.size() << std::endl;);
         // Potential future improvement: make this go fast when there are many
         // leaves to insert.
         for (auto& n : uninserted_leaf_nodes)
@@ -2030,88 +2030,131 @@ namespace merkle
     }
   };
 
-  // clang-format off
-  /// @brief SHA256 compression function for tree node hashes
+  namespace detail
+  {
+    static inline std::array<uint32_t, 8> sha256_initial_state()
+    {
+      return {
+        0x6a09e667,
+        0xbb67ae85,
+        0x3c6ef372,
+        0xa54ff53a,
+        0x510e527f,
+        0x9b05688c,
+        0x1f83d9ab,
+        0x5be0cd19};
+    }
+
+    static inline void sha256_transform(
+      const uint8_t block[64], std::array<uint32_t, 8>& state)
+    {
+      static constexpr std::array<uint32_t, 64> constants = {
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+        0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+        0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+        0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+        0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+        0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+        0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+        0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+
+      std::array<uint32_t, 64> schedule = {};
+      for (size_t i = 0; i < 16; ++i)
+      {
+        const size_t offset = i * 4;
+        schedule[i] = (static_cast<uint32_t>(block[offset]) << 24) |
+          (static_cast<uint32_t>(block[offset + 1]) << 16) |
+          (static_cast<uint32_t>(block[offset + 2]) << 8) |
+          static_cast<uint32_t>(block[offset + 3]);
+      }
+
+      for (size_t i = 16; i < 64; ++i)
+      {
+        const uint32_t word15 = schedule[i - 15];
+        const uint32_t word2 = schedule[i - 2];
+        const uint32_t sigma0 = (word15 >> 7 | word15 << 25) ^
+          (word15 >> 18 | word15 << 14) ^ (word15 >> 3);
+        const uint32_t sigma1 = (word2 >> 17 | word2 << 15) ^
+          (word2 >> 19 | word2 << 13) ^ (word2 >> 10);
+        schedule[i] = schedule[i - 16] + sigma0 + schedule[i - 7] + sigma1;
+      }
+
+      auto working = state;
+      for (size_t i = 0; i < 64; ++i)
+      {
+        const uint32_t choice =
+          (working[4] & working[5]) ^ (~working[4] & working[6]);
+        const uint32_t majority = (working[0] & working[1]) ^
+          (working[0] & working[2]) ^ (working[1] & working[2]);
+        const uint32_t sigma0 = (working[0] >> 2 | working[0] << 30) ^
+          (working[0] >> 13 | working[0] << 19) ^
+          (working[0] >> 22 | working[0] << 10);
+        const uint32_t sigma1 = (working[4] >> 6 | working[4] << 26) ^
+          (working[4] >> 11 | working[4] << 21) ^
+          (working[4] >> 25 | working[4] << 7);
+        const uint32_t temporary1 =
+          working[7] + sigma1 + choice + constants[i] + schedule[i];
+        const uint32_t temporary2 = sigma0 + majority;
+
+        working[7] = working[6];
+        working[6] = working[5];
+        working[5] = working[4];
+        working[4] = working[3] + temporary1;
+        working[3] = working[2];
+        working[2] = working[1];
+        working[1] = working[0];
+        working[0] = temporary1 + temporary2;
+      }
+
+      for (size_t i = 0; i < state.size(); ++i)
+      {
+        state[i] += working[i];
+      }
+    }
+
+    static inline void sha256_write_digest(
+      const std::array<uint32_t, 8>& state, HashT<32>& out)
+    {
+      for (size_t i = 0; i < state.size(); ++i)
+      {
+        out.bytes[i * 4] = static_cast<uint8_t>(state[i] >> 24);
+        out.bytes[i * 4 + 1] = static_cast<uint8_t>(state[i] >> 16);
+        out.bytes[i * 4 + 2] = static_cast<uint8_t>(state[i] >> 8);
+        out.bytes[i * 4 + 3] = static_cast<uint8_t>(state[i]);
+      }
+    }
+  }
+
+  /// @brief Built-in SHA256 function for tree node hashes
   /// @param l Left node hash
   /// @param r Right node hash
   /// @param out Output node hash
-  /// @details This function is the compression function of SHA256, which, for
-  /// the special case of hashing two hashes, is more efficient than a full
-  /// SHA256 while providing similar guarantees.
-  static inline void sha256_compress(const HashT<32> &l, const HashT<32> &r, HashT<32> &out) {
-    static const uint32_t constants[] = {
-      0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-      0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-      0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-      0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-      0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-      0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-      0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-      0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
-    };
-
+  /// @details Computes SHA256 over the 64-byte concatenation of @p l and @p r,
+  /// including standard SHA256 message padding.
+  static inline void sha256(
+    const HashT<32>& l, const HashT<32>& r, HashT<32>& out)
+  {
     uint8_t block[32 * 2];
     memcpy(&block[0], l.bytes, 32);
     memcpy(&block[32], r.bytes, 32);
 
-    static const uint32_t s[8] = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-                                   0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 };
+    auto state = detail::sha256_initial_state();
+    detail::sha256_transform(block, state);
 
-    uint32_t cws[64] = {0};
-
-    for (int i=0; i < 16; i++) {
-      cws[i] = convert_endianness(reinterpret_cast<const int32_t*>(block)[i]);
-}
-
-    for (int i = 16; i < 64; i++) {
-      uint32_t const t16 = cws[i - 16];
-      uint32_t const t15 = cws[i - 15];
-      uint32_t const t7 = cws[i - 7];
-      uint32_t const t2 = cws[i - 2];
-      uint32_t const s1 = (t2 >> 17 | t2 << 15) ^ ((t2 >> 19 | t2 << 13) ^ t2 >> 10);
-      uint32_t const s0 = (t15 >> 7 | t15 << 25) ^ ((t15 >> 18 | t15 << 14) ^ t15 >> 3);
-      cws[i] = (s1 + t7 + s0 + t16);
-    }
-
-    uint32_t h[8];
-    for (int i=0; i < 8; i++) {
-      h[i] = s[i];
-}
-
-    for (int i=0; i < 64; i++) {
-      const uint32_t a0 = h[0];
-      const uint32_t b0 = h[1];
-      const uint32_t c0 = h[2];
-      const uint32_t d0 = h[3];
-      const uint32_t e0 = h[4];
-      const uint32_t f0 = h[5];
-      const uint32_t g0 = h[6];
-      const uint32_t h03 = h[7];
-      uint32_t const w = cws[i];
-      uint32_t const t1 = h03 + ((e0 >> 6 | e0 << 26) ^ ((e0 >> 11 | e0 << 21) ^ (e0 >> 25 | e0 << 7))) + ((e0 & f0) ^ (~e0 & g0)) + constants[i] + w;
-      uint32_t const t2 = ((a0 >> 2 | a0 << 30) ^ ((a0 >> 13 | a0 << 19) ^ (a0 >> 22 | a0 << 10))) + ((a0 & b0) ^ ((a0 & c0) ^ (b0 & c0)));
-      h[0] = t1 + t2;
-      h[1] = a0;
-      h[2] = b0;
-      h[3] = c0;
-      h[4] = d0 + t1;
-      h[5] = e0;
-      h[6] = f0;
-      h[7] = g0;
-    }
-
-    for (int i=0; i < 8; i++) {
-      reinterpret_cast<uint32_t*>(out.bytes)[i] = convert_endianness(s[i] + h[i]);
-}
+    uint8_t padding[64] = {0x80};
+    padding[62] = 0x02;
+    detail::sha256_transform(padding, state);
+    detail::sha256_write_digest(state, out);
   }
-  // clang-format on
 
 #ifdef HAVE_OPENSSL
   /// @brief OpenSSL SHA256
   /// @param l Left node hash
   /// @param r Right node hash
   /// @param out Output node hash
-  /// @note Some versions of OpenSSL may not provide SHA256_Transform.
   static inline void sha256_openssl(
     const merkle::HashT<32>& l,
     const merkle::HashT<32>& r,
@@ -2197,8 +2240,8 @@ namespace merkle
   using Hash = HashT<32>;
 
   /// @brief Type of paths in the default tree type
-  using Path = PathT<32, sha256_compress>;
+  using Path = PathT<32, sha256>;
 
   /// @brief Default tree with default hash size and function
-  using Tree = TreeT<32, sha256_compress>;
+  using Tree = TreeT<32, sha256>;
 };

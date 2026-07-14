@@ -224,8 +224,7 @@ using TiledTree =
 
 Aliases derive hash size and function from the core tree. Roll-up and proof code
 combine two `HASH_SIZE`-byte hashes with that same function, so the default
-single-block `sha256_compress` remains sufficient and adds no OpenSSL
-dependency.
+built-in `sha256` function adds no OpenSSL dependency.
 
 ### 5.2 `TileStoreT`
 

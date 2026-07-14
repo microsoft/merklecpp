@@ -7,6 +7,22 @@
 #include <doctest/doctest.h>
 #include <merklecpp.h>
 
+TEST_CASE("Built-in SHA256 hashes complete messages")
+{
+  const merkle::Hash zero;
+  merkle::Hash digest;
+  merkle::sha256(zero, zero, digest);
+
+  REQUIRE(
+    digest.to_string() ==
+    "f5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b");
+
+  merkle::Tree tree;
+  tree.insert(zero);
+  tree.insert(zero);
+  REQUIRE(tree.root() == digest);
+}
+
 TEST_CASE("HashT constructors and error paths")
 {
   // Default constructor: all bytes zero
@@ -161,7 +177,7 @@ TEST_CASE("PathT equality")
 
   const auto path0a = tree.path(0);
   const auto path0b = tree.path(0); // same path extracted twice
-  const auto path1 = tree.path(1);  // path to a different leaf
+  const auto path1 = tree.path(1); // path to a different leaf
 
   // Two paths to the same leaf should be equal
   REQUIRE(*path0a == *path0b);
@@ -178,7 +194,7 @@ TEST_CASE("PathT equality")
   h3.bytes[0] = 3;
   tree_diff.insert(h3);
 
-  const auto path_orig = tree.path(0);  // h0 leaf, element has h1
+  const auto path_orig = tree.path(0); // h0 leaf, element has h1
   const auto path_diff = tree_diff.path(0); // h0 leaf, element has h3
   REQUIRE_FALSE(*path_orig == *path_diff);
   REQUIRE(*path_orig != *path_diff);

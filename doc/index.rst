@@ -7,9 +7,9 @@ allows us to create a Merkle tree with a compile-time configurable hash size
 and function.
 
 A default implementation without further dependencies is provided as
-:cpp:type:`merkle::Tree`, which uses the SHA256 compression function
-(:cpp:func:`merkle::sha256_compress`). merklecpp also provides bindings
-for the respective OpenSSL functions (see `Hash functions`_),
+:cpp:type:`merkle::Tree`, which uses the built-in SHA256 function
+(:cpp:func:`merkle::sha256`). merklecpp also provides bindings for the
+respective OpenSSL functions (see `Hash functions`_),
 which can be specified as a template parameter as illustrated by the following
 example:
 
@@ -46,13 +46,13 @@ Paths
 Hash functions
 --------------
 
-By default, merklecpp uses the SHA256 compression function
-(:cpp:func:`merkle::sha256_compress`) for node hashes. For convenience,
-it also provides bindings to the SHA256 implementation in OpenSSL.
+By default, merklecpp uses its built-in SHA256 function
+(:cpp:func:`merkle::sha256`) for node hashes. For convenience, merklecpp also
+provides bindings to the SHA256 implementation in OpenSSL.
 To enable these bindings, merklecpp requires the compiler macro
 :code:`HAVE_OPENSSL` to be defined.
 
-.. doxygenfunction:: merkle::sha256_compress
+.. doxygenfunction:: merkle::sha256
    :project: merklecpp
 
 .. doxygenfunction:: merkle::sha256_openssl

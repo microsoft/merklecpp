@@ -3,6 +3,7 @@
 
 #include "util.h"
 
+#include <Hacl_Hash.h>
 #include <MerkleTree.h>
 #include <chrono>
 #include <iostream>
@@ -10,6 +11,14 @@
 
 #define HSZ 32
 #define PRNTSZ 3
+
+void sha256_evercrypt(uint8_t* lhs, uint8_t* rhs, uint8_t* out)
+{
+  uint8_t block[HSZ * 2];
+  memcpy(&block[0], lhs, HSZ);
+  memcpy(&block[HSZ], rhs, HSZ);
+  Hacl_Hash_SHA2_hash_256(block, sizeof(block), out);
+}
 
 void dump_ec_tree(merkle_tree* mt)
 {
@@ -91,7 +100,7 @@ int main()
 
         memcpy(ec_hash, h.bytes, HSZ);
         if (!ec_mt)
-          ec_mt = mt_create(ec_hash);
+          ec_mt = mt_create_custom(HSZ, ec_hash, sha256_evercrypt);
         else
           mt_insert(ec_mt, ec_hash);
 
