@@ -4,6 +4,8 @@
 #include "util.h"
 
 #include <chrono>
+#include <cstdlib>
+#include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <merklecpp.h>
