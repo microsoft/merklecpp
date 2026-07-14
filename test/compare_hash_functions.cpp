@@ -4,37 +4,13 @@
 #include "util.h"
 
 #include <chrono>
+#include <cstdlib>
+#include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <merklecpp.h>
 
 constexpr size_t PRNTSZ = 3;
-
-#ifdef HAVE_EVERCRYPT
-#  include <Hacl_Hash.h>
-#  include <MerkleTree.h>
-
-void sha256_evercrypt(
-  const merkle::HashT<32>& l,
-  const merkle::HashT<32>& r,
-  merkle::HashT<32>& out)
-{
-  uint8_t block[32 * 2];
-  memcpy(&block[0], l.bytes, 32);
-  memcpy(&block[32], r.bytes, 32);
-  Hacl_Hash_SHA2_hash_256(block, sizeof(block), (uint8_t*)out.bytes);
-}
-
-void mt_sha256_evercrypt(uint8_t* src1, uint8_t* src2, uint8_t* dst)
-{
-  uint8_t block[32 * 2];
-  memcpy(&block[0], src1, 32);
-  memcpy(&block[32], src2, 32);
-  Hacl_Hash_SHA2_hash_256(block, sizeof(block), dst);
-}
-
-using EverCryptTree = merkle::TreeT<32, sha256_evercrypt>;
-#endif
 
 #ifdef HAVE_OPENSSL
 using OpenSSLTree = merkle::TreeT<32, merkle::sha256_openssl>;
@@ -88,10 +64,6 @@ void compare_sha256_hashes()
     OpenSSLTree mto;
 #endif
 
-#ifdef HAVE_EVERCRYPT
-    EverCryptTree mte;
-#endif
-
     // Build trees with k+1 leaves
     int j = 0;
     auto hashes = make_hashes(k + 1);
@@ -104,19 +76,12 @@ void compare_sha256_hashes()
       mto.insert(h);
 #endif
 
-#ifdef HAVE_EVERCRYPT
-      mte.insert(h);
-#endif
-
       total_inserts++;
 
       if ((j++ % root_interval) == 0)
       {
 #ifdef HAVE_OPENSSL
         compare_roots(mt, mto, "OpenSSL");
-#endif
-#ifdef HAVE_EVERCRYPT
-        compare_roots(mt, mte, "EverCrypt");
 #endif
 
         total_roots++;
@@ -125,9 +90,6 @@ void compare_sha256_hashes()
 
 #ifdef HAVE_OPENSSL
     compare_roots(mt, mto, "OpenSSL");
-#endif
-#ifdef HAVE_EVERCRYPT
-    compare_roots(mt, mte, "EverCrypt");
 #endif
   }
 
@@ -195,41 +157,6 @@ void benchT(
             << '\n';
 }
 
-#ifdef HAVE_EVERCRYPT
-template <void (*HASH_FUNCTION)(uint8_t* l, uint8_t* r, uint8_t* out)>
-void bench_evercrypt(
-  const std::vector<uint8_t*>& hashes,
-  const std::string& name,
-  size_t root_interval)
-{
-  size_t j = 0, num_inserts = 0, num_roots = 0;
-  uint8_t* ec_root = mt_init_hash(32);
-  auto start = std::chrono::high_resolution_clock::now();
-  merkle_tree* ec_mt = mt_create_custom(32, hashes[0], HASH_FUNCTION);
-  for (size_t i = 1; i < hashes.size(); i++)
-  {
-    mt_insert(ec_mt, hashes[i]);
-    num_inserts++;
-    if ((j++ % root_interval) == 0)
-    {
-      mt_get_root(ec_mt, ec_root);
-      num_roots++;
-    }
-  }
-  mt_get_root(ec_mt, ec_root);
-  num_roots++;
-  auto stop = std::chrono::high_resolution_clock::now();
-  auto seconds =
-    std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() /
-    1e9;
-  std::cout << std::left << std::setw(10) << name << ": " << num_inserts
-            << " insertions, " << num_roots << " roots in " << seconds << " sec"
-            << '\n';
-  mt_free_hash(ec_root);
-  mt_free(ec_mt);
-}
-#endif
-
 int main()
 {
   try
@@ -257,10 +184,6 @@ int main()
     bench<OpenSSLTree>(hashes, "OpenSSL", root_interval);
 #endif
 
-#ifdef HAVE_EVERCRYPT
-    bench<EverCryptTree>(hashes, "EverCrypt", root_interval);
-#endif
-
 #ifdef HAVE_OPENSSL
     {
       std::cout << "--- merklecpp trees with SHA384: " << '\n';
@@ -273,21 +196,6 @@ int main()
       auto hashes512 = make_hashesT<64>(num_leaves);
       benchT<merkle::Tree512, 64>(hashes512, "OpenSSL", root_interval);
     }
-#endif
-
-#ifdef HAVE_EVERCRYPT
-    std::vector<uint8_t*> ec_hashes;
-    for (auto& h : hashes)
-    {
-      ec_hashes.push_back(mt_init_hash(32));
-      memcpy(ec_hashes.back(), h.bytes, 32);
-    }
-
-    std::cout << "--- EverCrypt trees with SHA256: " << '\n';
-    bench_evercrypt<mt_sha256_evercrypt>(ec_hashes, "EverCrypt", root_interval);
-
-    for (auto h : ec_hashes)
-      mt_free_hash(h);
 #endif
   }
   catch (std::exception& ex)

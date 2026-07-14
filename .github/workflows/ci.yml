@@ -75,6 +75,6 @@ jobs:
     - name: Test
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       shell: bash
-      run: ctest -VV -C ${{ matrix.build_type }}
+      run: ctest -VV -C ${{ matrix.build_type }} --timeout 300
       env: 
         ASAN_OPTIONS: use_sigaltstack=false # To avoid SetAlternateSignalStack with clang-11 

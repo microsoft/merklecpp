@@ -3,7 +3,7 @@
 
 cmake_minimum_required(VERSION 3.14)
 
-project(merklecpp LANGUAGES CXX C ASM)
+project(merklecpp LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
@@ -14,7 +14,6 @@ set(MERKLECPP_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 option(PROFILE "enable profiling" OFF)
 option(TESTS "enable testing" OFF)
-option(EVERCRYPT "enable comparison with EverCrypt Merkle trees" OFF)
 option(OPENSSL "enable OpenSSL" OFF)
 option(TRACE "enable debug traces" OFF)
 option(CLANG_TIDY "enable clang-tidy checks during build" OFF)
@@ -39,25 +38,6 @@ install(
   FILES merklecpp.h merklecpp_pal.h merklecpp_tiles.h
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
-
-if(EVERCRYPT)
-  if(NOT EVERCRYPT_DIR)
-    message(FATAL_ERROR "EverCrypt not found, add -DEVERCRYPT_DIR=...")
-  endif()
-
-  file(GLOB EVERCRYPT_SRC "${EVERCRYPT_DIR}/*.c"
-       "${EVERCRYPT_DIR}/*-x86_64-linux.S"
-  )
-  add_library(evercrypt STATIC ${EVERCRYPT_SRC})
-  target_include_directories(
-    evercrypt PUBLIC ${EVERCRYPT_DIR} ${EVERCRYPT_DIR}/kremlin
-                     ${EVERCRYPT_DIR}/kremlin/kremlib
-  )
-  set_target_properties(evercrypt PROPERTIES LINKER_LANGUAGE C)
-
-  target_compile_definitions(merklecpp INTERFACE HAVE_EVERCRYPT)
-  target_link_libraries(merklecpp INTERFACE evercrypt)
-endif()
 
 if(OPENSSL)
   find_package(OpenSSL REQUIRED COMPONENTS Crypto)

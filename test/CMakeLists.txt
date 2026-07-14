@@ -38,13 +38,7 @@ add_merklecpp_test(partial_serialisation partial_serialisation.cpp)
 add_merklecpp_test(serialise_to_file serialise_to_file.cpp)
 add_merklecpp_test(coverage coverage.cpp)
 
-if(TARGET evercrypt.host)
-  add_merklecpp_test(compare_evercrypt compare_evercrypt.cpp)
-endif()
-
-if(OPENSSL
-   OR EVERCRYPT
-)
+if(OPENSSL)
   add_merklecpp_test(compare_hash_functions compare_hash_functions.cpp)
 endif()
 
