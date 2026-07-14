@@ -6,10 +6,6 @@
 #include <iomanip>
 #include <iostream>
 
-#ifdef HAVE_EVERCRYPT
-#  include <MerkleTree.h>
-#endif
-
 #include "util.h"
 
 #include <merklecpp.h>
