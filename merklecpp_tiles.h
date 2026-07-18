@@ -1035,10 +1035,13 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       TileStoreT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
 
     /// @brief Default tile writer (SHA256, default hash function).
-    using TileWriter = TileWriterT<32, sha256_compress>;
+    using TileWriter =
+      TileWriterT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
 
     /// @brief Default entry-bundle writer (SHA256, default hash function).
-    using EntryBundleWriter = EntryBundleWriterT<32, sha256_compress>;
+    using EntryBundleWriter = EntryBundleWriterT<
+      merkle::Tree::Hash::size_bytes,
+      merkle::Tree::hash_function>;
 
   }
 }

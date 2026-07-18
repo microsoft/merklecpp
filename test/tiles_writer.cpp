@@ -47,7 +47,9 @@ static size_t tile_file_count(const TileStore& store)
 // Roll up a full level-0 tile and compare with a level-1 tile entry.
 static Hash rollup(const std::vector<Hash>& leaves)
 {
-  return merkle::tiles::perfect_root<32, merkle::sha256_compress>(leaves);
+  return merkle::tiles::perfect_root<
+    merkle::Tree::Hash::size_bytes,
+    merkle::Tree::hash_function>(leaves);
 }
 
 static void overwrite_file(
