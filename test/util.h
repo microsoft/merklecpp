@@ -38,9 +38,9 @@ inline std::vector<merkle::HashT<SIZE>> make_hashesT(
 
 inline size_t random_index(merkle::Tree& mt)
 {
-  return (size_t)(
-    mt.min_index() +
-    (std::rand() / (double)RAND_MAX) * (mt.max_index() - mt.min_index()));
+  return (size_t)(mt.min_index() +
+                  (std::rand() / (double)RAND_MAX) *
+                    (mt.max_index() - mt.min_index()));
 }
 
 inline double get_timeout()

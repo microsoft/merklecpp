@@ -4,8 +4,24 @@
 #include "util.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include <doctest.h>
+#include <doctest/doctest.h>
 #include <merklecpp.h>
+
+TEST_CASE("Built-in SHA256 hashes complete messages")
+{
+  const merkle::Hash zero;
+  merkle::Hash digest;
+  merkle::sha256(zero, zero, digest);
+
+  REQUIRE(
+    digest.to_string() ==
+    "f5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b");
+
+  merkle::Tree tree;
+  tree.insert(zero);
+  tree.insert(zero);
+  REQUIRE(tree.root() == digest);
+}
 
 TEST_CASE("HashT constructors and error paths")
 {
@@ -72,6 +88,11 @@ TEST_CASE("HashT constructors and error paths")
   size_t pos2 = 10;
   const std::vector<uint8_t> too_short(41, 0); // only 31 bytes from position 10
   REQUIRE_THROWS(merkle::Hash(too_short, pos2));
+
+  // Vector+position constructor: position beyond the buffer throws
+  size_t beyond_end = too_short.size() + 1;
+  REQUIRE_THROWS(merkle::Hash(too_short, beyond_end));
+  REQUIRE(beyond_end == too_short.size() + 1);
 }
 
 TEST_CASE("HashT methods")
@@ -85,6 +106,12 @@ TEST_CASE("HashT methods")
   {
     REQUIRE(b == 0);
   }
+
+  // deserialise: position beyond the buffer throws without advancing
+  const std::vector<uint8_t> empty;
+  size_t beyond_end = 1;
+  REQUIRE_THROWS(h.deserialise(empty, beyond_end));
+  REQUIRE(beyond_end == 1);
 
   // to_string (lower case)
   merkle::Hash h2;
@@ -102,9 +129,10 @@ TEST_CASE("HashT methods")
   const std::string s2 = h2.to_string(2);
   REQUIRE(s2.size() == 4);
   REQUIRE(s2 == "abcd");
+  REQUIRE_THROWS_AS((void)h2.to_string(33), std::out_of_range);
 
   // operator== and operator!=
-  merkle::Hash ha;
+  const merkle::Hash ha;
   merkle::Hash hb;
   REQUIRE(ha == hb);
   REQUIRE_FALSE(ha != hb);
@@ -149,7 +177,7 @@ TEST_CASE("PathT equality")
 
   const auto path0a = tree.path(0);
   const auto path0b = tree.path(0); // same path extracted twice
-  const auto path1 = tree.path(1);  // path to a different leaf
+  const auto path1 = tree.path(1); // path to a different leaf
 
   // Two paths to the same leaf should be equal
   REQUIRE(*path0a == *path0b);
@@ -166,7 +194,7 @@ TEST_CASE("PathT equality")
   h3.bytes[0] = 3;
   tree_diff.insert(h3);
 
-  const auto path_orig = tree.path(0);  // h0 leaf, element has h1
+  const auto path_orig = tree.path(0); // h0 leaf, element has h1
   const auto path_diff = tree_diff.path(0); // h0 leaf, element has h3
   REQUIRE_FALSE(*path_orig == *path_diff);
   REQUIRE(*path_orig != *path_diff);
@@ -175,7 +203,7 @@ TEST_CASE("PathT equality")
 TEST_CASE("TreeT to_string")
 {
   // Empty tree produces "<EMPTY>"
-  merkle::Tree empty_tree;
+  const merkle::Tree empty_tree;
   const std::string empty_str = empty_tree.to_string();
   REQUIRE(empty_str.find("<EMPTY>") != std::string::npos);
 
@@ -192,7 +220,7 @@ TEST_CASE("TreeT to_string")
 TEST_CASE("TreeT leaf bounds and uninserted leaves")
 {
   // leaf() out of bounds on empty tree
-  merkle::Tree empty_tree;
+  const merkle::Tree empty_tree;
   REQUIRE_THROWS(empty_tree.leaf(0));
 
   // Access leaf before insertion is flushed (uninserted_leaf_nodes path)
@@ -216,7 +244,7 @@ TEST_CASE("TreeT size with uninserted leaves")
 {
   merkle::Tree tree;
   // size() when tree has uninserted leaves triggers insert_leaves()
-  merkle::Tree::Hash h;
+  const merkle::Tree::Hash h;
   tree.insert(h);
   // size() forces lazy insertion
   const size_t sz = tree.size();

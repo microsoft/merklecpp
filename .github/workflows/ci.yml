@@ -22,19 +22,22 @@ jobs:
         os: [ubuntu-latest]
         build_type: [Debug, Release]
         compiler: [g++, clang++]
+        openssl: ['OFF', 'ON']
         include:
           - os: windows-latest
             build_type: Debug
             compiler: msvc
+            openssl: 'OFF'
           - os: windows-latest
             build_type: Release
             compiler: msvc
+            openssl: 'OFF'
 
     steps:
     - name: Install packages
       run: |
         sudo apt-get update
-        sudo apt-get -y install doctest-dev clang clang-tidy
+        sudo apt-get -y install clang clang-tidy
       if: matrix.os == 'ubuntu-latest'
 
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -51,9 +54,9 @@ jobs:
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
-          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=ON -DCLANG_TIDY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=${{ matrix.openssl }} -DCLANG_TIDY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         else
-          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON
+          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=${{ matrix.openssl }}
         fi
 
     - name: Build
@@ -64,7 +67,10 @@ jobs:
     - name: Clang-Tidy Header
       if: matrix.os == 'ubuntu-latest'
       shell: bash
-      run: clang-tidy merklecpp.h -p build/${{ matrix.build_type }} --warnings-as-errors='*'
+      run: |
+        clang-tidy merklecpp.h -p build/${{ matrix.build_type }} --warnings-as-errors='*'
+        clang-tidy merklecpp_tiles.h -p build/${{ matrix.build_type }} --warnings-as-errors='*'
+        clang-tidy merklecpp_pal.h -p build/${{ matrix.build_type }} --warnings-as-errors='*'
 
     - name: Test
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}

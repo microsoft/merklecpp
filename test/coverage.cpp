@@ -116,6 +116,9 @@ namespace
     {
       require(byte == 0xAA, "valid hash string parsed incorrectly");
     }
+    require_throws(
+      [&] { (void)valid_hash.to_string(valid_hash.size() + 1); },
+      "hash string should reject byte counts beyond the hash size");
 
     std::string mixed_case_hex(64, '0');
     mixed_case_hex[0] = 'A';

@@ -9,6 +9,8 @@ unusual features like flushing, retracting, and tree segment serialisation.
 
 ## Usage
 
+merklecpp requires C++20.
+
     #include <merklecpp.h>
 
     merkle::Tree::Hash hash("fa8f44eabb728d4020e7f33d1aa973faaef19de6c06679bccdc5100a3c01f54a");

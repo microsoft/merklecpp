@@ -1,10 +1,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+cmake_minimum_required(VERSION 3.14)
+
 project(merklecpp LANGUAGES CXX)
 
-cmake_minimum_required(VERSION 3.11)
-set(CMAKE_CXX_STANDARD 17)
+include(GNUInstallDirs)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(MERKLECPP_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -22,6 +26,7 @@ if(CLANG_TIDY)
 endif()
 
 add_library(merklecpp INTERFACE)
+target_compile_features(merklecpp INTERFACE cxx_std_20)
 target_include_directories(merklecpp INTERFACE .)
 
 if(TRACE)
@@ -29,13 +34,15 @@ if(TRACE)
 endif()
 
 install(TARGETS merklecpp)
-
-set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".so")
+install(
+  FILES merklecpp.h merklecpp_pal.h merklecpp_tiles.h
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 
 if(OPENSSL)
-  find_package(OpenSSL)
+  find_package(OpenSSL REQUIRED COMPONENTS Crypto)
   target_compile_definitions(merklecpp INTERFACE HAVE_OPENSSL)
-  target_link_libraries(merklecpp INTERFACE crypto)
+  target_link_libraries(merklecpp INTERFACE OpenSSL::Crypto)
 endif()
 
 if(TESTS)
