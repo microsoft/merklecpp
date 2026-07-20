@@ -5,12 +5,11 @@
 
 #include <merklecpp_pal.h>
 
+#include "tiles_test_util.h"
 #include "util.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cerrno>
-#include <chrono>
 #include <cstdint>
 #include <doctest/doctest.h>
 #include <filesystem>
@@ -31,40 +30,6 @@ using merkle::tiles::TileRef;
 
 static_assert(std::min(1, 2) == 1);
 static_assert(std::max(1, 2) == 2);
-
-class TemporaryDirectory
-{
-private:
-  fs::path path_;
-
-public:
-  TemporaryDirectory()
-  {
-    static std::atomic<uint64_t> sequence = 0;
-    const auto nonce =
-      std::chrono::steady_clock::now().time_since_epoch().count();
-    path_ = fs::temp_directory_path() /
-      std::format(
-              "merklecpp_tiles_{}_{}_{}",
-              merkle::pal::process_id(),
-              nonce,
-              sequence++);
-  }
-
-  ~TemporaryDirectory()
-  {
-    std::error_code ec;
-    fs::remove_all(path_, ec);
-  }
-
-  TemporaryDirectory(const TemporaryDirectory&) = delete;
-  TemporaryDirectory& operator=(const TemporaryDirectory&) = delete;
-
-  [[nodiscard]] const fs::path& path() const
-  {
-    return path_;
-  }
-};
 
 static void custom_hash(const Hash& lhs, const Hash& rhs, Hash& out)
 {

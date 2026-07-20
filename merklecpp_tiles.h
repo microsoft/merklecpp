@@ -818,7 +818,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @note Incremental: full tiles already on disk are immutable and are
       /// never rewritten once validated and confirmed durable. Malformed files
       /// are replaced. Entries that do not complete a tile are not written.
-      /// Tiles are always rolled up at every level (0..63), so the on-disk set
+      /// Tiles are always rolled up through MAX_TILE_LEVEL, so the on-disk set
       /// always contains the higher-level roll-ups that proof generation relies
       /// on.
       Stats write_up_to(uint64_t size, const LeafFn& leaf_at)
@@ -826,9 +826,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         Stats stats;
         store.begin_write_attempt();
 
-        // tlog-tiles defines levels 0..63; the loop stops early once a level
-        // has no complete entries (see the entries == 0 break below).
-        for (uint8_t level = 0; level <= 63; level++)
+        // The loop stops early once a level has no complete entries (see the
+        // entries == 0 break below).
+        for (uint8_t level = 0; level <= MAX_TILE_LEVEL; level++)
         {
           // Number of complete (balanced) level-L entries available; this
           // deliberately excludes the incomplete frontier subtree.
@@ -882,7 +882,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// size.
       static uint64_t entries_at_level(uint64_t size, uint8_t level)
       {
-        const unsigned shift = 8U * (unsigned)level;
+        const unsigned shift =
+          static_cast<unsigned>(TILE_HEIGHT) * static_cast<unsigned>(level);
         return shift >= 64 ? 0 : (size >> shift);
       }
 

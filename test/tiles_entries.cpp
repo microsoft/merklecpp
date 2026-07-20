@@ -1,11 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#include "tiles_test_util.h"
 #include "util.h"
 
 #include <cstdint>
-#include <cstdlib>
-#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -39,13 +38,8 @@ static void overwrite_file(const fs::path& p, const std::vector<uint8_t>& bytes)
 
 int main()
 {
-  const auto seed = std::time(nullptr);
-  std::srand((unsigned)seed);
-  std::cout << "seed=" << seed << '\n';
-
-  const fs::path base = fs::temp_directory_path() /
-    ("merklecpp_tiles_entries_" + std::to_string((unsigned long long)seed) +
-     "_" + std::to_string(std::rand()));
+  const TemporaryDirectory temporary_directory("merklecpp_tiles_entries");
+  const fs::path& base = temporary_directory.path();
 
   try
   {
@@ -202,22 +196,15 @@ int main()
     }
 
     std::cout << "tiles_entries: OK" << '\n';
-
-    std::error_code ec;
-    fs::remove_all(base, ec);
   }
   catch (std::exception& ex)
   {
     std::cout << "Error: " << ex.what() << '\n';
-    std::error_code ec;
-    fs::remove_all(base, ec);
     return 1;
   }
   catch (...)
   {
     std::cout << "Error" << '\n';
-    std::error_code ec;
-    fs::remove_all(base, ec);
     return 1;
   }
 
