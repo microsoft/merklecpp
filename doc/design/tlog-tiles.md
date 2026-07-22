@@ -253,19 +253,55 @@ algorithms use the explicit-name constructor. The concurrency contract is in
 [section 1](#1-requirements), and publication semantics are in
 [section 4](#4-storage-layout-and-publication).
 
-### 5.3 Entry bundles (optional)
+### 5.3 `TileWriterT`
+
+`TileWriterT` incrementally persists every newly complete tile at every level:
+
+```cpp
+class TileWriterT {
+public:
+  explicit TileWriterT(TileStoreT& store);
+
+  struct Stats { uint64_t full_written; };
+  Stats write_up_to(
+    uint64_t size,
+    const std::function<const Hash&(uint64_t)>& leaf_at);
+};
+```
+
+For each level `L`, `write_up_to` computes the number of complete level entries
+as `size >> (8 * L)`, then writes each complete group of 256 entries. Level 0
+reads leaf hashes from `leaf_at`; higher levels roll up the complete child tiles
+already on disk. The incomplete frontier is never written.
+
+A writer caches the next full-tile index at each level. A fresh writer rebuilds
+each cursor with a bounded scan of the confirmed contiguous prefix, then checks
+later indices individually so malformed or missing interior tiles are repaired.
+Existing valid tiles are immutable. If publication succeeds but a directory
+sync fails, a retry confirms the visible tile's durability instead of rewriting
+it.
+
+The resulting tile counts provide useful test vectors:
+
+- Size 256 produces one level-0 tile and no level-1 tile.
+- Size 70,000 produces 273 level-0 tiles and one level-1 tile.
+- Size 65,536 completes both level-0 tile 255 and level-1 tile 0.
+
+### 5.4 Entry bundles (optional)
 
 Entry bundles are application-owned because merklecpp receives precomputed leaf
 hashes, not raw entries. Each full bundle stores 256 big-endian `uint16`
 length-prefixed entries at `<algorithm>-256w/tile/entries/<N>`. The application
 defines the leaf derivation (for example, `leaf_hash = H(entry)`); merklecpp
-stores the supplied leaf hash unchanged.
+stores the supplied leaf hash unchanged. `EntryBundleWriterT` mirrors
+`TileWriterT`: it writes only complete 256-entry bundles, confirms existing
+bundles before reusing them, and leaves the incomplete tail with the application.
 
 ## 6. Delivery plan
 
-This PR delivers phases 0 and 1 plus the standalone entry-bundle codec and
-storage primitives. Later PRs deliver the remaining independently testable
-phases; phases 1-3 need no further core changes, while phase 4 may add one
+Phases 0-2 now deliver the storage primitives plus incremental tile and
+entry-bundle writers. Later PRs deliver the remaining independently testable
+phases; phase 3 needs no further core changes, while phase 4 may add one
 non-hashing accessor.
 
 | Phase | Scope | Key tests |
