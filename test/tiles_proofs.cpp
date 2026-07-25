@@ -305,6 +305,8 @@ int main()
     {
       merkle::Tree tree;
       tree.insert(hashes[0]);
+      const MemoryHashSource source(tree);
+      const ProofEngine engine(source);
       Hash out;
       expect(!tree.subtree_root(64, 0, out), "subtree_root rejects level 64");
       expect(!tree.subtree_root(100, 0, out), "subtree_root rejects level 100");
@@ -325,6 +327,17 @@ int main()
         ProofEngineProbe::largest_pow2_lt(
           std::numeric_limits<uint64_t>::max()) == ((uint64_t)1 << 63),
         "pow2_lt uint64 max");
+      bool rejected = false;
+      try
+      {
+        engine.consistency_proof_from_indices(
+          0, std::numeric_limits<uint64_t>::max());
+      }
+      catch (const std::runtime_error&)
+      {
+        rejected = true;
+      }
+      expect(rejected, "consistency index rejects overflow");
       std::cout << "hostile arithmetic inputs: OK" << '\n';
     }
 
@@ -349,9 +362,10 @@ int main()
 
     // Large trees. 65536 == 256 full L0 tiles == one full L1 tile (exact L1
     // boundary); 65537 is one past it; 70000 exercises a full L1 tile plus an
-    // in-memory frontier; 300000 forces proofs over height->=16 subtrees, so
+    // in-memory frontier; 300000 forces proofs over height >= 16 subtrees, so
     // TileHashSource::resolve descends through level-2 logic (full_shift = 24)
-    // before reaching the level-1 tiles -- the only coverage of the L>=2 path.
+    // before falling back to level-1 tiles. tiles_level2 separately covers a
+    // completed level-2 tile.
     for (const uint64_t n :
          {(uint64_t)65536, (uint64_t)65537, (uint64_t)70000, (uint64_t)300000})
     {

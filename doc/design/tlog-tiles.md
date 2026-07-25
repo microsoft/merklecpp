@@ -174,10 +174,10 @@ hashes, not bytes.
                               │ owns Tree                    ▲
               inclusion / consistency proofs                │ tiles
                               ▼                              │
-                       ProofEngine ──▶ HashSource ◀──────────┘
-                                        ├─ MemoryHashSource
-                                        ├─ TileHashSource
-                                        └─ CombinedHashSource
+                      ProofEngineT ──▶ HashSourceT ◀─────────┘
+                                         ├─ MemoryHashSourceT
+                                         ├─ TileHashSourceT
+                                         └─ CombinedHashSourceT
 ```
 
 `merklecpp_tiles.h` contains the public `merkle::tiles` API and includes
@@ -192,7 +192,7 @@ hashes, not bytes.
 | `TileWriterT` | Persist newly completed full tiles |
 | Hash sources | Resolve subtree roots from memory, tiles, or both |
 | `ProofEngineT` | Roots, inclusion/consistency proofs, and verification |
-| `TiledTreeT` | `append`, `flush`, proof APIs, and compaction |
+| `TiledTreeT` (planned) | `append`, `flush`, proof APIs, and compaction |
 
 `TileHashSourceT` owns the proof-read LRU cache; `TileStoreT` does not cache.
 `MemoryHashSourceT` uses the logically read-only, non-hashing
@@ -215,9 +215,8 @@ class TileStoreT;
 
 using TileStore =
   TileStoreT<Tree::Hash::size_bytes, Tree::hash_function>;
-using TiledTree =
-  TiledTreeT<Tree::Hash::size_bytes, Tree::hash_function>;
-// Equivalent SHA-384 and SHA-512 aliases.
+// Hash-source and proof-engine aliases follow the same pattern.
+// The TiledTree alias arrives with the phase-4 lifecycle wrapper.
 
 }
 ```
@@ -336,13 +335,14 @@ struct HashSourceT {
 
 ### 5.7 `ProofEngineT`
 
-All three proof building blocks reduce to `mth_range` over a `HashSource`.
+All three proof building blocks reduce to `mth_range` over a `HashSourceT`.
 Returned `PathT` objects are byte-identical to `Tree::path` / `Tree::past_path`.
 
 ```cpp
 class ProofEngineT {
 public:
-  explicit ProofEngineT(const HashSource& src);
+  using Source = HashSourceT<HASH_SIZE, HASH_FUNCTION>;
+  explicit ProofEngineT(const Source& source);
 
   Hash root(uint64_t size) const;                 // = mth_range(0, size)
 
@@ -420,4 +420,4 @@ no further core changes are planned.
 | 5. Documentation/performance | README usage, design link, and tile-backed benchmarks | Documentation and benchmark coverage |
 
 Deliverables are `merklecpp_tiles.h`, `merklecpp_pal.h`, `test/tiles_*.cpp`,
-CMake wiring, the optional core accessor, and README/design updates.
+CMake wiring, the core accessor, and README/design updates.

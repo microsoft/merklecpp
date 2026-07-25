@@ -15,6 +15,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -1098,11 +1099,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     };
 
     /// @brief Builds and verifies inclusion and consistency proofs.
-    /// @note Proofs are assembled from a HashSource using the tree's
+    /// @note Proofs are assembled from a HashSourceT using the tree's
     /// HASH_FUNCTION, so an inclusion proof is byte-identical to the one
     /// produced by merkle::TreeT::path()/past_path() and verifies with
     /// PathT::verify().
-    /// @warning Thread safety is inherited from the supplied HashSource. Callers
+    /// @warning Thread safety is inherited from the supplied HashSourceT. Callers
     /// must serialize operations when the source is shared.
     template <
       size_t HASH_SIZE,
@@ -1141,6 +1142,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         {
           throw std::runtime_error("leaf index out of bounds");
         }
+        if (
+          index > std::numeric_limits<size_t>::max() ||
+          size - 1 > std::numeric_limits<size_t>::max())
+        {
+          throw std::runtime_error("inclusion proof exceeds PathT index range");
+        }
 
         std::list<typename Path::Element> elements; // leaf -> root order
         uint64_t lo = 0;
@@ -1176,7 +1183,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           throw std::runtime_error("unresolved leaf in inclusion proof");
         }
         return std::make_shared<Path>(
-          leaf, index, std::move(elements), size - 1);
+          leaf,
+          static_cast<size_t>(index),
+          std::move(elements),
+          static_cast<size_t>(size - 1));
       }
 
       /// @brief Consistency proof that a tree of @p m leaves is a prefix of a
@@ -1205,6 +1215,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       std::vector<Hash> consistency_proof_from_indices(
         uint64_t first_index, uint64_t second_index) const
       {
+        if (
+          first_index == std::numeric_limits<uint64_t>::max() ||
+          second_index == std::numeric_limits<uint64_t>::max())
+        {
+          throw std::runtime_error("consistency proof index out of bounds");
+        }
         return consistency_proof(first_index + 1, second_index + 1);
       }
 
@@ -1402,7 +1418,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
       bool subtree_root(uint8_t level, uint64_t index, Hash& out) const override
       {
-        return tree.subtree_root(level, (size_t)index, out);
+        if (index > std::numeric_limits<size_t>::max())
+        {
+          return false;
+        }
+        return tree.subtree_root(level, static_cast<size_t>(index), out);
       }
 
     protected:
@@ -1546,19 +1566,27 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       TileWriterT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
 
     /// @brief Default abstract hash source (SHA256, default hash function).
-    using HashSource = HashSourceT<32, sha256_compress>;
+    using HashSource =
+      HashSourceT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
 
     /// @brief Default tile-backed hash source (SHA256, default hash function).
-    using TileHashSource = TileHashSourceT<32, sha256_compress>;
+    using TileHashSource = TileHashSourceT<
+      merkle::Tree::Hash::size_bytes,
+      merkle::Tree::hash_function>;
 
     /// @brief Default proof engine (SHA256, default hash function).
-    using ProofEngine = ProofEngineT<32, sha256_compress>;
+    using ProofEngine =
+      ProofEngineT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
 
     /// @brief Default in-memory hash source (SHA256, default hash function).
-    using MemoryHashSource = MemoryHashSourceT<32, sha256_compress>;
+    using MemoryHashSource = MemoryHashSourceT<
+      merkle::Tree::Hash::size_bytes,
+      merkle::Tree::hash_function>;
 
     /// @brief Default combined hash source (SHA256, default hash function).
-    using CombinedHashSource = CombinedHashSourceT<32, sha256_compress>;
+    using CombinedHashSource = CombinedHashSourceT<
+      merkle::Tree::Hash::size_bytes,
+      merkle::Tree::hash_function>;
 
     /// @brief Default entry-bundle writer (SHA256, default hash function).
     using EntryBundleWriter = EntryBundleWriterT<

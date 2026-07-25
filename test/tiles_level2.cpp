@@ -38,7 +38,9 @@ static void expect(bool cond, const std::string& what)
 // Roll up a perfect (power-of-two) set of hashes with the default combiner.
 static Hash rollup(const std::vector<Hash>& hashes)
 {
-  return merkle::tiles::perfect_root<32, merkle::sha256_compress>(hashes);
+  return merkle::tiles::perfect_root<
+    merkle::Tree::Hash::size_bytes,
+    merkle::Tree::hash_function>(hashes);
 }
 
 int main()
