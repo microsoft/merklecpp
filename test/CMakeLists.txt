@@ -43,4 +43,6 @@ if(OPENSSL)
 endif()
 
 add_merklecpp_test(tiles_store tiles_store.cpp)
+add_merklecpp_test(tiles_writer tiles_writer.cpp)
+add_merklecpp_test(tiles_entries tiles_entries.cpp)
 add_merklecpp_test(unit_tests unit_tests.cpp)

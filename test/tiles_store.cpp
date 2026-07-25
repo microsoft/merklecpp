@@ -5,12 +5,11 @@
 
 #include <merklecpp_pal.h>
 
+#include "tiles_test_util.h"
 #include "util.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cerrno>
-#include <chrono>
 #include <cstdint>
 #include <doctest/doctest.h>
 #include <filesystem>
@@ -31,40 +30,6 @@ using merkle::tiles::TileRef;
 
 static_assert(std::min(1, 2) == 1);
 static_assert(std::max(1, 2) == 2);
-
-class TemporaryDirectory
-{
-private:
-  fs::path path_;
-
-public:
-  TemporaryDirectory()
-  {
-    static std::atomic<uint64_t> sequence = 0;
-    const auto nonce =
-      std::chrono::steady_clock::now().time_since_epoch().count();
-    path_ = fs::temp_directory_path() /
-      std::format(
-              "merklecpp_tiles_{}_{}_{}",
-              merkle::pal::process_id(),
-              nonce,
-              sequence++);
-  }
-
-  ~TemporaryDirectory()
-  {
-    std::error_code ec;
-    fs::remove_all(path_, ec);
-  }
-
-  TemporaryDirectory(const TemporaryDirectory&) = delete;
-  TemporaryDirectory& operator=(const TemporaryDirectory&) = delete;
-
-  [[nodiscard]] const fs::path& path() const
-  {
-    return path_;
-  }
-};
 
 static void custom_hash(const Hash& lhs, const Hash& rhs, Hash& out)
 {
@@ -391,6 +356,72 @@ TEST_CASE("Visible publication can be confirmed after sync failure")
 
   store.begin_attempt();
   CHECK_FALSE(store.confirm_tile(ref.level, ref.index + 1));
+}
+
+TEST_CASE("Tile writer confirms visible tiles after sync failure")
+{
+  const TemporaryDirectory temporary_directory;
+  const fs::path prefix =
+    temporary_directory.path() / "writer_publication_retry";
+  const auto fault = std::make_shared<SyncFault>();
+  constexpr uint64_t growing_size =
+    (uint64_t)merkle::tiles::TILE_WIDTH * 2;
+  const auto growing = make_hashes((size_t)growing_size);
+  const auto leaf_at = [&](uint64_t i) -> const Hash& { return growing[i]; };
+
+  FaultInjectingTileStore retry_store(prefix, fault);
+  merkle::tiles::TileWriter retry_writer(retry_store);
+  const fs::path destination =
+    retry_store.tile_path(TileRef{0, 0}).parent_path();
+  fault->fail_path = destination;
+  REQUIRE(
+    retry_writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at).full_written ==
+    1);
+
+  fault->matching_calls_before_failure = 1;
+  fault->failures_remaining = 1;
+  {
+    FaultInjectingTileStore failed_store(prefix, fault);
+    merkle::tiles::TileWriter writer(failed_store);
+    CHECK_THROWS_AS(
+      (writer.write_up_to(growing_size, leaf_at)), std::runtime_error);
+    CHECK(failed_store.has_full_tile(0, 1));
+  }
+
+  CHECK(retry_writer.write_up_to(growing_size, leaf_at).full_written == 0);
+  CHECK(fault->call_count(destination) == 4);
+  const std::vector<Hash> second(
+    growing.begin() + (std::ptrdiff_t)merkle::tiles::TILE_WIDTH, growing.end());
+  CHECK(retry_store.read_tile(TileRef{0, 1}) == second);
+}
+
+TEST_CASE("Tile writer retries ancestor sync before publication")
+{
+  const TemporaryDirectory temporary_directory;
+  const fs::path prefix = temporary_directory.path() / "writer_ancestor_retry";
+  const auto fault = std::make_shared<SyncFault>();
+  fault->fail_path = prefix;
+  fault->failures_remaining = 1;
+  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  const auto leaf_at = [&](uint64_t i) -> const Hash& { return full[i]; };
+
+  {
+    FaultInjectingTileStore failed_store(prefix, fault);
+    merkle::tiles::TileWriter writer(failed_store);
+    CHECK_THROWS_AS(
+      (writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at)),
+      std::runtime_error);
+    CHECK(fs::is_directory(prefix / "sha256-256w"));
+    CHECK_FALSE(failed_store.has_full_tile(0, 0));
+  }
+
+  FaultInjectingTileStore retry_store(prefix, fault);
+  merkle::tiles::TileWriter retry_writer(retry_store);
+  CHECK(
+    retry_writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at).full_written ==
+    1);
+  CHECK(fault->call_count(prefix) == 2);
+  CHECK(retry_store.has_full_tile(0, 0));
 }
 
 TEST_CASE("Replacement and directory conflicts clean up temporary files")
