@@ -29,7 +29,8 @@ static void expect(bool cond, const std::string& what)
   }
 }
 
-static size_t tile_file_count(const TileStore& store)
+template <typename Store>
+static size_t tile_file_count(const Store& store)
 {
   const fs::path tiles = store.root() / "tile";
   if (!fs::exists(tiles))
@@ -50,6 +51,19 @@ static Hash rollup(const std::vector<Hash>& leaves)
     merkle::Tree::Hash::size_bytes,
     merkle::Tree::hash_function>(leaves);
 }
+
+class TileWriterProbe : public TileWriter
+{
+public:
+  using TileWriter::TileWriter;
+
+  void mark_level_complete(uint8_t level, uint64_t full_tiles)
+  {
+    ensure_level(level);
+    next_full[level] = full_tiles;
+    cursor_inited[level] = 1;
+  }
+};
 
 static void overwrite_file(
   const fs::path& path, const std::vector<uint8_t>& bytes)
@@ -308,6 +322,101 @@ int main()
 
       std::cout << "G (bounded sparse recovery): OK" << '\n';
     }
+
+    // ---- H. A complete level-2 tile rolls up 256 level-1 child tiles. Prime
+    // the lower-level cursors to model a long-lived writer without allocating
+    // all 2^24 source leaves.
+    {
+      const fs::path dir = base / "h";
+      TileStore store(dir);
+      const auto child_template = make_hashes(merkle::tiles::TILE_WIDTH);
+      std::vector<Hash> expected;
+      expected.reserve(merkle::tiles::TILE_WIDTH);
+
+      for (uint64_t index = 0; index < merkle::tiles::TILE_WIDTH; index++)
+      {
+        auto child = child_template;
+        child[0].bytes[0] = static_cast<uint8_t>(index);
+        store.write_tile(TileRef{1, index}, child);
+        expected.push_back(rollup(child));
+      }
+
+      TileWriterProbe writer(store);
+      writer.mark_level_complete(
+        0,
+        (uint64_t)merkle::tiles::TILE_WIDTH * merkle::tiles::TILE_WIDTH);
+      writer.mark_level_complete(1, merkle::tiles::TILE_WIDTH);
+
+      bool leaf_requested = false;
+      const Hash unused;
+      const auto leaf_at = [&](uint64_t) -> const Hash& {
+        leaf_requested = true;
+        return unused;
+      };
+      constexpr uint64_t size = (uint64_t)merkle::tiles::TILE_WIDTH *
+        merkle::tiles::TILE_WIDTH * merkle::tiles::TILE_WIDTH;
+      const auto stats = writer.write_up_to(size, leaf_at);
+
+      expect(stats.full_written == 1, "H writes one L2 tile");
+      expect(!leaf_requested, "H does not revisit completed lower levels");
+      expect(store.has_full_tile(2, 0), "H full L2 tile");
+      expect(store.read_tile(TileRef{2, 0}) == expected, "H L2 roll-up");
+      expect(!store.has_full_tile(3, 0), "H no L3 tile");
+      expect(tile_file_count(store) == 257, "H exact tile file count");
+
+      std::cout << "H (full L2 tile): OK" << '\n';
+    }
+
+#ifdef HAVE_OPENSSL
+    // ---- I. The templated writer uses the selected hash size and function
+    // when producing higher-level tiles.
+    {
+      using Hash384 = merkle::Tree384::Hash;
+      using TileStore384 = merkle::tiles::TileStoreT<
+        Hash384::size_bytes,
+        merkle::Tree384::hash_function>;
+      using TileWriter384 = merkle::tiles::TileWriterT<
+        Hash384::size_bytes,
+        merkle::Tree384::hash_function>;
+
+      constexpr uint64_t size = (uint64_t)merkle::tiles::TILE_WIDTH *
+        merkle::tiles::TILE_WIDTH;
+      const auto hashes = make_hashesT<Hash384::size_bytes>((size_t)size);
+      const auto leaf_at = [&](uint64_t index) -> const Hash384& {
+        return hashes[index];
+      };
+
+      TileStore384 store(base / "i");
+      TileWriter384 writer(store);
+      const auto stats = writer.write_up_to(size, leaf_at);
+
+      expect(stats.full_written == 257, "I writes L0 and L1 SHA-384 tiles");
+      expect(store.has_full_tile(1, 0), "I full SHA-384 L1 tile");
+      const auto level1 = store.read_tile(TileRef{1, 0});
+      const std::vector<Hash384> first_tile(
+        hashes.begin(), hashes.begin() + merkle::tiles::TILE_WIDTH);
+      expect(
+        level1[0] ==
+          merkle::tiles::perfect_root<
+            Hash384::size_bytes,
+            merkle::Tree384::hash_function>(first_tile),
+        "I first SHA-384 roll-up");
+
+      merkle::Tree384 tree;
+      for (const auto& hash : hashes)
+      {
+        tree.insert(hash);
+      }
+      expect(
+        merkle::tiles::perfect_root<
+          Hash384::size_bytes,
+          merkle::Tree384::hash_function>(level1) == tree.root(),
+        "I SHA-384 tiled root");
+      expect(tile_file_count(store) == 257, "I exact tile file count");
+
+      std::cout << "I (SHA-384 writer): OK" << '\n';
+    }
+#endif
 
     std::cout << "tiles_writer: OK" << '\n';
   }
