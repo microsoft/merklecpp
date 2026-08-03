@@ -44,9 +44,13 @@ add_merklecpp_test(tiles_entries tiles_entries.cpp)
 
 if(LONG_TESTS)
   add_merklecpp_test(tiles_level2 tiles_level2.cpp)
+  set(TILES_LEVEL2_TIMEOUT 900)
+  if(WIN32)
+    set(TILES_LEVEL2_TIMEOUT 3600)
+  endif()
   set_tests_properties(
     ${MERKLECPP_TEST_PREFIX}tiles_level2
-    PROPERTIES TIMEOUT 900
+    PROPERTIES TIMEOUT ${TILES_LEVEL2_TIMEOUT}
   )
 endif()
 

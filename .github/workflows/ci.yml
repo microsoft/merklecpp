@@ -47,6 +47,10 @@ jobs:
     - name: Create Build Environment
       run: cmake -E make_directory ${{github.workspace}}/build/${{ matrix.build_type }}
 
+    - name: Detect Runner Parallelism
+      shell: bash
+      run: cmake -P "$GITHUB_WORKSPACE/.github/processor_count.cmake"
+
     - name: Configure CMake
       # Use a bash shell so we can use the same syntax for environment variable
       # access regardless of the host operating system
@@ -54,10 +58,7 @@ jobs:
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       run: |
         long_tests=OFF
-        if [ "$RUNNER_OS" == "Linux" ] &&
-           [ "${{ matrix.compiler }}" == "g++" ] &&
-           [ "${{ matrix.build_type }}" == "Release" ] &&
-           [ "${{ matrix.openssl }}" == "OFF" ]; then
+        if [ "${{ matrix.build_type }}" == "Release" ]; then
           long_tests=ON
         fi
         if [ "$RUNNER_OS" == "Linux" ]; then
@@ -69,7 +70,7 @@ jobs:
     - name: Build
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       shell: bash
-      run: cmake --build . --config ${{ matrix.build_type }}
+      run: cmake --build . --config ${{ matrix.build_type }} --parallel "$PARALLELISM"
 
     - name: Clang-Tidy Header
       if: matrix.os == 'ubuntu-latest'
@@ -82,6 +83,6 @@ jobs:
     - name: Test
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       shell: bash
-      run: ctest -VV -C ${{ matrix.build_type }} --timeout 300
+      run: ctest -VV -C ${{ matrix.build_type }} --timeout 300 --parallel "$PARALLELISM"
       env: 
         ASAN_OPTIONS: use_sigaltstack=false # To avoid SetAlternateSignalStack with clang-11 
