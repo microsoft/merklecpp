@@ -1036,7 +1036,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           // Spans 2**level <= TILE_WIDTH leaves: held by one level-0 tile.
           const uint64_t span = (uint64_t)1 << level;
           const uint64_t start = index << level;
-          const std::vector<Hash> tile =
+          const std::vector<Hash>& tile =
             read_tile(TileRef{0, start / TILE_WIDTH});
           out = roll_up(tile, start % TILE_WIDTH, span);
           return;
@@ -1053,7 +1053,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         if (n < full_tiles)
         {
           // One full level-L tile holds all 2**r entries of this subtree.
-          const std::vector<Hash> tile = read_tile(TileRef{L, n});
+          const std::vector<Hash>& tile = read_tile(TileRef{L, n});
           out = roll_up(tile, first % TILE_WIDTH, (uint64_t)1 << r);
           return;
         }
@@ -1075,7 +1075,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       static constexpr size_t TILE_CACHE_SIZE = 64;
       mutable std::vector<TileCacheEntry> tile_cache;
 
-      std::vector<Hash> read_tile(const TileRef& ref) const
+      const std::vector<Hash>& read_tile(const TileRef& ref) const
       {
         for (auto it = tile_cache.begin(); it != tile_cache.end(); it++)
         {
@@ -1083,9 +1083,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           {
             TileCacheEntry entry = std::move(*it);
             tile_cache.erase(it);
-            std::vector<Hash> hashes = entry.hashes;
             tile_cache.push_back(std::move(entry));
-            return hashes;
+            return tile_cache.back().hashes;
           }
         }
 
@@ -1231,7 +1230,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         uint64_t n,
         const Hash& first_hash,
         const Hash& second_hash,
-        std::vector<Hash> proof)
+        const std::vector<Hash>& proof)
       {
         if (m > n)
         {
@@ -1246,13 +1245,18 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           return proof.empty();
         }
 
-        if (is_pow2(m))
+        size_t proof_index = 0;
+        Hash fr = first_hash;
+        Hash sr = first_hash;
+        if (!is_pow2(m))
         {
-          proof.insert(proof.begin(), first_hash);
-        }
-        if (proof.empty())
-        {
-          return false;
+          if (proof.empty())
+          {
+            return false;
+          }
+          fr = proof[0];
+          sr = proof[0];
+          proof_index = 1;
         }
 
         uint64_t fn = m - 1;
@@ -1263,9 +1267,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           sn >>= 1;
         }
 
-        Hash fr = proof[0];
-        Hash sr = proof[0];
-        for (size_t i = 1; i < proof.size(); i++)
+        for (size_t i = proof_index; i < proof.size(); i++)
         {
           if (sn == 0)
           {

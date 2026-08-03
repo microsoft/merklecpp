@@ -21,6 +21,7 @@ using merkle::Hash;
 using merkle::tiles::CombinedHashSource;
 using merkle::tiles::MemoryHashSource;
 using merkle::tiles::ProofEngine;
+using merkle::tiles::TILE_WIDTH;
 using merkle::tiles::TileHashSource;
 using merkle::tiles::TileStore;
 using merkle::tiles::TileWriter;
@@ -142,7 +143,7 @@ static void check_size(
   // tree serves the un-tiled frontier. Drop the tiled past from the frontier
   // tree so proofs over it are genuinely served from the tiles. merklecpp keeps
   // at least one resident leaf, so never flush the whole tree.
-  const uint64_t covered = (n / 256) * 256; // 256 == TILE_WIDTH
+  const uint64_t covered = (n / TILE_WIDTH) * TILE_WIDTH;
   merkle::Tree frontier;
   for (uint64_t i = 0; i < n; i++)
   {
