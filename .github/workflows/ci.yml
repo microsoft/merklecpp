@@ -61,11 +61,21 @@ jobs:
         if [ "${{ matrix.build_type }}" == "Release" ]; then
           long_tests=ON
         fi
+
+        linux_options=()
         if [ "$RUNNER_OS" == "Linux" ]; then
-          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DLONG_TESTS=$long_tests -DOPENSSL=${{ matrix.openssl }} -DCLANG_TIDY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-        else
-          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DLONG_TESTS=$long_tests -DOPENSSL=${{ matrix.openssl }}
+          linux_options=(
+            "-DCMAKE_CXX_COMPILER=${{ matrix.compiler }}"
+            -DCLANG_TIDY=ON
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          )
         fi
+
+        cmake "$GITHUB_WORKSPACE" \
+          "-DCMAKE_BUILD_TYPE=${{ matrix.build_type }}" \
+          "-DLONG_TESTS=$long_tests" \
+          "-DOPENSSL=${{ matrix.openssl }}" \
+          "${linux_options[@]}"
 
     - name: Build
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
@@ -84,5 +94,3 @@ jobs:
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       shell: bash
       run: ctest -VV -C ${{ matrix.build_type }} --timeout 300
-      env: 
-        ASAN_OPTIONS: use_sigaltstack=false # To avoid SetAlternateSignalStack with clang-11 

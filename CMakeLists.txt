@@ -6,6 +6,7 @@ cmake_minimum_required(VERSION 3.14)
 project(merklecpp LANGUAGES CXX)
 
 include(GNUInstallDirs)
+include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -13,7 +14,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(MERKLECPP_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 option(PROFILE "enable profiling" OFF)
-option(TESTS "enable testing" OFF)
 option(OPENSSL "enable OpenSSL" OFF)
 option(TRACE "enable debug traces" OFF)
 option(CLANG_TIDY "enable clang-tidy checks during build" OFF)
@@ -46,9 +46,7 @@ if(OPENSSL)
   target_link_libraries(merklecpp INTERFACE OpenSSL::Crypto)
 endif()
 
-if(TESTS)
-  enable_testing()
-
+if(BUILD_TESTING)
   function(add_unit_test NAME SRC)
     add_executable(${NAME} ${SRC})
     target_link_libraries(${NAME} PRIVATE $<BUILD_INTERFACE:merklecpp>)
