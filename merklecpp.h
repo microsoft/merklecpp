@@ -704,7 +704,14 @@ namespace merkle
       /// 2**height-1.
       [[nodiscard]] bool is_full() const
       {
-        size_t max_size = (1 << height) - 1;
+        constexpr size_t size_digits = std::numeric_limits<size_t>::digits;
+        if (height > size_digits)
+        {
+          return false;
+        }
+        const size_t max_size = height == size_digits ?
+          std::numeric_limits<size_t>::max() :
+          (size_t{1} << height) - 1;
         assert(size <= max_size);
         return size == max_size;
       }

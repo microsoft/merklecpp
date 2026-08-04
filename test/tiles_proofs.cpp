@@ -1,17 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#include "tiles_test_util.h"
 #include "util.h"
 
 #include <cstdint>
-#include <cstdlib>
-#include <ctime>
 #include <filesystem>
 #include <functional>
 #include <iostream>
 #include <limits>
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -30,6 +30,18 @@ class ProofEngineProbe : public ProofEngine
 {
 public:
   using ProofEngine::largest_pow2_lt;
+};
+
+class TreeProbe : public merkle::Tree
+{
+public:
+  static bool node_is_full(uint8_t height, size_t size)
+  {
+    Node node{};
+    node.height = height;
+    node.size = size;
+    return node.is_full();
+  }
 };
 
 static void expect(bool cond, const std::string& what)
@@ -272,13 +284,8 @@ static void check_size(
 
 int main()
 {
-  const auto seed = std::time(nullptr);
-  std::srand((unsigned)seed);
-  std::cout << "seed=" << seed << '\n';
-
-  const fs::path base = fs::temp_directory_path() /
-    ("merklecpp_tiles_proofs_" + std::to_string((unsigned long long)seed) +
-     "_" + std::to_string(std::rand()));
+  const TemporaryDirectory temporary_directory("merklecpp_tiles_proofs");
+  const fs::path& base = temporary_directory.path();
 
   try
   {
@@ -314,6 +321,23 @@ int main()
       expect(
         !tree.subtree_root(1, std::numeric_limits<size_t>::max(), out),
         "subtree_root rejects overflowing index");
+
+      const auto signed_shift_boundary =
+        static_cast<uint8_t>(std::numeric_limits<int>::digits);
+      if (
+        signed_shift_boundary < std::numeric_limits<size_t>::digits)
+      {
+        const size_t full_size =
+          (size_t{1} << signed_shift_boundary) - 1;
+        expect(
+          TreeProbe::node_is_full(signed_shift_boundary, full_size),
+          "is_full handles signed-shift boundary");
+      }
+      expect(
+        TreeProbe::node_is_full(
+          static_cast<uint8_t>(std::numeric_limits<size_t>::digits),
+          std::numeric_limits<size_t>::max()),
+        "is_full handles maximum size_t height");
 
       expect(ProofEngineProbe::largest_pow2_lt(2) == 1, "pow2_lt 2");
       expect(
@@ -375,22 +399,15 @@ int main()
     }
 
     std::cout << "tiles_proofs: OK" << '\n';
-
-    std::error_code ec;
-    fs::remove_all(base, ec);
   }
   catch (std::exception& ex)
   {
     std::cout << "Error: " << ex.what() << '\n';
-    std::error_code ec;
-    fs::remove_all(base, ec);
     return 1;
   }
   catch (...)
   {
     std::cout << "Error" << '\n';
-    std::error_code ec;
-    fs::remove_all(base, ec);
     return 1;
   }
 

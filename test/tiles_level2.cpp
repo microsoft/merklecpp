@@ -8,14 +8,15 @@
 // level-by-level roll-up against TileHashSourceT::resolve (which reads the
 // level-2 tile) and against the underlying leaves.
 
+#include "tiles_test_util.h"
 #include "util.h"
 
 #include <cstdint>
-#include <ctime>
 #include <filesystem>
 #include <iostream>
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -45,9 +46,8 @@ static Hash rollup(const std::vector<Hash>& hashes)
 
 int main()
 {
-  const fs::path dir = fs::temp_directory_path() /
-    ("merklecpp_tiles_level2_" +
-     std::to_string((unsigned long long)std::time(nullptr)));
+  const TemporaryDirectory temporary_directory("merklecpp_tiles_level2");
+  const fs::path& dir = temporary_directory.path();
 
   try
   {

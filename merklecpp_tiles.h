@@ -1015,13 +1015,26 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       static Hash roll_up(
         const std::vector<Hash>& tile, uint64_t off, uint64_t span)
       {
-        if (span == 1)
+        if (
+          span == 0 || span > TILE_WIDTH || (span & (span - 1)) != 0 ||
+          off > tile.size() || span > tile.size() - off)
         {
-          return tile.at(off);
+          throw std::runtime_error("invalid tile roll-up range");
         }
-        return perfect_root<HASH_SIZE, HASH_FUNCTION>(std::vector<Hash>(
-          tile.begin() + (std::ptrdiff_t)off,
-          tile.begin() + (std::ptrdiff_t)(off + span)));
+
+        std::array<Hash, TILE_WIDTH> level;
+        for (size_t i = 0; i < span; i++)
+        {
+          level[i] = tile[off + i];
+        }
+        for (size_t width = span; width > 1; width /= 2)
+        {
+          for (size_t i = 0; i < width; i += 2)
+          {
+            HASH_FUNCTION(level[i], level[i + 1], level[i / 2]);
+          }
+        }
+        return level[0];
       }
 
       /// @brief Resolves a complete subtree known to lie within the full-tile
