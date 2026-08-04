@@ -1350,10 +1350,13 @@ namespace merkle
     /// @param index The index of the subtree at that height
     /// @return The subtree root hash if the subtree is complete (balanced) and
     /// fully resident in memory; otherwise, std::nullopt
-    /// @note This may materialize pending insertions and cache computed hashes,
-    /// exactly as root() and path() do. It does not change the leaf sequence or
-    /// hashing semantics. The subtree spans leaf indices [index << level,
-    /// (index + 1) << level).
+    /// @note Like root() and path(), it may
+    /// materialize pending nodes and compute dirty hashes, but does not change
+    /// logical leaf contents or hashing semantics. It returns std::nullopt if
+    /// any leaf of the subtree has been flushed, if the subtree extends past
+    /// the last leaf, or if the node at that position is not a full subtree.
+    /// The subtree spans leaf indices
+    /// [index << level, (index + 1) << level).
     std::optional<Hash> subtree_root(uint8_t level, size_t index)
     {
       const size_t leaves = num_leaves();

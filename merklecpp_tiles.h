@@ -732,6 +732,32 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @endcond
     };
 
+    namespace detail
+    {
+      template <
+        size_t HASH_SIZE,
+        void HASH_FUNCTION(
+          const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+      HashT<HASH_SIZE> perfect_root_range(
+        const std::vector<HashT<HASH_SIZE>>& hashes,
+        size_t offset,
+        size_t count)
+      {
+        if (count == 1)
+        {
+          return hashes[offset];
+        }
+        const size_t half = count / 2;
+        const auto left =
+          perfect_root_range<HASH_SIZE, HASH_FUNCTION>(hashes, offset, half);
+        const auto right = perfect_root_range<HASH_SIZE, HASH_FUNCTION>(
+          hashes, offset + half, half);
+        HashT<HASH_SIZE> out;
+        HASH_FUNCTION(left, right, out);
+        return out;
+      }
+    }
+
     /// @brief Computes the Merkle Tree Hash of a perfect (balanced) subtree.
     /// @param leaves The subtree's leaves; the count MUST be a power of two.
     /// @return The subtree root, computed with the tree's HASH_FUNCTION.
@@ -755,20 +781,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           "perfect_root requires a power-of-two number of leaves");
       }
 
-      std::vector<HashT<HASH_SIZE>> level = leaves;
-      while (level.size() > 1)
-      {
-        std::vector<HashT<HASH_SIZE>> next;
-        next.reserve(level.size() / 2);
-        for (size_t i = 0; i + 1 < level.size(); i += 2)
-        {
-          HashT<HASH_SIZE> h;
-          HASH_FUNCTION(level[i], level[i + 1], h);
-          next.push_back(h);
-        }
-        level.swap(next);
-      }
-      return level.front();
+      return detail::perfect_root_range<HASH_SIZE, HASH_FUNCTION>(
+        leaves, 0, leaves.size());
     }
 
     /// @brief Computes and persists tlog-tiles tiles for a growing tree.
@@ -1021,24 +1035,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         {
           throw std::runtime_error("invalid tile roll-up range");
         }
-        if (span == 1)
-        {
-          return tile[off];
-        }
-
-        std::array<Hash, TILE_WIDTH> level;
-        for (size_t i = 0; i < span; i++)
-        {
-          level[i] = tile[off + i];
-        }
-        for (size_t width = span; width > 1; width /= 2)
-        {
-          for (size_t i = 0; i < width; i += 2)
-          {
-            HASH_FUNCTION(level[i], level[i + 1], level[i / 2]);
-          }
-        }
-        return level[0];
+        return detail::perfect_root_range<HASH_SIZE, HASH_FUNCTION>(
+          tile, static_cast<size_t>(off), static_cast<size_t>(span));
       }
 
       /// @brief Resolves a complete subtree known to lie within the full-tile
@@ -1063,7 +1061,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         const uint8_t r = level % TILE_HEIGHT;
         const uint64_t first = index << r; // first level-L entry
         const uint64_t n = first / TILE_WIDTH; // level-L tile index
-        const unsigned full_shift = 8U * ((unsigned)L + 1U);
+        const unsigned full_shift = static_cast<unsigned>(TILE_HEIGHT) *
+          (static_cast<unsigned>(L) + 1U);
         const uint64_t full_tiles =
           full_shift >= 64 ? 0 : (available_size >> full_shift);
 
@@ -1422,8 +1421,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// @brief Resolves subtree roots from an in-memory merkle::TreeT.
     /// @note Resolves only complete subtrees that are fully resident (not
     /// flushed), returning false otherwise so that a builder can fall back to
-    /// another source. Resolution may materialize the tree's pending insertions
-    /// and cache hashes (see TreeT::subtree_root).
+    /// another source. It may materialize pending nodes and compute dirty
+    /// hashes but does not change logical contents or hashing semantics.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(

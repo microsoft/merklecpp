@@ -306,9 +306,9 @@ std::optional<Hash> subtree_root(uint8_t level, size_t index);
 It returns the existing root of the complete subtree spanning
 `[index << level, (index + 1) << level)`. The method rejects overflow, flushed
 or out-of-range leaves, and non-perfect frontier nodes by returning
-`std::nullopt`. Like `root()` and `path()`, it may materialize pending
-insertions and cache computed hashes without changing the leaf sequence or
-hashing semantics.
+`std::nullopt`. Like `root()` and `path()`, it may materialize pending nodes and
+compute dirty hashes, but does not change logical leaf contents or hashing
+semantics.
 
 ### 5.6 Hash sources
 
