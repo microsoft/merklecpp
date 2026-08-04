@@ -317,11 +317,13 @@ int main()
       tree.insert(hashes[0]);
       const MemoryHashSource source(tree);
       const ProofEngine engine(source);
-      Hash out;
-      expect(!tree.subtree_root(64, 0, out), "subtree_root rejects level 64");
-      expect(!tree.subtree_root(100, 0, out), "subtree_root rejects level 100");
       expect(
-        !tree.subtree_root(1, std::numeric_limits<size_t>::max(), out),
+        tree.subtree_root(0, 0) == hashes[0],
+        "subtree_root returns a resident leaf hash");
+      expect(!tree.subtree_root(64, 0), "subtree_root rejects level 64");
+      expect(!tree.subtree_root(100, 0), "subtree_root rejects level 100");
+      expect(
+        !tree.subtree_root(1, std::numeric_limits<size_t>::max()),
         "subtree_root rejects overflowing index");
 
       const auto signed_shift_boundary =

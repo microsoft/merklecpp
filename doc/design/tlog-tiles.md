@@ -195,8 +195,7 @@ hashes, not bytes.
 | `TiledTreeT` (planned) | `append`, `flush`, proof APIs, and compaction |
 
 `TileHashSourceT` owns the proof-read LRU cache; `TileStoreT` does not cache.
-`MemoryHashSourceT` uses the logically read-only
-`TreeT::subtree_root` accessor.
+`MemoryHashSourceT` uses the `TreeT::subtree_root` accessor.
 
 ### 5.1 Types and aliases
 
@@ -298,16 +297,17 @@ bundles before reusing them, and leaves the incomplete tail with the application
 
 ### 5.5 `TreeT::subtree_root`
 
-Proofs over the resident frontier use one logically read-only core accessor:
+Proofs over the resident frontier use one core accessor:
 
 ```cpp
-bool subtree_root(uint8_t level, size_t index, Hash& out);
+std::optional<Hash> subtree_root(uint8_t level, size_t index);
 ```
 
 It returns the existing root of the complete subtree spanning
 `[index << level, (index + 1) << level)`. The method rejects overflow, flushed
-or out-of-range leaves, and non-perfect frontier nodes. It may realize a dirty
-node hash exactly as `root()` and `path()` do, but does not change tree shape or
+or out-of-range leaves, and non-perfect frontier nodes by returning
+`std::nullopt`. Like `root()` and `path()`, it may materialize pending
+insertions and cache computed hashes without changing the leaf sequence or
 hashing semantics.
 
 ### 5.6 Hash sources

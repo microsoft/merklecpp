@@ -1422,7 +1422,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// @brief Resolves subtree roots from an in-memory merkle::TreeT.
     /// @note Resolves only complete subtrees that are fully resident (not
     /// flushed), returning false otherwise so that a builder can fall back to
-    /// another source. Performs no hashing changes (see TreeT::subtree_root).
+    /// another source. Resolution may materialize the tree's pending insertions
+    /// and cache hashes (see TreeT::subtree_root).
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -1441,7 +1442,13 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         {
           return false;
         }
-        return tree.subtree_root(level, static_cast<size_t>(index), out);
+        const auto root = tree.subtree_root(level, static_cast<size_t>(index));
+        if (!root)
+        {
+          return false;
+        }
+        out = *root;
+        return true;
       }
 
     protected:

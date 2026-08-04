@@ -16,6 +16,7 @@
 #include <limits>
 #include <list>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <stack>
 #include <stdexcept>
@@ -1347,25 +1348,22 @@ namespace merkle
     /// @brief Extracts the root hash of a complete subtree resident in memory
     /// @param level The height of the subtree (it spans 2**level leaves)
     /// @param index The index of the subtree at that height
-    /// @param out Set to the subtree root hash on success
-    /// @return Whether the subtree is a complete (balanced) subtree fully
-    /// resident in memory
-    /// @note This is read-only and does not change the hashing of the tree: it
-    /// returns an existing node hash (computing it on demand exactly as root()
-    /// and path() do). It returns false if any leaf of the subtree has been
-    /// flushed, if the subtree extends past the last leaf, or if the node at
-    /// that position is not a full subtree. The subtree spans leaf indices
-    /// [index << level, (index + 1) << level).
-    bool subtree_root(uint8_t level, size_t index, Hash& out)
+    /// @return The subtree root hash if the subtree is complete (balanced) and
+    /// fully resident in memory; otherwise, std::nullopt
+    /// @note This may materialize pending insertions and cache computed hashes,
+    /// exactly as root() and path() do. It does not change the leaf sequence or
+    /// hashing semantics. The subtree spans leaf indices [index << level,
+    /// (index + 1) << level).
+    std::optional<Hash> subtree_root(uint8_t level, size_t index)
     {
       const size_t leaves = num_leaves();
       if (leaves == 0 || level >= std::numeric_limits<size_t>::digits)
       {
-        return false;
+        return std::nullopt;
       }
       if (index > (std::numeric_limits<size_t>::max() >> level))
       {
-        return false;
+        return std::nullopt;
       }
 
       const size_t lo = index << level;
@@ -1373,13 +1371,12 @@ namespace merkle
 
       if (lo < min_index() || count > leaves || lo > leaves - count)
       {
-        return false;
+        return std::nullopt;
       }
 
       if (level == 0)
       {
-        out = leaf(lo);
-        return true;
+        return leaf(lo);
       }
 
       compute_root();
@@ -1387,7 +1384,7 @@ namespace merkle
       const uint8_t target_height = level + 1;
       if (!_root || _root->height < target_height)
       {
-        return false;
+        return std::nullopt;
       }
 
       Node* cur = _root;
@@ -1400,7 +1397,7 @@ namespace merkle
           Node* next = go_right ? cur->right : cur->left;
           if (!next)
           {
-            return false; // conflated/flushed: not resident
+            return std::nullopt; // conflated/flushed: not resident
           }
           cur = next;
         }
@@ -1410,14 +1407,13 @@ namespace merkle
 
       if (cur->height != target_height || !cur->is_full())
       {
-        return false;
+        return std::nullopt;
       }
       if (cur->dirty)
       {
         hash(cur);
       }
-      out = cur->hash;
-      return true;
+      return cur->hash;
     }
 
     /// @brief Serialises the tree
