@@ -1021,6 +1021,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         {
           throw std::runtime_error("invalid tile roll-up range");
         }
+        if (span == 1)
+        {
+          return tile[off];
+        }
 
         std::array<Hash, TILE_WIDTH> level;
         for (size_t i = 0; i < span; i++)

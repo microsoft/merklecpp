@@ -224,10 +224,10 @@ static void check_size(
   {
     pairs = {{1, n}, {n / 2, n}, {n - 1, n}, {1, 2}};
     // Tile-boundary crossings.
-    if (n > 256)
+    if (n > TILE_WIDTH)
     {
-      pairs.emplace_back(256, n);
-      pairs.emplace_back(257, n);
+      pairs.emplace_back(TILE_WIDTH, n);
+      pairs.emplace_back((uint64_t)TILE_WIDTH + 1, n);
     }
   }
 
@@ -286,6 +286,8 @@ int main()
 {
   const TemporaryDirectory temporary_directory("merklecpp_tiles_proofs");
   const fs::path& base = temporary_directory.path();
+  const uint64_t tile_width = TILE_WIDTH;
+  const uint64_t level1_width = tile_width * tile_width;
 
   try
   {
@@ -300,8 +302,8 @@ int main()
           (uint64_t)8,
           (uint64_t)13,
           (uint64_t)16,
-          (uint64_t)256,
-          (uint64_t)257,
+          tile_width,
+          tile_width + 1,
           (uint64_t)1000})
     {
       check_memory_source(n, hashes);
@@ -376,23 +378,26 @@ int main()
           (uint64_t)8,
           (uint64_t)13,
           (uint64_t)16,
-          (uint64_t)255,
-          (uint64_t)256,
-          (uint64_t)257,
+          tile_width - 1,
+          tile_width,
+          tile_width + 1,
           (uint64_t)1000})
     {
       check_size(base / ("n" + std::to_string(n)), n, hashes);
     }
     std::cout << "small/medium sizes: OK" << '\n';
 
-    // Large trees. 65536 == 256 full L0 tiles == one full L1 tile (exact L1
-    // boundary); 65537 is one past it; 70000 exercises a full L1 tile plus an
-    // in-memory frontier; 300000 forces proofs over height >= 16 subtrees, so
-    // TileHashSource::resolve descends through level-2 logic (full_shift = 24)
-    // before falling back to level-1 tiles. tiles_level2 separately covers a
-    // completed level-2 tile.
+    // Large trees. TILE_WIDTH * TILE_WIDTH is one full L1 tile (the exact L1
+    // boundary); the next size is one past it. 70000 exercises a full L1 tile
+    // plus an in-memory frontier; 300000 forces proofs over height >= 16
+    // subtrees, so TileHashSource::resolve descends through level-2 logic
+    // (full_shift = 24) before falling back to level-1 tiles. tiles_level2
+    // separately covers a completed level-2 tile.
     for (const uint64_t n :
-         {(uint64_t)65536, (uint64_t)65537, (uint64_t)70000, (uint64_t)300000})
+         {level1_width,
+          level1_width + 1,
+          (uint64_t)70000,
+          (uint64_t)300000})
     {
       check_size(base / ("big" + std::to_string(n)), n, hashes);
       std::cout << "size " << n << ": OK" << '\n';

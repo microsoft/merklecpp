@@ -195,7 +195,7 @@ hashes, not bytes.
 | `TiledTreeT` (planned) | `append`, `flush`, proof APIs, and compaction |
 
 `TileHashSourceT` owns the proof-read LRU cache; `TileStoreT` does not cache.
-`MemoryHashSourceT` uses the logically read-only, non-hashing
+`MemoryHashSourceT` uses the logically read-only
 `TreeT::subtree_root` accessor.
 
 ### 5.1 Types and aliases
@@ -419,5 +419,5 @@ no further core changes are planned.
 | 4. Combined tree | `TiledTreeT` append, flush, proof, and compaction APIs | Prove flushed and resident leaves against a non-flushed reference; consistency across a flush boundary |
 | 5. Documentation/performance | README usage, design link, and tile-backed benchmarks | Documentation and benchmark coverage |
 
-Deliverables are `merklecpp_tiles.h`, `merklecpp_pal.h`, `test/tiles_*.cpp`,
-CMake wiring, the core accessor, and README/design updates.
+Delivered through phase 3 are `merklecpp_tiles.h`, `merklecpp_pal.h`,
+`test/tiles_*.cpp`, CMake wiring, the core accessor, and design updates.
