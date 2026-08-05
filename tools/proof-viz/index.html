@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="An instrumented atlas of merklecpp tile-backed inclusion and consistency proofs.">
+    <title>Merkle proof atlas</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="data.js" defer></script>
+    <script src="app.js" defer></script>
+</head>
+
+<body>
+    <header class="masthead">
+        <div class="masthead__inner">
+            <div class="identity">
+                <div class="identity__mark" aria-hidden="true">
+                    <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                </div>
+                <p>merklecpp / instrumented proofs</p>
+            </div>
+            <div class="masthead__copy">
+                <h1>Tile &amp; frontier proof atlas</h1>
+                <p>
+                    A node-level view of where proof hashes come from when durable tiles
+                    meet the resident Merkle frontier.
+                </p>
+            </div>
+            <dl class="masthead__stats" aria-label="Atlas summary">
+                <div>
+                    <dt>Scenes</dt>
+                    <dd id="scene-count">7</dd>
+                </div>
+                <div>
+                    <dt>Tile width</dt>
+                    <dd id="tile-width">256</dd>
+                </div>
+                <div>
+                    <dt>Evidence</dt>
+                    <dd>Live calls</dd>
+                </div>
+            </dl>
+        </div>
+    </header>
+
+    <main>
+        <section class="control-band" aria-label="Atlas controls">
+            <div class="control-band__inner">
+                <div class="segmented" role="tablist" aria-label="Proof type">
+                    <button type="button" class="is-active" data-filter="all" role="tab" aria-selected="true">All
+                        scenes</button>
+                    <button type="button" data-filter="inclusion" role="tab" aria-selected="false">Inclusion</button>
+                    <button type="button" data-filter="consistency" role="tab"
+                        aria-selected="false">Consistency</button>
+                </div>
+                <div class="toggles">
+                    <label class="toggle">
+                        <input id="toggle-edges" type="checkbox" checked>
+                        <span aria-hidden="true"></span>
+                        Tree edges
+                    </label>
+                    <label class="toggle">
+                        <input id="toggle-calls" type="checkbox" checked>
+                        <span aria-hidden="true"></span>
+                        Resolver calls
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <section class="legend-band" aria-labelledby="legend-title">
+            <div class="legend-band__inner">
+                <div>
+                    <p class="section-label">Visual grammar</p>
+                    <h2 id="legend-title">One square, one Merkle node</h2>
+                </div>
+                <ul class="legend" aria-label="Node colors">
+                    <li><span class="swatch swatch--tile"></span><b>Tile</b> durable full-tile data</li>
+                    <li><span class="swatch swatch--frontier"></span><b>Frontier</b> resident in-memory data</li>
+                    <li><span class="swatch swatch--computed"></span><b>Computed</b> assembled across ranges</li>
+                    <li><span class="swatch swatch--route"></span><b>Proof route</b> ancestry and proof components</li>
+                    <li><span class="swatch swatch--query"></span><b>Resolved</b> an actual source answer</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="scenarios" aria-label="Proof visualization scenes"></section>
+
+        <section class="method" aria-labelledby="method-title">
+            <div>
+                <p class="section-label">Method</p>
+                <h2 id="method-title">Observed, not simulated</h2>
+            </div>
+            <div class="method__copy">
+                <p>
+                    Each scene constructs the same production-shaped fixture used by
+                    <code>tiles_proofs</code>: full tiles cover the compacted prefix and
+                    an in-memory tree owns the frontier. Thin wrappers record every
+                    <code>subtree_root</code> attempt made by the real
+                    <code>ProofEngine</code>.
+                </p>
+                <p>
+                    Inclusion scenes are checked byte-for-byte against
+                    <code>Tree::path()</code>. The consistency scene is verified with
+                    <code>ProofEngine::verify_consistency()</code> before it reaches this
+                    page.
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <div id="node-tooltip" class="node-tooltip" role="status" aria-live="polite" hidden></div>
+    <noscript>This atlas requires JavaScript to draw the Merkle node maps.</noscript>
+</body>
+
+</html>
