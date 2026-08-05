@@ -12,6 +12,7 @@
         computed: "#aaa79c",
         route: "#d13b3f",
         query: "#e4a11b",
+        endpoint: "#202521",
         edge: "rgba(74, 79, 73, 0.20)",
         boundary: "rgba(32, 37, 33, 0.48)",
         paper: "#fffdf7"
@@ -76,6 +77,8 @@
         const roles = [];
         if (node.path) roles.push("proof route");
         if (node.proof) roles.push("proof component");
+        if (node.firstLeaf) roles.push("earlier selected leaf (A)");
+        if (node.secondLeaf) roles.push("later selected leaf (B)");
         if (node.queried) roles.push(`resolved #${node.queryOrder} by ${node.querySource}`);
         if (node.overlap) roles.push("available from both; memory selected first");
         if (roles.length === 0) roles.push("not used by this proof");
@@ -117,6 +120,7 @@
     }
 
     function buildNodes(scenario) {
+        scenario.mapLeaves = scenario.type === "consistency" ? scenario.secondIndex + 1 : scenario.leaves;
         const nodes = [];
         const byRange = new Map();
         const key = (lo, hi) => `${lo}:${hi}`;
@@ -141,6 +145,8 @@
                 overlap: inFrontier && inTiles,
                 path: false,
                 proof: false,
+                firstLeaf: false,
+                secondLeaf: false,
                 queried: false,
                 queryOrder: 0,
                 querySource: ""
@@ -188,11 +194,13 @@
             }
         }
 
-        add(0, scenario.leaves, 0);
+        add(0, scenario.mapLeaves, 0);
         if (scenario.type === "inclusion") {
-            markInclusion(0, scenario.leaves);
+            markInclusion(0, scenario.mapLeaves);
         } else {
-            markConsistency(scenario.focus, 0, scenario.leaves, true);
+            markConsistency(scenario.focus + 1, 0, scenario.mapLeaves, true);
+            mark(scenario.focus, scenario.focus + 1, "firstLeaf");
+            mark(scenario.secondIndex, scenario.secondIndex + 1, "secondLeaf");
         }
 
         scenario.attempts.forEach((attempt, order) => {
@@ -212,7 +220,7 @@
 
         function draw() {
             const maxDepth = Math.max(...scenario.nodes.map((node) => node.depth));
-            const minimumWidth = Math.max(660, Math.ceil(scenario.leaves * 2.35 + 88));
+            const minimumWidth = Math.max(660, Math.ceil(scenario.mapLeaves * 2.35 + 88));
             const cssWidth = Math.max(scroll.clientWidth - 2, minimumWidth);
             const cssHeight = Math.max(270, (maxDepth + 1) * 22 + 64);
             const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
@@ -229,12 +237,12 @@
             const plotWidth = cssWidth - plot.left - plot.right;
             const plotHeight = cssHeight - plot.top - plot.bottom;
             const positions = scenario.nodes.map((node) => ({
-                x: plot.left + (((node.lo + node.hi) / 2) / scenario.leaves) * plotWidth,
+                x: plot.left + (((node.lo + node.hi) / 2) / scenario.mapLeaves) * plotWidth,
                 y: plot.top + (node.depth / Math.max(maxDepth, 1)) * plotHeight
             }));
 
-            if (scenario.covered > 0 && scenario.covered < scenario.leaves) {
-                const boundaryX = plot.left + (scenario.covered / scenario.leaves) * plotWidth;
+            if (scenario.covered > 0 && scenario.covered < scenario.mapLeaves) {
+                const boundaryX = plot.left + (scenario.covered / scenario.mapLeaves) * plotWidth;
                 context.save();
                 context.setLineDash([4, 4]);
                 context.strokeStyle = colors.boundary;
@@ -279,7 +287,7 @@
             });
             context.stroke();
 
-            const baseSize = scenario.leaves > 400 ? 3 : 3.6;
+            const baseSize = scenario.mapLeaves > 400 ? 3 : 3.6;
             hitTargets = [];
             scenario.nodes.forEach((node, index) => {
                 const position = positions[index];
@@ -325,6 +333,33 @@
                     baseSize,
                     baseSize
                 );
+
+                if (node.firstLeaf || node.secondLeaf) {
+                    const markerSize = baseSize + 8;
+                    context.save();
+                    context.strokeStyle = colors.endpoint;
+                    context.fillStyle = colors.endpoint;
+                    context.lineWidth = 2;
+                    context.beginPath();
+                    if (node.firstLeaf) {
+                        context.arc(position.x, position.y, markerSize / 2, 0, Math.PI * 2);
+                    } else {
+                        context.moveTo(position.x, position.y - markerSize / 2);
+                        context.lineTo(position.x + markerSize / 2, position.y);
+                        context.lineTo(position.x, position.y + markerSize / 2);
+                        context.lineTo(position.x - markerSize / 2, position.y);
+                        context.closePath();
+                    }
+                    context.stroke();
+                    context.font = "700 10px 'Cascadia Code', monospace";
+                    context.textAlign = "center";
+                    context.fillText(
+                        `${node.firstLeaf ? "A" : "B"} ${number.format(node.lo)}`,
+                        position.x,
+                        position.y - markerSize / 2 - 5
+                    );
+                    context.restore();
+                }
                 hitTargets.push({ ...position, node });
             });
 
@@ -333,7 +368,7 @@
             context.textAlign = "left";
             context.fillText("leaf 0", plot.left, cssHeight - 12);
             context.textAlign = "right";
-            context.fillText(`leaf ${number.format(scenario.leaves - 1)}`, cssWidth - plot.right, cssHeight - 12);
+            context.fillText(`leaf ${number.format(scenario.mapLeaves - 1)}`, cssWidth - plot.right, cssHeight - 12);
         }
 
         canvas.addEventListener("pointermove", (event) => {
@@ -389,15 +424,21 @@
         const details = document.createElement("div");
         const facts = document.createElement("dl");
         facts.className = "scene__facts";
-        facts.append(
-            fact("Leaves", number.format(scenario.leaves)),
-            fact("Tiled prefix", number.format(scenario.covered)),
-            fact("Frontier begins", number.format(scenario.frontierStart)),
-            fact(
-                scenario.type === "inclusion" ? "Target leaf" : "Proven prefix",
-                number.format(scenario.focus)
-            )
-        );
+        if (scenario.type === "inclusion") {
+            facts.append(
+                fact("Leaves", number.format(scenario.leaves)),
+                fact("Tiled prefix", number.format(scenario.covered)),
+                fact("Frontier begins", number.format(scenario.frontierStart)),
+                fact("Target leaf", number.format(scenario.focus))
+            );
+        } else {
+            facts.append(
+                fact("Backing leaves", number.format(scenario.leaves)),
+                fact("Tiled prefix", number.format(scenario.covered)),
+                fact("Earlier leaf A", `index ${number.format(scenario.focus)} · tree ends at A`),
+                fact("Later leaf B", `index ${number.format(scenario.secondIndex)} · tree ends at B`)
+            );
+        }
         const takeaway = document.createElement("p");
         takeaway.className = "scene__takeaway";
         takeaway.textContent = scenario.takeaway;
@@ -409,7 +450,9 @@
         const visualHead = document.createElement("div");
         visualHead.className = "visual-head";
         const mapTitle = document.createElement("span");
-        mapTitle.innerHTML = "<strong>Node map</strong> / root to leaves";
+        mapTitle.innerHTML = scenario.type === "consistency"
+            ? "<strong>Leaf-to-leaf consistency</strong> / A and B anchor the two tree states"
+            : "<strong>Node map</strong> / root to leaves";
         const mapMeta = document.createElement("span");
         mapMeta.textContent = `${number.format(scenario.nodes.length)} nodes · ${number.format(scenario.attempts.length)} resolver attempts`;
         visualHead.append(mapTitle, mapMeta);
@@ -421,7 +464,7 @@
         canvas.setAttribute("role", "img");
         canvas.setAttribute(
             "aria-label",
-            `${scenario.title}: ${number.format(scenario.leaves)} leaves with tile, frontier, and proof-route nodes`
+            `${scenario.title}: ${number.format(scenario.mapLeaves)} proof leaves with tile, frontier, and proof-route nodes`
         );
         scroll.append(canvas);
         const attempts = makeAttempts(scenario);

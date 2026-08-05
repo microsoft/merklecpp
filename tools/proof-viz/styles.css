@@ -316,7 +316,7 @@ h1 {
 
 .legend {
     display: grid;
-    grid-template-columns: repeat(5, minmax(130px, 1fr));
+    grid-template-columns: repeat(6, minmax(120px, 1fr));
     gap: 18px;
     margin: 0;
     padding: 0;
@@ -363,6 +363,12 @@ h1 {
 
 .swatch--query {
     border: 3px solid var(--query);
+    background: var(--paper-strong);
+}
+
+.swatch--endpoint {
+    border: 2px solid var(--ink);
+    border-radius: 50%;
     background: var(--paper-strong);
 }
 

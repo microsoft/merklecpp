@@ -8,6 +8,12 @@ The C++ harness uses the real `TileWriter`, hash sources, and `ProofEngine`. Thi
 wrappers record each `subtree_root(level, index)` attempt without changing its
 result. Inclusion proofs are checked against `Tree::path()`, and every traced
 proof is compared with an unwrapped control proof before data is emitted.
+Consistency scenes call `consistency_proof_from_indices()` with explicit first
+and second leaf indices, including historical pairs that end before the backing
+tree's current size.
+The canvas marks those two last leaves directly as A (circle) and B (diamond);
+the red subtree nodes remain the actual RFC 6962 proof components between the
+tree states ending at A and B.
 
 ## Run
 

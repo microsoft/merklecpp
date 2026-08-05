@@ -65,6 +65,7 @@ struct Scenario
   std::string takeaway;
   uint64_t leaves;
   uint64_t focus;
+  uint64_t second_index;
   uint64_t covered;
   uint64_t frontier_start;
   Attempts attempts;
@@ -125,15 +126,27 @@ static void run_scenario(
   }
   else
   {
-    const Hash first_root = *oracle.past_root(scenario.focus - 1);
-    const auto proof =
-      engine.consistency_proof(scenario.focus, scenario.leaves);
-    const auto control_proof =
-      control_engine.consistency_proof(scenario.focus, scenario.leaves);
+    if (
+      scenario.focus >= scenario.second_index ||
+      scenario.second_index >= scenario.leaves)
+    {
+      throw std::runtime_error(
+        "invalid consistency indices for " + scenario.id);
+    }
+    const Hash first_root = *oracle.past_root(scenario.focus);
+    const Hash second_root = *oracle.past_root(scenario.second_index);
+    const auto proof = engine.consistency_proof_from_indices(
+      scenario.focus, scenario.second_index);
+    const auto control_proof = control_engine.consistency_proof_from_indices(
+      scenario.focus, scenario.second_index);
     if (
       proof != control_proof ||
       !ProofEngine::verify_consistency(
-        scenario.focus, scenario.leaves, first_root, root, proof))
+        scenario.focus + 1,
+        scenario.second_index + 1,
+        first_root,
+        second_root,
+        proof))
     {
       throw std::runtime_error("consistency proof mismatch for " + scenario.id);
     }
@@ -167,6 +180,7 @@ static void write_data(
     stream << "      covered: " << scenario.covered << ",\n";
     stream << "      frontierStart: " << scenario.frontier_start << ",\n";
     stream << "      focus: " << scenario.focus << ",\n";
+    stream << "      secondIndex: " << scenario.second_index << ",\n";
     stream << "      attempts: [\n";
     for (size_t attempt_index = 0; attempt_index < scenario.attempts.size();
          attempt_index++)
@@ -205,6 +219,7 @@ int main(int argc, char** argv)
        37,
        0,
        0,
+       0,
        {}},
       {"tile-to-frontier",
        "inclusion",
@@ -215,6 +230,7 @@ int main(int argc, char** argv)
        "subtrees to complete the current 300-leaf root.",
        300,
        42,
+       0,
        0,
        0,
        {}},
@@ -229,6 +245,7 @@ int main(int argc, char** argv)
        271,
        0,
        0,
+       0,
        {}},
       {"near-boundary",
        "inclusion",
@@ -240,6 +257,7 @@ int main(int argc, char** argv)
        "past.",
        511,
        510,
+       0,
        0,
        0,
        {}},
@@ -256,6 +274,7 @@ int main(int argc, char** argv)
        511,
        0,
        0,
+       0,
        {}},
       {"next-frontier",
        "inclusion",
@@ -267,17 +286,71 @@ int main(int argc, char** argv)
        512,
        0,
        0,
+       0,
        {}},
       {"consistency-boundary",
        "consistency",
        "Consistency across the flush line",
-       "This RFC 6962 proof shows that the 256-leaf tiled tree is a prefix of "
-       "the current 300-leaf tree.",
+       "Leaf indices 255 and 299 identify the 256- and 300-leaf checkpoints "
+       "on opposite sides of the flush line.",
        "There is no target leaf. Red marks the SUBPROOF recursion and its "
        "proof components, combining the old green root with blue hashes from "
        "the new frontier.",
        300,
-       256,
+       255,
+       299,
+       0,
+       0,
+       {}},
+      {"consistency-frontier-only",
+       "consistency",
+       "Two leaves before tiling",
+       "Leaves A=47 and B=149 end the 48- and 150-leaf tree states inside a "
+       "192-leaf backing tree that has not completed its first tile.",
+       "Every consistency component is answered by the resident frontier, "
+       "even though neither selected leaf is the backing tree's current end.",
+       192,
+       47,
+       149,
+       0,
+       0,
+       {}},
+      {"consistency-tiled-history",
+       "consistency",
+       "Two leaves in tiled history",
+       "Leaves A=127 and B=399 end historical tree states inside a 513-leaf "
+       "backing tree with two durable tiles.",
+       "The current frontier begins after both checkpoints, so the complete "
+       "consistency proof is recovered from green tile storage.",
+       513,
+       127,
+       399,
+       0,
+       0,
+       {}},
+      {"consistency-arbitrary-crossing",
+       "consistency",
+       "An arbitrary leaf pair crosses the boundary",
+       "Leaves A=91 and B=287 end the 92- and 288-leaf tree states in a "
+       "300-leaf backing tree.",
+       "The tree ending at A sits wholly in the tiled past, while the tree "
+       "ending at B requires both the durable tile and resident frontier.",
+       300,
+       91,
+       287,
+       0,
+       0,
+       {}},
+      {"consistency-frontier-pair",
+       "consistency",
+       "Two leaves inside one frontier",
+       "Leaves A=269 and B=493 end two tree states beyond the first tile in "
+       "a 511-leaf backing tree.",
+       "Both roots include tiled history, but their changing suffixes are "
+       "assembled from different portions of the same blue frontier.",
+       511,
+       269,
+       493,
        0,
        0,
        {}}};
