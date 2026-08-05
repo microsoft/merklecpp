@@ -19,7 +19,6 @@
     };
 
     const state = {
-        filter: "all",
         edges: true,
         calls: true
     };
@@ -77,8 +76,7 @@
         const roles = [];
         if (node.path) roles.push("proof route");
         if (node.proof) roles.push("proof component");
-        if (node.firstLeaf) roles.push("earlier selected leaf (A)");
-        if (node.secondLeaf) roles.push("later selected leaf (B)");
+        if (node.endpoint) roles.push(`${node.endpoint === "A" ? "earlier" : "later"} selected leaf (${node.endpoint})`);
         if (node.queried) roles.push(`resolved #${node.queryOrder} by ${node.querySource}`);
         if (node.overlap) roles.push("available from both; memory selected first");
         if (roles.length === 0) roles.push("not used by this proof");
@@ -120,7 +118,10 @@
     }
 
     function buildNodes(scenario) {
-        scenario.mapLeaves = scenario.type === "consistency" ? scenario.secondIndex + 1 : scenario.leaves;
+        scenario.covered = Math.floor(scenario.leaves / data.tileWidth) * data.tileWidth;
+        scenario.frontierStart = Math.min(scenario.covered, scenario.leaves - 1);
+        scenario.type = scenario.secondIndex === undefined ? "inclusion" : "consistency";
+        scenario.mapLeaves = (scenario.secondIndex ?? scenario.leaves - 1) + 1;
         const nodes = [];
         const byRange = new Map();
         const key = (lo, hi) => `${lo}:${hi}`;
@@ -145,8 +146,7 @@
                 overlap: inFrontier && inTiles,
                 path: false,
                 proof: false,
-                firstLeaf: false,
-                secondLeaf: false,
+                endpoint: "",
                 queried: false,
                 queryOrder: 0,
                 querySource: ""
@@ -199,8 +199,8 @@
             markInclusion(0, scenario.mapLeaves);
         } else {
             markConsistency(scenario.focus + 1, 0, scenario.mapLeaves, true);
-            mark(scenario.focus, scenario.focus + 1, "firstLeaf");
-            mark(scenario.secondIndex, scenario.secondIndex + 1, "secondLeaf");
+            byRange.get(key(scenario.focus, scenario.focus + 1)).endpoint = "A";
+            byRange.get(key(scenario.secondIndex, scenario.secondIndex + 1)).endpoint = "B";
         }
 
         scenario.attempts.forEach((attempt, order) => {
@@ -334,14 +334,14 @@
                     baseSize
                 );
 
-                if (node.firstLeaf || node.secondLeaf) {
+                if (node.endpoint) {
                     const markerSize = baseSize + 8;
                     context.save();
                     context.strokeStyle = colors.endpoint;
                     context.fillStyle = colors.endpoint;
                     context.lineWidth = 2;
                     context.beginPath();
-                    if (node.firstLeaf) {
+                    if (node.endpoint === "A") {
                         context.arc(position.x, position.y, markerSize / 2, 0, Math.PI * 2);
                     } else {
                         context.moveTo(position.x, position.y - markerSize / 2);
@@ -354,7 +354,7 @@
                     context.font = "700 10px 'Cascadia Code', monospace";
                     context.textAlign = "center";
                     context.fillText(
-                        `${node.firstLeaf ? "A" : "B"} ${number.format(node.lo)}`,
+                        `${node.endpoint} ${number.format(node.lo)}`,
                         position.x,
                         position.y - markerSize / 2 - 5
                     );
@@ -483,16 +483,17 @@
         makeScene(scenario, index);
     });
 
-    document.querySelectorAll("[data-filter]").forEach((button) => {
+    const filterButtons = document.querySelectorAll("[data-filter]");
+    filterButtons.forEach((button) => {
         button.addEventListener("click", () => {
-            state.filter = button.dataset.filter;
-            document.querySelectorAll("[data-filter]").forEach((candidate) => {
+            const filter = button.dataset.filter;
+            filterButtons.forEach((candidate) => {
                 const active = candidate === button;
                 candidate.classList.toggle("is-active", active);
                 candidate.setAttribute("aria-selected", String(active));
             });
             renderers.forEach((renderer) => {
-                renderer.article.hidden = state.filter !== "all" && renderer.article.dataset.type !== state.filter;
+                renderer.article.hidden = filter !== "all" && renderer.article.dataset.type !== filter;
             });
         });
     });
