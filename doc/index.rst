@@ -19,6 +19,12 @@ example:
     :end-before: SNIPPET_END: OpenSSL-SHA256
     :dedent: 2
 
+Proof visualization
+-------------------
+
+Explore the `interactive tile and frontier proof atlas <proof-viz/>`_ to see
+which durable tiles and resident Merkle nodes supply each proof hash.
+
 Trees
 -----
 
