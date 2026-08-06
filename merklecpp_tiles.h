@@ -1656,6 +1656,13 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         }
 
         stats = writer.write_up_to(n, [this](uint64_t i) -> const Hash& {
+          if (i < tree.min_index())
+          {
+            throw std::runtime_error(std::format(
+              "TiledTree::flush: cannot regenerate a missing or malformed "
+              "tile from non-resident leaf {}",
+              i));
+          }
           return tree.leaf((size_t)i);
         });
         tiles_size = covered;
@@ -1753,6 +1760,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           throw std::runtime_error(
             "consistency proof index exceeds current tree size");
         }
+        if (first_index > second_index)
+        {
+          throw std::runtime_error(
+            "first consistency proof index exceeds second index");
+        }
         return with_engine([&](const auto& engine) {
           return engine.consistency_proof_from_indices(
             first_index, second_index);
@@ -1774,16 +1786,18 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         std::filesystem::create_directories(tile_root.parent_path(), ec);
         if (ec)
         {
-          throw std::runtime_error(
-            "TiledTree: cannot create tile namespace parent " +
-            tile_root.parent_path().string() + ": " + ec.message());
+          throw std::runtime_error(std::format(
+            "TiledTree: cannot create tile namespace parent {}: {}",
+            tile_root.parent_path().string(),
+            ec.message()));
         }
         const bool claimed = std::filesystem::create_directory(tile_root, ec);
         if (ec)
         {
-          throw std::runtime_error(
-            "TiledTree: cannot claim tile namespace " + tile_root.string() +
-            ": " + ec.message());
+          throw std::runtime_error(std::format(
+            "TiledTree: cannot claim tile namespace {}: {}",
+            tile_root.string(),
+            ec.message()));
         }
         if (!claimed)
         {

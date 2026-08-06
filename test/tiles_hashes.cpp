@@ -9,6 +9,7 @@
 #include <iostream>
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
+#include <stdexcept>
 #include <string>
 
 namespace fs = std::filesystem;

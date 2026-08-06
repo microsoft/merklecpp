@@ -10,6 +10,7 @@
 #include <limits>
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -220,7 +221,53 @@ int main()
         threw = true;
       }
       expect(threw, "proof bounds: reject overflowing indices");
+
+      bounded.append(hashes[1]);
+      threw = false;
+      try
+      {
+        (void)bounded.consistency_proof_from_indices(1, 0);
+      }
+      catch (const std::runtime_error& error)
+      {
+        threw = std::string(error.what()) ==
+          "first consistency proof index exceeds second index";
+      }
+      expect(threw, "proof bounds: reject reversed indices clearly");
       std::cout << "proof bounds: OK" << '\n';
+    }
+
+    {
+      TiledTree::Config missing_cfg;
+      missing_cfg.prefix = base / "tt_missing_compacted_tile";
+      missing_cfg.compact_on_flush = true;
+      TiledTree compacted(missing_cfg);
+      for (uint64_t i = 0; i < 300; i++)
+      {
+        compacted.append(hashes[i]);
+      }
+      compacted.flush();
+      expect(
+        compacted.tree_ref().min_index() > 0,
+        "missing tile: old leaves compacted");
+      fs::remove(store_root(missing_cfg.prefix) / "tile/0/000");
+
+      TiledTree moved(std::move(compacted));
+      bool threw_clear_error = false;
+      try
+      {
+        moved.flush();
+      }
+      catch (const std::runtime_error& error)
+      {
+        threw_clear_error =
+          std::string(error.what()).find("non-resident leaf") !=
+          std::string::npos;
+      }
+      expect(
+        threw_clear_error,
+        "missing tile: regeneration reports non-resident leaf");
+      std::cout << "missing compacted tile: OK" << '\n';
     }
 
     // ---- Part 2: TiledTree flush, proofs over tiles + memory.
