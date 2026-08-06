@@ -37,12 +37,25 @@ add_merklecpp_test(serialisation serialisation.cpp)
 add_merklecpp_test(partial_serialisation partial_serialisation.cpp)
 add_merklecpp_test(serialise_to_file serialise_to_file.cpp)
 add_merklecpp_test(coverage coverage.cpp)
+add_merklecpp_test(tiles_store tiles_store.cpp)
+add_merklecpp_test(tiles_writer tiles_writer.cpp)
+add_merklecpp_test(tiles_proofs tiles_proofs.cpp)
+add_merklecpp_test(tiles_entries tiles_entries.cpp)
+
+if(LONG_TESTS)
+  add_merklecpp_test(tiles_level2 tiles_level2.cpp)
+  set(TILES_LEVEL2_TIMEOUT 900)
+  if(WIN32)
+    set(TILES_LEVEL2_TIMEOUT 3600)
+  endif()
+  set_tests_properties(
+    ${MERKLECPP_TEST_PREFIX}tiles_level2
+    PROPERTIES TIMEOUT ${TILES_LEVEL2_TIMEOUT}
+  )
+endif()
 
 if(OPENSSL)
   add_merklecpp_test(compare_hash_functions compare_hash_functions.cpp)
 endif()
 
-add_merklecpp_test(tiles_store tiles_store.cpp)
-add_merklecpp_test(tiles_writer tiles_writer.cpp)
-add_merklecpp_test(tiles_entries tiles_entries.cpp)
 add_merklecpp_test(unit_tests unit_tests.cpp)

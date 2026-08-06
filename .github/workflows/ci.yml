@@ -47,17 +47,35 @@ jobs:
     - name: Create Build Environment
       run: cmake -E make_directory ${{github.workspace}}/build/${{ matrix.build_type }}
 
+    - name: Detect Runner Parallelism
+      shell: bash
+      run: cmake -P "$GITHUB_WORKSPACE/.github/processor_count.cmake"
+
     - name: Configure CMake
       # Use a bash shell so we can use the same syntax for environment variable
       # access regardless of the host operating system
       shell: bash
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       run: |
-        if [ "$RUNNER_OS" == "Linux" ]; then
-          cmake $GITHUB_WORKSPACE -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=${{ matrix.openssl }} -DCLANG_TIDY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-        else
-          cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTESTS=ON -DOPENSSL=${{ matrix.openssl }}
+        long_tests=OFF
+        if [ "${{ matrix.build_type }}" == "Release" ]; then
+          long_tests=ON
         fi
+
+        linux_options=()
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          linux_options=(
+            "-DCMAKE_CXX_COMPILER=${{ matrix.compiler }}"
+            -DCLANG_TIDY=ON
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          )
+        fi
+
+        cmake "$GITHUB_WORKSPACE" \
+          "-DCMAKE_BUILD_TYPE=${{ matrix.build_type }}" \
+          "-DLONG_TESTS=$long_tests" \
+          "-DOPENSSL=${{ matrix.openssl }}" \
+          "${linux_options[@]}"
 
     - name: Build
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
@@ -76,5 +94,3 @@ jobs:
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       shell: bash
       run: ctest -VV -C ${{ matrix.build_type }} --timeout 300
-      env: 
-        ASAN_OPTIONS: use_sigaltstack=false # To avoid SetAlternateSignalStack with clang-11 

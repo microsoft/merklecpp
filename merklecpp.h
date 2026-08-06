@@ -13,8 +13,10 @@
 #include <format>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <list>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <stack>
 #include <stdexcept>
@@ -703,7 +705,14 @@ namespace merkle
       /// 2**height-1.
       [[nodiscard]] bool is_full() const
       {
-        size_t max_size = (1 << height) - 1;
+        constexpr size_t size_digits = std::numeric_limits<size_t>::digits;
+        if (height > size_digits)
+        {
+          return false;
+        }
+        const size_t max_size = height == size_digits ?
+          std::numeric_limits<size_t>::max() :
+          (size_t{1} << height) - 1;
         assert(size <= max_size);
         return size == max_size;
       }
@@ -1334,6 +1343,80 @@ namespace merkle
 
       return std::make_shared<Path>(
         leaf_node(index)->hash, index, std::move(path), as_of);
+    }
+
+    /// @brief Extracts the root hash of a complete subtree resident in memory
+    /// @param level The height of the subtree (it spans 2**level leaves)
+    /// @param index The index of the subtree at that height
+    /// @return The subtree root hash if the subtree is complete (balanced) and
+    /// fully resident in memory; otherwise, std::nullopt
+    /// @note Like root() and path(), it may
+    /// materialize pending nodes and compute dirty hashes, but does not change
+    /// logical leaf contents or hashing semantics. It returns std::nullopt if
+    /// any leaf of the subtree has been flushed, if the subtree extends past
+    /// the last leaf, or if the node at that position is not a full subtree.
+    /// The subtree spans leaf indices
+    /// [index << level, (index + 1) << level).
+    std::optional<Hash> subtree_root(uint8_t level, size_t index)
+    {
+      const size_t leaves = num_leaves();
+      if (leaves == 0 || level >= std::numeric_limits<size_t>::digits)
+      {
+        return std::nullopt;
+      }
+      if (index > (std::numeric_limits<size_t>::max() >> level))
+      {
+        return std::nullopt;
+      }
+
+      const size_t lo = index << level;
+      const size_t count = (size_t)1 << level;
+
+      if (lo < min_index() || count > leaves || lo > leaves - count)
+      {
+        return std::nullopt;
+      }
+
+      if (level == 0)
+      {
+        return leaf(lo);
+      }
+
+      compute_root();
+
+      const uint8_t target_height = level + 1;
+      if (!_root || _root->height < target_height)
+      {
+        return std::nullopt;
+      }
+
+      Node* cur = _root;
+      size_t it = lo << (sizeof(lo) * 8 - _root->height + 1);
+      for (uint8_t height = _root->height; height > target_height;)
+      {
+        const bool go_right = ((it >> (8 * sizeof(it) - 1)) & 0x01) != 0U;
+        if (cur->height == height)
+        {
+          Node* next = go_right ? cur->right : cur->left;
+          if (!next)
+          {
+            return std::nullopt; // conflated/flushed: not resident
+          }
+          cur = next;
+        }
+        it <<= 1;
+        height--;
+      }
+
+      if (cur->height != target_height || !cur->is_full())
+      {
+        return std::nullopt;
+      }
+      if (cur->dirty)
+      {
+        hash(cur);
+      }
+      return cur->hash;
     }
 
     /// @brief Serialises the tree
