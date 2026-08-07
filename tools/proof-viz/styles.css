@@ -1,4 +1,5 @@
 :root {
+    --page-gutter: clamp(12px, 1.5vw, 40px);
     --paper: #f3f1e9;
     --paper-strong: #fffdf7;
     --ink: #202521;
@@ -68,7 +69,8 @@ code {
 .legend-band__inner,
 .scene__inner,
 .method {
-    width: min(100% - 40px, 1380px);
+    width: 100%;
+    padding-inline: var(--page-gutter);
     margin-inline: auto;
 }
 
@@ -611,7 +613,7 @@ h1 {
     .legend-band__inner,
     .scene__inner,
     .method {
-        width: min(100% - 24px, 1380px);
+        padding-inline: var(--page-gutter);
     }
 
     .masthead__inner {

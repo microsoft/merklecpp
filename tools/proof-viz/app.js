@@ -221,7 +221,10 @@
         function draw() {
             const maxDepth = Math.max(...scenario.nodes.map((node) => node.depth));
             const minimumWidth = Math.max(660, Math.ceil(scenario.mapLeaves * 2.35 + 88));
-            const cssWidth = Math.max(scroll.clientWidth - 2, minimumWidth);
+            const availableWidth = scroll.clientWidth - 2;
+            const cssWidth = window.innerWidth > 980
+                ? availableWidth
+                : Math.max(availableWidth, minimumWidth);
             const cssHeight = Math.max(270, (maxDepth + 1) * 22 + 64);
             const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
 
