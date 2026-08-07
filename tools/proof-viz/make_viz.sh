@@ -23,11 +23,16 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const data = JSON.parse(fs.readFileSync(path.resolve(process.argv[2]), "utf8"));
-const validAttempt = (attempt) =>
-  ["frontier", "tile"].includes(attempt.source) &&
-  Number.isSafeInteger(attempt.level) && attempt.level >= 0 &&
-  Number.isSafeInteger(attempt.index) && attempt.index >= 0 &&
-  typeof attempt.success === "boolean";
+const validAttempt = (attempt) => {
+  if (!["frontier", "tile"].includes(attempt.source)) return false;
+  if (!Number.isSafeInteger(attempt.level) || attempt.level < 0 || attempt.level > 52) return false;
+  if (!Number.isSafeInteger(attempt.index) || attempt.index < 0) return false;
+  const width = 2 ** attempt.level;
+  const lo = attempt.index * width;
+  if (!Number.isSafeInteger(width) || width < 1) return false;
+  if (!Number.isSafeInteger(lo) || lo < 0 || lo > Number.MAX_SAFE_INTEGER - width) return false;
+  return typeof attempt.success === "boolean";
+};
 const validScenario = (scenario) =>
   ["id", "title", "description", "takeaway"].every(
     (field) => typeof scenario[field] === "string"

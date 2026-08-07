@@ -215,8 +215,7 @@ static std::vector<Scenario> read_scenarios(const fs::path& directory)
   {
     if (!entry.is_regular_file() || entry.path().extension() != ".scenario")
     {
-      throw std::runtime_error(
-        "unexpected scenario directory entry: " + entry.path().string());
+      continue;
     }
     scenarios.push_back(read_scenario(entry.path()));
   }
