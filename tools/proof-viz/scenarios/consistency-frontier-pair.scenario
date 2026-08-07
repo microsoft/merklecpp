@@ -1,0 +1,9 @@
+name: consistency-frontier-pair
+proof: consistency
+title: Two leaves inside one frontier
+description: Leaves A=269 and B=493 end two tree states beyond the first tile in a 511-leaf backing tree.
+takeaway: Both roots include tiled history, but their changing suffixes are assembled from different portions of the same blue frontier.
+order: 11
+leaves: 511
+focus: 269
+second: 493

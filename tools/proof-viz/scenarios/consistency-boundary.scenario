@@ -1,0 +1,9 @@
+name: consistency-boundary
+proof: consistency
+title: Consistency across the flush line
+description: Leaf indices 255 and 299 identify the 256- and 300-leaf checkpoints on opposite sides of the flush line.
+takeaway: There is no target leaf. Red marks the SUBPROOF recursion and its proof components, combining the old green root with blue hashes from the new frontier.
+order: 7
+leaves: 300
+focus: 255
+second: 299

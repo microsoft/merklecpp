@@ -15,7 +15,7 @@ rm -f "$output_dir/data.js"
   -I"$repo_root/test" \
   "$script_dir/proof_viz.cpp" \
   -o "$build_dir/proof_viz"
-"$build_dir/proof_viz" "$output_dir/data.json"
+"$build_dir/proof_viz" "$script_dir/scenarios" "$output_dir/data.json"
 
 node --check "$script_dir/app.js"
 node - "$output_dir/data.json" <<'NODE'

@@ -1,0 +1,9 @@
+name: consistency-frontier-only
+proof: consistency
+title: Two leaves before tiling
+description: Leaves A=47 and B=149 end the 48- and 150-leaf tree states inside a 192-leaf backing tree that has not completed its first tile.
+takeaway: Every consistency component is answered by the resident frontier, even though neither selected leaf is the backing tree's current end.
+order: 8
+leaves: 192
+focus: 47
+second: 149

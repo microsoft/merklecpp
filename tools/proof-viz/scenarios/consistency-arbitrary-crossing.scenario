@@ -1,0 +1,9 @@
+name: consistency-arbitrary-crossing
+proof: consistency
+title: An arbitrary leaf pair crosses the boundary
+description: Leaves A=91 and B=287 end the 92- and 288-leaf tree states in a 300-leaf backing tree.
+takeaway: The tree ending at A sits wholly in the tiled past, while the tree ending at B requires both the durable tile and resident frontier.
+order: 10
+leaves: 300
+focus: 91
+second: 287
