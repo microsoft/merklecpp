@@ -17,12 +17,7 @@
 <body>
     <header class="masthead">
         <div class="masthead__inner">
-            <div class="identity">
-                <div class="identity__mark" aria-hidden="true">
-                    <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-                </div>
-                <p>merklecpp / instrumented proofs</p>
-            </div>
+            <p class="identity">merklecpp / instrumented proofs</p>
             <div class="masthead__copy">
                 <h1>Tile &amp; frontier proof atlas</h1>
                 <p>
@@ -30,20 +25,11 @@
                     meet the resident Merkle frontier.
                 </p>
             </div>
-            <dl class="masthead__stats" aria-label="Atlas summary">
-                <div>
-                    <dt>Scenes</dt>
-                    <dd id="scene-count">11</dd>
-                </div>
-                <div>
-                    <dt>Tile width</dt>
-                    <dd id="tile-width">256</dd>
-                </div>
-                <div>
-                    <dt>Evidence</dt>
-                    <dd>Live calls</dd>
-                </div>
-            </dl>
+            <p class="masthead__stats" aria-label="Atlas summary">
+                <span><b id="scene-count">11</b> scenes</span>
+                <span><b id="tile-width">256</b> tile width</span>
+                <span><b>Live calls</b> evidence</span>
+            </p>
         </div>
     </header>
 
@@ -60,34 +46,25 @@
                 <div class="toggles">
                     <label class="toggle">
                         <input id="toggle-edges" type="checkbox" checked>
-                        <span aria-hidden="true"></span>
                         Tree edges
                     </label>
                     <label class="toggle">
                         <input id="toggle-calls" type="checkbox" checked>
-                        <span aria-hidden="true"></span>
                         Resolver calls
                     </label>
                 </div>
             </div>
         </section>
 
-        <section class="legend-band" aria-labelledby="legend-title">
-            <div class="legend-band__inner">
-                <div>
-                    <p class="section-label">Visual grammar</p>
-                    <h2 id="legend-title">One square, one Merkle node</h2>
-                </div>
-                <ul class="legend" aria-label="Node colors">
-                    <li><span class="swatch swatch--tile"></span><b>Tile</b> durable full-tile data</li>
-                    <li><span class="swatch swatch--frontier"></span><b>Frontier</b> resident in-memory data</li>
-                    <li><span class="swatch swatch--computed"></span><b>Computed</b> assembled across ranges</li>
-                    <li><span class="swatch swatch--route"></span><b>Proof route</b> ancestry and proof components</li>
-                    <li><span class="swatch swatch--query"></span><b>Resolved</b> an actual source answer</li>
-                    <li><span class="swatch swatch--endpoint"></span><b>A / B leaves</b> selected consistency endpoints
-                    </li>
-                </ul>
-            </div>
+        <section class="legend-band" aria-label="Node colors">
+            <ul class="legend">
+                <li><span class="swatch swatch--tile"></span><b>Tile</b> durable full-tile data</li>
+                <li><span class="swatch swatch--frontier"></span><b>Frontier</b> resident in-memory data</li>
+                <li><span class="swatch swatch--computed"></span><b>Computed</b> assembled across ranges</li>
+                <li><span class="swatch swatch--route"></span><b>Proof route</b> ancestry and proof components</li>
+                <li><span class="swatch swatch--query"></span><b>Resolved</b> an actual source answer</li>
+                <li><span class="swatch swatch--endpoint"></span><b>A / B leaves</b> selected consistency endpoints</li>
+            </ul>
         </section>
 
         <section id="scenarios" aria-label="Proof visualization scenes" aria-busy="true">
