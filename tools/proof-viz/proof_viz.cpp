@@ -11,6 +11,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -165,6 +166,51 @@ static void run_scenario(
   }
 }
 
+static void write_json_string(std::ostream& stream, std::string_view value)
+{
+  stream << '"';
+  for (const unsigned char character : value)
+  {
+    switch (character)
+    {
+      case '"':
+        stream << "\\\"";
+        break;
+      case '\\':
+        stream << "\\\\";
+        break;
+      case '\b':
+        stream << "\\b";
+        break;
+      case '\f':
+        stream << "\\f";
+        break;
+      case '\n':
+        stream << "\\n";
+        break;
+      case '\r':
+        stream << "\\r";
+        break;
+      case '\t':
+        stream << "\\t";
+        break;
+      default:
+        if (character < 0x20)
+        {
+          stream << "\\u00" << std::hex << std::setw(2) << std::setfill('0')
+                 << static_cast<unsigned>(character) << std::dec
+                 << std::setfill(' ');
+        }
+        else
+        {
+          stream << static_cast<char>(character);
+        }
+        break;
+    }
+  }
+  stream << '"';
+}
+
 static void write_data(
   const fs::path& output, const std::vector<Scenario>& scenarios)
 {
@@ -174,34 +220,41 @@ static void write_data(
     throw std::runtime_error("could not open " + output.string());
   }
 
-  stream << "window.PROOF_VIZ_DATA = {\n";
-  stream << "  tileWidth: " << TILE_WIDTH << ",\n";
-  stream << "  scenarios: [\n";
+  stream << "{\n";
+  stream << "  \"schemaVersion\": 1,\n";
+  stream << "  \"tileWidth\": " << TILE_WIDTH << ",\n";
+  stream << "  \"scenarios\": [\n";
   for (size_t scenario_index = 0; scenario_index < scenarios.size();
        scenario_index++)
   {
     const Scenario& scenario = scenarios[scenario_index];
     stream << "    {\n";
-    stream << "      id: " << std::quoted(scenario.id) << ",\n";
-    stream << "      title: " << std::quoted(scenario.title) << ",\n";
-    stream << "      description: " << std::quoted(scenario.description)
-           << ",\n";
-    stream << "      takeaway: " << std::quoted(scenario.takeaway) << ",\n";
-    stream << "      leaves: " << scenario.leaves << ",\n";
-    stream << "      focus: " << scenario.focus << ",\n";
+    stream << "      \"id\": ";
+    write_json_string(stream, scenario.id);
+    stream << ",\n      \"title\": ";
+    write_json_string(stream, scenario.title);
+    stream << ",\n      \"description\": ";
+    write_json_string(stream, scenario.description);
+    stream << ",\n      \"takeaway\": ";
+    write_json_string(stream, scenario.takeaway);
+    stream << ",\n";
+    stream << "      \"leaves\": " << scenario.leaves << ",\n";
+    stream << "      \"focus\": " << scenario.focus << ",\n";
     if (scenario.second_index)
     {
-      stream << "      secondIndex: " << *scenario.second_index << ",\n";
+      stream << "      \"secondIndex\": " << *scenario.second_index << ",\n";
     }
-    stream << "      attempts: [\n";
+    stream << "      \"attempts\": [\n";
     for (size_t attempt_index = 0; attempt_index < scenario.attempts.size();
          attempt_index++)
     {
       const Attempt& attempt = scenario.attempts[attempt_index];
-      stream << "        {source:" << std::quoted(attempt.source)
-             << ",level:" << static_cast<unsigned>(attempt.level)
-             << ",index:" << attempt.index
-             << ",success:" << (attempt.success ? "true" : "false") << "}";
+      stream << "        {\"source\": ";
+      write_json_string(stream, attempt.source);
+      stream << ", \"level\": " << static_cast<unsigned>(attempt.level)
+             << ", \"index\": " << attempt.index
+             << ", \"success\": " << (attempt.success ? "true" : "false")
+             << "}";
       stream << (attempt_index + 1 == scenario.attempts.size() ? "\n" : ",\n");
     }
     stream << "      ]\n";
@@ -209,14 +262,14 @@ static void write_data(
     stream << (scenario_index + 1 == scenarios.size() ? "\n" : ",\n");
   }
   stream << "  ]\n";
-  stream << "};\n";
+  stream << "}\n";
 }
 
 int main(int argc, char** argv)
 {
   try
   {
-    const fs::path output = argc > 1 ? argv[1] : "data.js";
+    const fs::path output = argc > 1 ? argv[1] : "data.json";
     const TemporaryDirectory temporary_directory("merklecpp_proof_viz");
     const auto hashes = make_hashes(513);
     std::vector<Scenario> scenarios = {

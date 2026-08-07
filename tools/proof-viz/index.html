@@ -6,8 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="An instrumented atlas of merklecpp tile-backed inclusion and consistency proofs.">
     <title>Merkle proof atlas</title>
+    <script>
+        document.documentElement.dataset.theme = localStorage.getItem("theme") ||
+            (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    </script>
     <link rel="stylesheet" href="styles.css">
-    <script src="data.js" defer></script>
     <script src="app.js" defer></script>
 </head>
 
@@ -87,7 +90,9 @@
             </div>
         </section>
 
-        <section id="scenarios" aria-label="Proof visualization scenes"></section>
+        <section id="scenarios" aria-label="Proof visualization scenes" aria-busy="true">
+            <p class="load-status" role="status">Loading proof data...</p>
+        </section>
 
         <section class="method" aria-labelledby="method-title">
             <div>

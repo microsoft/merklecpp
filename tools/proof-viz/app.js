@@ -1,22 +1,29 @@
-(() => {
-    "use strict";
+"use strict";
 
-    const data = window.PROOF_VIZ_DATA;
-    if (!data || !Array.isArray(data.scenarios)) {
+const scenarioRoot = document.querySelector("#scenarios");
+
+(async () => {
+    const response = await fetch("data.json");
+    if (!response.ok) {
+        throw new Error(`Could not load proof data (${response.status})`);
+    }
+
+    const data = await response.json();
+    if (data.schemaVersion !== 1 || !Array.isArray(data.scenarios)) {
         throw new Error("Proof visualization data is missing");
     }
 
-    const colors = {
-        tile: "#238b57",
-        frontier: "#2868a8",
-        computed: "#aaa79c",
-        route: "#d13b3f",
-        query: "#e4a11b",
-        endpoint: "#202521",
-        edge: "rgba(74, 79, 73, 0.20)",
-        boundary: "rgba(32, 37, 33, 0.48)",
-        paper: "#fffdf7"
+    const canvasColorNames = [
+        "tile", "frontier", "computed", "route", "query", "endpoint",
+        "edge", "boundary", "muted", "paper"
+    ];
+    const readCanvasColors = () => {
+        const styles = getComputedStyle(document.documentElement);
+        return Object.fromEntries(canvasColorNames.map(
+            (name) => [name, styles.getPropertyValue(`--${name}`).trim()]
+        ));
     };
+    let colors = readCanvasColors();
 
     const state = {
         edges: true,
@@ -24,10 +31,22 @@
     };
 
     const number = new Intl.NumberFormat("en-US");
-    const scenarioRoot = document.querySelector("#scenarios");
     const tooltip = document.querySelector("#node-tooltip");
     const renderers = [];
 
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener(
+        "change",
+        (event) => {
+            if (!localStorage.getItem("theme")) {
+                document.documentElement.dataset.theme = event.matches ? "dark" : "light";
+            }
+            colors = readCanvasColors();
+            renderers.forEach((renderer) => renderer.draw());
+        }
+    );
+
+    scenarioRoot.replaceChildren();
+    scenarioRoot.removeAttribute("aria-busy");
     document.querySelector("#scene-count").textContent = data.scenarios.length;
     document.querySelector("#tile-width").textContent = number.format(data.tileWidth);
 
@@ -254,7 +273,7 @@
                 context.lineTo(boundaryX, cssHeight - 20);
                 context.stroke();
                 context.restore();
-                context.fillStyle = "#50564f";
+                context.fillStyle = colors.muted;
                 context.font = "10px 'Cascadia Code', monospace";
                 context.textAlign = boundaryX > cssWidth - 140 ? "right" : "left";
                 context.fillText(
@@ -366,7 +385,7 @@
                 hitTargets.push({ ...position, node });
             });
 
-            context.fillStyle = "#50564f";
+            context.fillStyle = colors.muted;
             context.font = "10px 'Cascadia Code', monospace";
             context.textAlign = "left";
             context.fillText("leaf 0", plot.left, cssHeight - 12);
@@ -513,4 +532,12 @@
             renderer.draw();
         });
     });
-})();
+})().catch((error) => {
+    console.error(error);
+    const message = document.createElement("p");
+    message.className = "load-status load-status--error";
+    message.setAttribute("role", "alert");
+    message.textContent = `Could not load proof visualization: ${error.message}`;
+    scenarioRoot.removeAttribute("aria-busy");
+    scenarioRoot.replaceChildren(message);
+});
