@@ -118,9 +118,9 @@ static Scenario read_scenario(const fs::path& path)
       values[index].empty() || values[index].front() == ' ' ||
       values[index].back() == ' ' ||
       std::any_of(
-        values[index].begin(), values[index].end(), [](unsigned char character) {
-          return character < 0x20;
-        }))
+        values[index].begin(),
+        values[index].end(),
+        [](unsigned char character) { return character < 0x20; }))
     {
       throw error(index + 1, "invalid value for " + std::string(keys[index]));
     }
@@ -140,8 +140,7 @@ static Scenario read_scenario(const fs::path& path)
       end != values[index].data() + values[index].size())
     {
       throw error(
-        index + 1,
-        "invalid unsigned integer for " + std::string(keys[index]));
+        index + 1, "invalid unsigned integer for " + std::string(keys[index]));
     }
     return value;
   };
@@ -324,19 +323,19 @@ static void write_data(
     throw std::runtime_error("could not open " + output.string());
   }
 
-    stream << "{\"schemaVersion\":1,\"tileWidth\":" << TILE_WIDTH
-      << ",\"scenarios\":[";
+  stream << "{\"schemaVersion\":1,\"tileWidth\":" << TILE_WIDTH
+         << ",\"scenarios\":[";
   for (size_t scenario_index = 0; scenario_index < scenarios.size();
        scenario_index++)
   {
     const Scenario& scenario = scenarios[scenario_index];
-        stream << (scenario_index == 0 ? "{" : ",{");
-        stream << "\"id\":" << std::quoted(scenario.id);
-        stream << ",\"title\":" << std::quoted(scenario.title);
-        stream << ",\"description\":" << std::quoted(scenario.description);
-        stream << ",\"takeaway\":" << std::quoted(scenario.takeaway);
-        stream << ",\"leaves\":" << scenario.leaves;
-        stream << ",\"focus\":" << scenario.focus;
+    stream << (scenario_index == 0 ? "{" : ",{");
+    stream << "\"id\":" << std::quoted(scenario.id);
+    stream << ",\"title\":" << std::quoted(scenario.title);
+    stream << ",\"description\":" << std::quoted(scenario.description);
+    stream << ",\"takeaway\":" << std::quoted(scenario.takeaway);
+    stream << ",\"leaves\":" << scenario.leaves;
+    stream << ",\"focus\":" << scenario.focus;
     if (scenario.second_index)
     {
       stream << ",\"secondIndex\":" << *scenario.second_index;
@@ -346,16 +345,15 @@ static void write_data(
          attempt_index++)
     {
       const Attempt& attempt = scenario.attempts[attempt_index];
-            stream << (attempt_index == 0 ? "{" : ",{");
-            stream << "\"source\":" << std::quoted(attempt.source)
-                   << ",\"level\":" << static_cast<unsigned>(attempt.level)
-                   << ",\"index\":" << attempt.index
-                   << ",\"success\":" << (attempt.success ? "true" : "false")
-             << "}";
+      stream << (attempt_index == 0 ? "{" : ",{");
+      stream << "\"source\":" << std::quoted(attempt.source)
+             << ",\"level\":" << static_cast<unsigned>(attempt.level)
+             << ",\"index\":" << attempt.index
+             << ",\"success\":" << (attempt.success ? "true" : "false") << "}";
     }
-          stream << "]}";
+    stream << "]}";
   }
-        stream << "]}\n";
+  stream << "]}\n";
 }
 
 int main(int argc, char** argv)
