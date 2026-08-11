@@ -31,6 +31,11 @@ const scenarioRoot = document.querySelector("#scenarios");
                 hi: scenario.hi[index],
                 height: scenario.height[index],
                 parent: scenario.parent[index],
+                // Only where the two trees combine this range with a
+                // different sibling: elsewhere the edge is already drawn.
+                parentFirst: scenario.parentFirst[index] !== scenario.parent[index]
+                    ? scenario.parentFirst[index]
+                    : -1,
                 source: (bits & frontier) ? "frontier" : (bits & tile) ? "tile" : "computed",
                 overlap: (bits & (tile | frontier)) === (tile | frontier),
                 proof: (bits & proof) !== 0,
@@ -213,6 +218,25 @@ const scenarioRoot = document.querySelector("#scenarios");
                 });
                 context.stroke();
             }
+
+            // How the old root is reached. Wherever the two trees combine a
+            // range with a different sibling, the old tree's own edge is drawn
+            // on top, so the folds that rebuild the old root can be traced
+            // from the proof elements that feed them.
+            context.save();
+            context.lineWidth = 1.4;
+            context.strokeStyle = colors.primary;
+            context.setLineDash([3, 3]);
+            context.beginPath();
+            scenario.nodes.forEach((node, index) => {
+                if (node.parentFirst < 0) return;
+                const parent = positions[node.parentFirst];
+                const current = positions[index];
+                context.moveTo(parent.x, parent.y);
+                context.lineTo(current.x, current.y);
+            });
+            context.stroke();
+            context.restore();
 
             const baseSize = scenario.mapLeaves > 400 ? 3 : 3.6;
             hitTargets = [];

@@ -61,6 +61,9 @@ struct Scenario
     uint64_t lo = 0;
     uint64_t hi = 0;
     int64_t parent = -1;
+    /// Parent within the first tree, which combines a different pair of
+    /// ranges wherever the two trees disagree.
+    int64_t parent_first = -1;
     int64_t left = -1;
     int64_t right = -1;
     uint32_t flags = 0;
@@ -95,7 +98,8 @@ struct Scenario
 /// whenever its size is not an aligned power of two, so both decompositions
 /// are merged here and each node records which trees it belongs to. The split
 /// point depends only on the range, so a range shared by both trees has the
-/// same children in both and is stored once.
+/// same children in both and is stored once, but the two trees combine it
+/// with a different sibling, so each records its own parent.
 // NOLINTNEXTLINE(misc-no-recursion) -- mirrors the bounded binary node tree.
 static size_t decompose(
   Scenario& scenario,
@@ -106,24 +110,28 @@ static size_t decompose(
 {
   const auto key = std::make_pair(lo, hi);
   const auto existing = scenario.by_range.find(key);
-  if (existing != scenario.by_range.end())
+  if (existing == scenario.by_range.end())
   {
-    Scenario::Node& node = scenario.nodes[existing->second];
-    if ((node.flags & membership) != 0)
-    {
-      return existing->second;
-    }
-    node.flags |= membership;
-  }
-  else
-  {
-    const size_t added = scenario.nodes.size();
-    scenario.nodes.push_back(Scenario::Node{lo, hi, parent});
-    scenario.nodes[added].flags = membership;
-    scenario.by_range.emplace(key, added);
+    scenario.by_range.emplace(key, scenario.nodes.size());
+    scenario.nodes.push_back(Scenario::Node{lo, hi});
   }
 
   const size_t index = scenario.by_range.at(key);
+  Scenario::Node& node = scenario.nodes[index];
+  if ((node.flags & membership) != 0)
+  {
+    return index;
+  }
+  node.flags |= membership;
+  if (membership == FLAG_IN_FIRST_TREE)
+  {
+    node.parent_first = parent;
+  }
+  else
+  {
+    node.parent = parent;
+  }
+
   if (hi - lo > 1)
   {
     const uint64_t split = lo + std::bit_floor(hi - lo - 1);
@@ -438,17 +446,6 @@ static void run_scenario(
     measure_height(scenario, index);
   }
 
-  // Edges describe the drawn tree only. A node that exists solely in the first
-  // tree has a parent there but not here, so it is left unattached and drawn
-  // on its own rather than joined into a structure it is not part of.
-  for (Scenario::Node& node : scenario.nodes)
-  {
-    if ((node.flags & FLAG_IN_SECOND_TREE) == 0)
-    {
-      node.parent = -1;
-    }
-  }
-
   // SHA-256 digests are unique, so a proof element identifies its node.
   std::map<std::string, size_t> by_digest;
   for (size_t index = 0; index < scenario.nodes.size(); index++)
@@ -578,6 +575,9 @@ static void write_data(
     column("hi", [](const Scenario::Node& node) { return node.hi; });
     column("height", [](const Scenario::Node& node) { return node.height; });
     column("parent", [](const Scenario::Node& node) { return node.parent; });
+    column("parentFirst", [](const Scenario::Node& node) {
+      return node.parent_first;
+    });
     column("flags", [](const Scenario::Node& node) { return node.flags; });
 
     stream << ",\"proof\":[";
