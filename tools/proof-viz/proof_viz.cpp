@@ -233,59 +233,6 @@ static uint32_t measure_height(Scenario& scenario, size_t index)
   return height;
 }
 
-/// @brief Drops the interior ranges that carry no information.
-/// @note What is left is every range a store could answer, every range the
-/// proof returned, the selected leaves, the two roots, and the first tree's
-/// spine. The remainder is the ragged right-hand scaffolding of the
-/// decomposition: ranges no store holds and no proof names, which exist only
-/// because the tree size is not a power of two. Edges are re-pointed at the
-/// nearest surviving ancestor so the drawn structure stays connected.
-static void prune_scaffolding(Scenario& scenario)
-{
-  static constexpr uint32_t ROLES = FLAG_PROOF | FLAG_FIRST | FLAG_SECOND;
-  static constexpr uint32_t ANSWERED = FLAG_TILE | FLAG_FRONTIER;
-
-  const size_t count = scenario.nodes.size();
-  std::vector<bool> keep(count, false);
-  for (size_t index = 0; index < count; index++)
-  {
-    const Scenario::Node& node = scenario.nodes[index];
-    keep[index] = (node.flags & (ANSWERED | ROLES)) != 0 ||
-      (node.flags & FLAG_IN_SECOND_TREE) == 0 ||
-      index == scenario.first_root || index == scenario.second_root;
-  }
-
-  std::vector<int64_t> moved(count, -1);
-  std::vector<Scenario::Node> kept;
-  kept.reserve(count);
-  for (size_t index = 0; index < count; index++)
-  {
-    if (keep[index])
-    {
-      moved[index] = static_cast<int64_t>(kept.size());
-      kept.push_back(scenario.nodes[index]);
-    }
-  }
-
-  for (Scenario::Node& node : kept)
-  {
-    int64_t parent = node.parent;
-    while (parent >= 0 && !keep[static_cast<size_t>(parent)])
-    {
-      parent = scenario.nodes[static_cast<size_t>(parent)].parent;
-    }
-    node.parent = parent < 0 ? -1 : moved[static_cast<size_t>(parent)];
-  }
-
-  for (size_t& node : scenario.proof_nodes)
-  {
-    node = static_cast<size_t>(moved[node]);
-  }
-  scenario.first_root = static_cast<size_t>(moved[scenario.first_root]);
-  scenario.second_root = static_cast<size_t>(moved[scenario.second_root]);
-  scenario.nodes = std::move(kept);
-}
-
 /// @brief Lists the full tiles that reached disk.
 static std::vector<std::pair<uint8_t, uint64_t>> list_tiles(
   const TileStore& store)
@@ -569,7 +516,6 @@ static void run_scenario(
   {
     scenario.nodes[node].flags |= FLAG_PROOF;
   }
-  prune_scaffolding(scenario);
 }
 
 static void write_data(

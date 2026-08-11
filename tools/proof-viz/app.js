@@ -236,12 +236,19 @@ const scenarioRoot = document.querySelector("#scenarios");
                     );
                 }
 
+                // A range no store answers and no proof names is only where two
+                // halves are combined. It has to stay for the tree to keep its
+                // shape, but it is drawn small so it reads as a join rather
+                // than as data someone holds.
+                const isJoin = node.source === "computed" &&
+                    !node.proof && !node.endpoint && !node.isRoot;
+                const size = isJoin ? baseSize * 0.55 : baseSize;
                 context.fillStyle = colors[node.source];
                 context.fillRect(
-                    position.x - baseSize / 2,
-                    position.y - baseSize / 2,
-                    baseSize,
-                    baseSize
+                    position.x - size / 2,
+                    position.y - size / 2,
+                    size,
+                    size
                 );
 
                 // Nodes that exist only in the tree ending at A: the ranges a
