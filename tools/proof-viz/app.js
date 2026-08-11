@@ -49,7 +49,14 @@ const scenarioRoot = document.querySelector("#scenarios");
                         : index === scenario.secondRoot ? "new root" : "",
                 endpoint: (bits & first)
                     ? (scenario.type === "consistency" ? "A" : "T")
-                    : (bits & second) ? "B" : ""
+                    : (bits & second) ? "B" : "",
+                // The marked leaves are where each tree ends, not what the
+                // proof is about: a consistency proof names two sizes.
+                endpointLabel: (bits & first)
+                    ? (scenario.type === "consistency"
+                        ? `old ends ${lo}`
+                        : `target ${lo}`)
+                    : (bits & second) ? `new ends ${lo}` : ""
             };
         });
     });
@@ -103,8 +110,8 @@ const scenarioRoot = document.querySelector("#scenarios");
         const roles = [];
         if (node.proof) roles.push("returned proof element");
         if (node.endpoint === "T") roles.push("target entry (T)");
-        if (node.endpoint === "A") roles.push("earlier selected leaf (A)");
-        if (node.endpoint === "B") roles.push("later selected leaf (B)");
+        if (node.endpoint === "A") roles.push("last leaf of the old tree, which ends here");
+        if (node.endpoint === "B") roles.push("last leaf of the new tree, which ends here");
         if (node.overlap) roles.push("available from both; memory selected first");
         if (roles.length === 0) roles.push("not returned in this proof");
 
@@ -339,7 +346,7 @@ const scenarioRoot = document.querySelector("#scenarios");
                     context.font = "700 10px 'Cascadia Code', monospace";
                     context.textAlign = "center";
                     context.fillText(
-                        `${node.endpoint} ${number.format(node.lo)}`,
+                        node.endpointLabel,
                         position.x,
                         position.y - markerSize / 2 - 5
                     );
@@ -418,10 +425,10 @@ const scenarioRoot = document.querySelector("#scenarios");
             );
         } else {
             facts.append(
-                fact("Backing leaves", number.format(scenario.leaves)),
-                fact("Tiled prefix", `${number.format(scenario.covered)} · ${number.format(scenario.tiles.length)} tiles`),
-                fact("Earlier leaf A", `index ${number.format(scenario.focus)} · tree ends at A`),
-                fact("Later leaf B", `index ${number.format(scenario.secondIndex)} · tree ends at B`)
+                fact("Old tree", `${number.format(scenario.focus + 1)} leaves · last index ${number.format(scenario.focus)}`),
+                fact("New tree", `${number.format(scenario.secondIndex + 1)} leaves · last index ${number.format(scenario.secondIndex)}`),
+                fact("Backing tree", `${number.format(scenario.leaves)} leaves · ${number.format(scenario.tiles.length)} tiles`),
+                fact("Tiled prefix", number.format(scenario.covered))
             );
         }
         const takeaway = document.createElement("p");
@@ -436,7 +443,7 @@ const scenarioRoot = document.querySelector("#scenarios");
         visualHead.className = "visual-head";
         const mapTitle = document.createElement("span");
         mapTitle.innerHTML = scenario.type === "consistency"
-            ? "<strong>Leaf-to-leaf consistency</strong> / A and B anchor the two tree states"
+            ? `<strong>Two tree states</strong> / ${number.format(scenario.focus + 1)} leaves as a prefix of ${number.format(scenario.secondIndex + 1)}`
             : "<strong>Node map</strong> / root to leaves";
         const mapMeta = document.createElement("span");
         mapMeta.textContent = `${number.format(scenario.nodes.length)} nodes · ${number.format(scenario.proof.length)} proof elements`;
