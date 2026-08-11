@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
 #include <optional>
@@ -23,12 +24,21 @@ namespace fs = std::filesystem;
 
 using merkle::Hash;
 using merkle::tiles::CombinedHashSource;
+using merkle::tiles::HashSource;
+using merkle::tiles::MAX_TILE_LEVEL;
 using merkle::tiles::MemoryHashSource;
 using merkle::tiles::ProofEngine;
 using merkle::tiles::TILE_WIDTH;
 using merkle::tiles::TileHashSource;
 using merkle::tiles::TileStore;
 using merkle::tiles::TileWriter;
+
+// Node roles, packed into one integer per node so the JSON stays compact.
+static constexpr uint32_t FLAG_TILE = 1U << 0;
+static constexpr uint32_t FLAG_FRONTIER = 1U << 1;
+static constexpr uint32_t FLAG_PROOF = 1U << 2;
+static constexpr uint32_t FLAG_FIRST = 1U << 3;
+static constexpr uint32_t FLAG_SECOND = 1U << 4;
 
 struct Scenario
 {
@@ -46,160 +56,140 @@ struct Scenario
 
   struct Node
   {
-    size_t lo;
-    size_t hi;
-    size_t depth;
-    int64_t parent;
-    const char* source;
-    bool overlap = false;
-    bool proof = false;
-    char endpoint = '\0';
+    uint64_t lo = 0;
+    uint64_t hi = 0;
+    uint32_t depth = 0;
+    int64_t parent = -1;
+    int64_t left = -1;
+    int64_t right = -1;
+    uint32_t flags = 0;
+    Hash digest;
+    bool resolved = false;
   };
   std::vector<Node> nodes;
+
+  /// Node ids of the returned proof elements, in the order the proof lists
+  /// them.
+  std::vector<size_t> proof_nodes;
+
+  /// The full tiles that reached disk, as (level, index) pairs.
+  std::vector<std::pair<uint8_t, uint64_t>> tile_files;
 };
 
+/// @brief Lays out the RFC 6962 decomposition of [lo, hi), splitting at the
+/// largest power of two below the width.
+/// @note Shape only: which nodes a proof uses, and which store can serve them,
+/// are read back from the library rather than predicted here.
 // NOLINTNEXTLINE(misc-no-recursion) -- mirrors the bounded binary node tree.
-static void add_node(
-  Scenario& scenario, size_t lo, size_t hi, size_t depth, int64_t parent)
+static size_t build_nodes(
+  std::vector<Scenario::Node>& nodes,
+  uint64_t lo,
+  uint64_t hi,
+  uint32_t depth,
+  int64_t parent)
 {
-  const size_t width = hi - lo;
-  const bool complete = std::has_single_bit(width) && lo % width == 0;
-  const bool in_frontier = complete && lo >= scenario.frontier_start;
-  const bool in_tiles = complete && hi <= scenario.covered;
-  const char* source = "computed";
-  if (in_frontier)
-  {
-    source = "frontier";
-  }
-  else if (in_tiles)
-  {
-    source = "tile";
-  }
-  const size_t index = scenario.nodes.size();
-  scenario.nodes.push_back(Scenario::Node{
-    lo,
-    hi,
-    depth,
-    parent,
-    source,
-    in_frontier && in_tiles});
+  const size_t index = nodes.size();
+  nodes.push_back(Scenario::Node{lo, hi, depth, parent});
 
-  if (width > 1)
+  if (hi - lo > 1)
   {
-    const size_t split = lo + std::bit_floor(width - 1);
-    add_node(scenario, lo, split, depth + 1, static_cast<int64_t>(index));
-    add_node(scenario, split, hi, depth + 1, static_cast<int64_t>(index));
+    const uint64_t split = lo + std::bit_floor(hi - lo - 1);
+    const auto left =
+      build_nodes(nodes, lo, split, depth + 1, static_cast<int64_t>(index));
+    const auto right =
+      build_nodes(nodes, split, hi, depth + 1, static_cast<int64_t>(index));
+    nodes[index].left = static_cast<int64_t>(left);
+    nodes[index].right = static_cast<int64_t>(right);
   }
+  return index;
 }
 
-static Scenario::Node* find_node(Scenario& scenario, size_t lo, size_t hi)
+/// @brief Records which store can serve each node, by asking both of them.
+/// @note The proof engine runs on a CombinedHashSource, which hides the answer
+/// behind a short-circuiting fallback. Querying the tile and frontier sources
+/// separately reports what each one actually holds, so a node that both can
+/// serve is observed rather than inferred from the flush boundary.
+static void classify_nodes(
+  Scenario& scenario, const HashSource& tiles, const HashSource& frontier)
 {
-  const auto found = std::find_if(
-    scenario.nodes.begin(),
-    scenario.nodes.end(),
-    [&](const Scenario::Node& node) { return node.lo == lo && node.hi == hi; });
-  return found == scenario.nodes.end() ? nullptr : &*found;
-}
-
-static Scenario::Node& node_at(Scenario& scenario, size_t lo, size_t hi)
-{
-  if (Scenario::Node* node = find_node(scenario, lo, hi))
+  for (Scenario::Node& node : scenario.nodes)
   {
-    return *node;
-  }
-  throw std::runtime_error(
-    "proof range [" + std::to_string(lo) + ", " + std::to_string(hi) +
-    ") is absent from node map");
-}
-
-// NOLINTNEXTLINE(misc-no-recursion) -- follows one bounded root-to-leaf path.
-static void mark_inclusion(
-  Scenario& scenario, size_t lo, size_t hi, size_t focus)
-{
-  if (hi - lo == 1)
-  {
-    return;
-  }
-
-  const size_t split = lo + std::bit_floor(hi - lo - 1);
-  if (focus < split)
-  {
-    node_at(scenario, split, hi).proof = true;
-    mark_inclusion(scenario, lo, split, focus);
-  }
-  else
-  {
-    node_at(scenario, lo, split).proof = true;
-    mark_inclusion(scenario, split, hi, focus);
-  }
-}
-
-// NOLINTNEXTLINE(misc-no-recursion) -- mirrors the bounded consistency proof.
-static void mark_consistency(
-  Scenario& scenario,
-  size_t first_size,
-  size_t lo,
-  size_t hi,
-  bool complete)
-{
-  if (first_size == hi - lo)
-  {
-    if (!complete)
+    const uint64_t width = node.hi - node.lo;
+    if (!std::has_single_bit(width) || node.lo % width != 0)
     {
-      node_at(scenario, lo, hi).proof = true;
+      continue;
     }
-    return;
-  }
 
-  const size_t split = lo + std::bit_floor(hi - lo - 1);
-  const size_t left_size = split - lo;
-  if (first_size <= left_size)
-  {
-    mark_consistency(scenario, first_size, lo, split, complete);
-    node_at(scenario, split, hi).proof = true;
-  }
-  else
-  {
-    mark_consistency(
-      scenario, first_size - left_size, split, hi, false);
-    node_at(scenario, lo, split).proof = true;
+    const auto level = static_cast<uint8_t>(std::countr_zero(width));
+    const uint64_t index = node.lo >> level;
+    Hash from_tiles;
+    Hash from_frontier;
+    const bool in_tiles = tiles.subtree_root(level, index, from_tiles);
+    const bool in_frontier = frontier.subtree_root(level, index, from_frontier);
+
+    if (in_tiles && in_frontier && from_tiles != from_frontier)
+    {
+      throw std::runtime_error(
+        "tile and frontier sources disagree in " + scenario.id);
+    }
+    if (in_tiles)
+    {
+      node.digest = from_tiles;
+      node.flags |= FLAG_TILE;
+      node.resolved = true;
+    }
+    if (in_frontier)
+    {
+      node.digest = from_frontier;
+      node.flags |= FLAG_FRONTIER;
+      node.resolved = true;
+    }
   }
 }
 
-static void derive_presentation(Scenario& scenario, size_t proof_size)
+/// @brief Fills in the digests of the ranges no store can serve directly.
+/// @note These are exactly the ranges the proof engine has to recombine. Nodes
+/// are laid out in pre-order, so a reverse pass always sees children first.
+static void fill_digests(Scenario& scenario)
 {
-  scenario.map_leaves =
-    scenario.second_index ? *scenario.second_index + 1 : scenario.leaves;
-  scenario.nodes.clear();
-  scenario.nodes.reserve(scenario.map_leaves * 2 - 1);
-  add_node(scenario, 0, scenario.map_leaves, 0, -1);
+  for (size_t index = scenario.nodes.size(); index-- > 0;)
+  {
+    Scenario::Node& node = scenario.nodes[index];
+    if (node.resolved || node.left < 0)
+    {
+      continue;
+    }
 
-  if (scenario.second_index)
-  {
-    mark_consistency(
-      scenario, scenario.focus + 1, 0, scenario.map_leaves, true);
-    node_at(scenario, scenario.focus, scenario.focus + 1).endpoint = 'A';
-    node_at(
-      scenario, *scenario.second_index, *scenario.second_index + 1)
-      .endpoint = 'B';
+    const Scenario::Node& left = scenario.nodes[node.left];
+    const Scenario::Node& right = scenario.nodes[node.right];
+    if (!left.resolved || !right.resolved)
+    {
+      throw std::runtime_error("unresolved child range in " + scenario.id);
+    }
+    merkle::sha256(left.digest, right.digest, node.digest);
+    node.resolved = true;
   }
-  else
-  {
-    mark_inclusion(scenario, 0, scenario.map_leaves, scenario.focus);
-    node_at(scenario, scenario.focus, scenario.focus + 1).endpoint = 'T';
-  }
+}
 
-  const auto marked_proof_nodes = static_cast<size_t>(std::count_if(
-    scenario.nodes.begin(),
-    scenario.nodes.end(),
-    [](const Scenario::Node& node) { return node.proof; }));
-  if (marked_proof_nodes != proof_size)
+/// @brief Lists the full tiles that reached disk.
+static std::vector<std::pair<uint8_t, uint64_t>> list_tiles(
+  const TileStore& store)
+{
+  std::vector<std::pair<uint8_t, uint64_t>> refs;
+  for (uint8_t level = 0; level <= MAX_TILE_LEVEL; level++)
   {
-    throw std::runtime_error(
-      "proof role mismatch for " + scenario.id + ": expected " +
-      std::to_string(proof_size) + ", marked " +
-      std::to_string(marked_proof_nodes));
+    uint64_t index = 0;
+    while (store.has_full_tile(level, index))
+    {
+      refs.emplace_back(level, index);
+      index++;
+    }
+    if (index == 0)
+    {
+      break;
+    }
   }
+  return refs;
 }
 
 static Scenario read_scenario(const fs::path& path)
@@ -285,8 +275,7 @@ static Scenario read_scenario(const fs::path& path)
     number(5),
     number(6),
     number(7),
-    std::nullopt,
-    {}};
+    std::nullopt};
   const std::string& second = values[8];
 
   if (proof == "inclusion")
@@ -386,19 +375,22 @@ static void run_scenario(
   };
   writer.write_up_to(scenario.leaves, leaf_at);
   scenario.covered = (scenario.leaves / TILE_WIDTH) * TILE_WIDTH;
-  scenario.frontier_start =
-    std::min(scenario.covered, scenario.leaves - 1);
+  scenario.tile_files = list_tiles(store);
 
-  merkle::Tree oracle;
   merkle::Tree frontier;
   for (size_t index = 0; index < scenario.leaves; index++)
   {
-    oracle.insert(hashes.at(index));
     frontier.insert(hashes.at(index));
   }
-  if (scenario.frontier_start > 0)
+  frontier.flush_to(std::min(scenario.covered, scenario.leaves - 1));
+  scenario.frontier_start = frontier.min_index();
+
+  // An unflushed, tile-free tree, kept only as an independent control for the
+  // proofs below.
+  merkle::Tree control;
+  for (size_t index = 0; index < scenario.leaves; index++)
   {
-    frontier.flush_to(scenario.frontier_start);
+    control.insert(hashes.at(index));
   }
 
   const MemoryHashSource memory(frontier);
@@ -406,21 +398,49 @@ static void run_scenario(
   const CombinedHashSource combined(memory, tiles);
   const ProofEngine engine(combined);
 
+  scenario.map_leaves =
+    scenario.second_index ? *scenario.second_index + 1 : scenario.leaves;
+  scenario.nodes.clear();
+  scenario.nodes.reserve(scenario.map_leaves * 2 - 1);
+  build_nodes(scenario.nodes, 0, scenario.map_leaves, 0, -1);
+  classify_nodes(scenario, tiles, memory);
+  fill_digests(scenario);
+
+  // SHA-256 digests are unique, so a proof element identifies its node.
+  std::map<std::string, size_t> by_digest;
+  for (size_t index = 0; index < scenario.nodes.size(); index++)
+  {
+    by_digest.emplace(scenario.nodes[index].digest.to_string(), index);
+  }
+  const auto locate = [&](const Hash& digest) {
+    const auto found = by_digest.find(digest.to_string());
+    if (found == by_digest.end())
+    {
+      throw std::runtime_error(
+        "proof element is absent from the node map in " + scenario.id);
+    }
+    return found->second;
+  };
+
   if (!scenario.second_index)
   {
-    const Hash root = oracle.root();
+    const Hash root = control.root();
     const auto proof = engine.inclusion_proof(scenario.focus, scenario.leaves);
-    if (!proof->verify(root) || *proof != *oracle.path(scenario.focus))
+    if (!proof->verify(root) || *proof != *control.path(scenario.focus))
     {
       throw std::runtime_error("inclusion proof mismatch for " + scenario.id);
     }
-    derive_presentation(scenario, proof->size());
+    for (size_t index = 0; index < proof->size(); index++)
+    {
+      scenario.proof_nodes.push_back(locate((*proof)[index]));
+    }
+    scenario.nodes[locate(hashes.at(scenario.focus))].flags |= FLAG_FIRST;
   }
   else
   {
     const size_t second_index = *scenario.second_index;
-    const Hash first_root = *oracle.past_root(scenario.focus);
-    const Hash second_root = *oracle.past_root(second_index);
+    const Hash first_root = *control.past_root(scenario.focus);
+    const Hash second_root = *control.past_root(second_index);
     const auto proof =
       engine.consistency_proof_from_indices(scenario.focus, second_index);
     if (
@@ -429,7 +449,17 @@ static void run_scenario(
     {
       throw std::runtime_error("consistency proof mismatch for " + scenario.id);
     }
-    derive_presentation(scenario, proof.size());
+    for (const Hash& element : proof)
+    {
+      scenario.proof_nodes.push_back(locate(element));
+    }
+    scenario.nodes[locate(hashes.at(scenario.focus))].flags |= FLAG_FIRST;
+    scenario.nodes[locate(hashes.at(second_index))].flags |= FLAG_SECOND;
+  }
+
+  for (const size_t node : scenario.proof_nodes)
+  {
+    scenario.nodes[node].flags |= FLAG_PROOF;
   }
 }
 
@@ -442,8 +472,9 @@ static void write_data(
     throw std::runtime_error("could not open " + output.string());
   }
 
-  stream << R"({"schemaVersion":3,"tileWidth":)" << TILE_WIDTH
-         << ",\"scenarios\":[";
+  stream << R"({"schemaVersion":4,"tileWidth":)" << TILE_WIDTH
+         << R"(,"flags":{"tile":1,"frontier":2,"proof":4,)"
+         << R"("first":8,"second":16},"scenarios":[)";
   for (size_t scenario_index = 0; scenario_index < scenarios.size();
        scenario_index++)
   {
@@ -454,8 +485,7 @@ static void write_data(
     stream << ",\"description\":" << std::quoted(scenario.description);
     stream << ",\"takeaway\":" << std::quoted(scenario.takeaway);
     stream << ",\"type\":"
-           << std::quoted(
-                scenario.second_index ? "consistency" : "inclusion");
+           << std::quoted(scenario.second_index ? "consistency" : "inclusion");
     stream << ",\"leaves\":" << scenario.leaves;
     stream << ",\"focus\":" << scenario.focus;
     if (scenario.second_index)
@@ -465,26 +495,38 @@ static void write_data(
     stream << ",\"covered\":" << scenario.covered;
     stream << ",\"frontierStart\":" << scenario.frontier_start;
     stream << ",\"mapLeaves\":" << scenario.map_leaves;
-    stream << ",\"nodes\":[";
-    for (size_t node_index = 0; node_index < scenario.nodes.size(); node_index++)
+
+    stream << ",\"tiles\":[";
+    for (size_t index = 0; index < scenario.tile_files.size(); index++)
     {
-      const Scenario::Node& node = scenario.nodes[node_index];
-      stream << (node_index == 0 ? "{" : ",{");
-      stream << "\"lo\":" << node.lo << ",\"hi\":" << node.hi;
-      stream << ",\"depth\":" << node.depth << ",\"parent\":" << node.parent;
-      stream << ",\"source\":" << std::quoted(node.source);
-      stream << ",\"overlap\":" << (node.overlap ? "true" : "false");
-      stream << ",\"proof\":" << (node.proof ? "true" : "false");
-      stream << ",\"endpoint\":";
-      if (node.endpoint == '\0')
+      const auto& ref = scenario.tile_files[index];
+      stream << (index == 0 ? "[" : ",[")
+             << static_cast<unsigned>(ref.first) << ',' << ref.second << ']';
+    }
+    stream << ']';
+
+    const auto column = [&](const char* name, const auto& select) {
+      stream << ",\"" << name << "\":[";
+      for (size_t index = 0; index < scenario.nodes.size(); index++)
       {
-        stream << "\"\"";
+        if (index != 0)
+        {
+          stream << ',';
+        }
+        stream << select(scenario.nodes[index]);
       }
-      else
-      {
-        stream << '"' << node.endpoint << '"';
-      }
-      stream << "}";
+      stream << ']';
+    };
+    column("lo", [](const Scenario::Node& node) { return node.lo; });
+    column("hi", [](const Scenario::Node& node) { return node.hi; });
+    column("depth", [](const Scenario::Node& node) { return node.depth; });
+    column("parent", [](const Scenario::Node& node) { return node.parent; });
+    column("flags", [](const Scenario::Node& node) { return node.flags; });
+
+    stream << ",\"proof\":[";
+    for (size_t index = 0; index < scenario.proof_nodes.size(); index++)
+    {
+      stream << (index == 0 ? "" : ",") << scenario.proof_nodes[index];
     }
     stream << "]}";
   }
@@ -514,7 +556,9 @@ int main(int argc, char** argv)
     for (Scenario& scenario : scenarios)
     {
       run_scenario(temporary_directory.path() / scenario.id, scenario, hashes);
-      std::cout << scenario.id << ": " << scenario.nodes.size() << " nodes\n";
+      std::cout << scenario.id << ": " << scenario.nodes.size() << " nodes, "
+                << scenario.proof_nodes.size() << " proof elements, "
+                << scenario.tile_files.size() << " tiles\n";
     }
     write_data(output, scenarios);
     std::cout << "wrote " << output << '\n';

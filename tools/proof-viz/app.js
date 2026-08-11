@@ -9,9 +9,32 @@ const scenarioRoot = document.querySelector("#scenarios");
     }
 
     const data = await response.json();
-    if (data.schemaVersion !== 3 || !Array.isArray(data.scenarios)) {
+    if (data.schemaVersion !== 4 || !Array.isArray(data.scenarios)) {
         throw new Error("Proof visualization data is missing");
     }
+
+    // Nodes arrive as parallel columns with one bitmask each. The tile and
+    // frontier bits are what those two stores answered for that range, so a
+    // node carrying both really is served by either; the proof bit marks the
+    // ranges the returned proof actually used.
+    const { tile, frontier, proof, first, second } = data.flags;
+    data.scenarios.forEach((scenario) => {
+        scenario.nodes = scenario.lo.map((lo, index) => {
+            const bits = scenario.flags[index];
+            return {
+                lo,
+                hi: scenario.hi[index],
+                depth: scenario.depth[index],
+                parent: scenario.parent[index],
+                source: (bits & frontier) ? "frontier" : (bits & tile) ? "tile" : "computed",
+                overlap: (bits & (tile | frontier)) === (tile | frontier),
+                proof: (bits & proof) !== 0,
+                endpoint: (bits & first)
+                    ? (scenario.type === "consistency" ? "A" : "T")
+                    : (bits & second) ? "B" : ""
+            };
+        });
+    });
 
     const canvasColorNames = [
         "tile", "frontier", "computed", "proof", "endpoint",
@@ -290,14 +313,14 @@ const scenarioRoot = document.querySelector("#scenarios");
         if (scenario.type === "inclusion") {
             facts.append(
                 fact("Leaves", number.format(scenario.leaves)),
-                fact("Tiled prefix", number.format(scenario.covered)),
+                fact("Tiled prefix", `${number.format(scenario.covered)} · ${number.format(scenario.tiles.length)} tiles`),
                 fact("Frontier begins", number.format(scenario.frontierStart)),
                 fact("Target leaf", number.format(scenario.focus))
             );
         } else {
             facts.append(
                 fact("Backing leaves", number.format(scenario.leaves)),
-                fact("Tiled prefix", number.format(scenario.covered)),
+                fact("Tiled prefix", `${number.format(scenario.covered)} · ${number.format(scenario.tiles.length)} tiles`),
                 fact("Earlier leaf A", `index ${number.format(scenario.focus)} · tree ends at A`),
                 fact("Later leaf B", `index ${number.format(scenario.secondIndex)} · tree ends at B`)
             );
@@ -317,8 +340,7 @@ const scenarioRoot = document.querySelector("#scenarios");
             ? "<strong>Leaf-to-leaf consistency</strong> / A and B anchor the two tree states"
             : "<strong>Node map</strong> / root to leaves";
         const mapMeta = document.createElement("span");
-        const proofElements = scenario.nodes.filter((node) => node.proof).length;
-        mapMeta.textContent = `${number.format(scenario.nodes.length)} nodes · ${number.format(proofElements)} proof elements`;
+        mapMeta.textContent = `${number.format(scenario.nodes.length)} nodes · ${number.format(scenario.proof.length)} proof elements`;
         visualHead.append(mapTitle, mapMeta);
 
         const scroll = document.createElement("div");
