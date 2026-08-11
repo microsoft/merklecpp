@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
 #include <optional>
@@ -29,6 +30,10 @@ using merkle::tiles::TILE_WIDTH;
 using merkle::tiles::TileHashSource;
 using merkle::tiles::TileStore;
 using merkle::tiles::TileWriter;
+
+static_assert(
+  std::numeric_limits<size_t>::digits <=
+  std::numeric_limits<uint64_t>::digits);
 
 struct Attempt
 {
@@ -67,10 +72,10 @@ struct Scenario
   std::string title;
   std::string description;
   std::string takeaway;
-  uint64_t order;
-  uint64_t leaves;
-  uint64_t focus;
-  std::optional<uint64_t> second_index;
+  size_t order;
+  size_t leaves;
+  size_t focus;
+  std::optional<size_t> second_index;
   Attempts attempts;
 };
 
@@ -132,7 +137,7 @@ static Scenario read_scenario(const fs::path& path)
   }
 
   const auto number = [&](size_t index) {
-    uint64_t value = 0;
+    size_t value = 0;
     const auto [end, parse_error] = std::from_chars(
       values[index].data(), values[index].data() + values[index].size(), value);
     if (
@@ -250,26 +255,30 @@ static void run_scenario(
   TileStore store(directory);
   TileWriter writer(store);
   const auto leaf_at = [&](uint64_t index) -> const Hash& {
-    return hashes.at(static_cast<size_t>(index));
+    if (index >= hashes.size())
+    {
+      throw std::runtime_error("leaf index exceeds resident hash range");
+    }
+    return hashes[static_cast<size_t>(index)];
   };
   writer.write_up_to(scenario.leaves, leaf_at);
 
   merkle::Tree oracle;
   merkle::Tree frontier;
-  for (uint64_t index = 0; index < scenario.leaves; index++)
+  for (size_t index = 0; index < scenario.leaves; index++)
   {
-    oracle.insert(hashes.at(static_cast<size_t>(index)));
-    frontier.insert(hashes.at(static_cast<size_t>(index)));
+    oracle.insert(hashes.at(index));
+    frontier.insert(hashes.at(index));
   }
-  const uint64_t covered = (scenario.leaves / TILE_WIDTH) * TILE_WIDTH;
-  uint64_t frontier_start = covered;
+  const size_t covered = (scenario.leaves / TILE_WIDTH) * TILE_WIDTH;
+  size_t frontier_start = covered;
   if (frontier_start >= scenario.leaves)
   {
     frontier_start = scenario.leaves - 1;
   }
   if (frontier_start > 0)
   {
-    frontier.flush_to(static_cast<size_t>(frontier_start));
+    frontier.flush_to(frontier_start);
   }
 
   const MemoryHashSource memory(frontier);
@@ -296,7 +305,7 @@ static void run_scenario(
   }
   else
   {
-    const uint64_t second_index = *scenario.second_index;
+    const size_t second_index = *scenario.second_index;
     const Hash first_root = *oracle.past_root(scenario.focus);
     const Hash second_root = *oracle.past_root(second_index);
     const auto proof =
@@ -370,7 +379,7 @@ int main(int argc, char** argv)
     size_t max_leaves = 0;
     for (const Scenario& scenario : scenarios)
     {
-      max_leaves = std::max(max_leaves, static_cast<size_t>(scenario.leaves));
+      max_leaves = std::max(max_leaves, scenario.leaves);
     }
     const TemporaryDirectory temporary_directory("merklecpp_proof_viz");
     const auto hashes = make_hashes(max_leaves);
