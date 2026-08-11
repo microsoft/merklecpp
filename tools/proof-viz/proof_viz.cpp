@@ -85,10 +85,10 @@ struct Scenario
 
   /// The full tiles that reached disk, as (level, index) pairs.
   std::vector<std::pair<uint8_t, uint64_t>> tile_files;
-
-  /// Node id of each distinct range, so the two trees share their nodes.
-  std::map<std::pair<uint64_t, uint64_t>, size_t> by_range;
 };
+
+/// @brief Node id of each distinct range, so the two trees share their nodes.
+using RangeIndex = std::map<std::pair<uint64_t, uint64_t>, size_t>;
 
 /// @brief Adds the RFC 6962 decomposition of [lo, hi) to the node map,
 /// splitting at the largest power of two below the width.
@@ -103,20 +103,20 @@ struct Scenario
 // NOLINTNEXTLINE(misc-no-recursion) -- mirrors the bounded binary node tree.
 static size_t decompose(
   Scenario& scenario,
+  RangeIndex& by_range,
   uint64_t lo,
   uint64_t hi,
   int64_t parent,
   uint32_t membership)
 {
   const auto key = std::make_pair(lo, hi);
-  const auto existing = scenario.by_range.find(key);
-  if (existing == scenario.by_range.end())
+  if (!by_range.contains(key))
   {
-    scenario.by_range.emplace(key, scenario.nodes.size());
-    scenario.nodes.push_back(Scenario::Node{lo, hi});
+    by_range.emplace(key, scenario.nodes.size());
+    scenario.nodes.push_back(Scenario::Node{.lo = lo, .hi = hi});
   }
 
-  const size_t index = scenario.by_range.at(key);
+  const size_t index = by_range.at(key);
   Scenario::Node& node = scenario.nodes[index];
   if ((node.flags & membership) != 0)
   {
@@ -136,9 +136,9 @@ static size_t decompose(
   {
     const uint64_t split = lo + std::bit_floor(hi - lo - 1);
     const auto left = decompose(
-      scenario, lo, split, static_cast<int64_t>(index), membership);
+      scenario, by_range, lo, split, static_cast<int64_t>(index), membership);
     const auto right = decompose(
-      scenario, split, hi, static_cast<int64_t>(index), membership);
+      scenario, by_range, split, hi, static_cast<int64_t>(index), membership);
     scenario.nodes[index].left = static_cast<int64_t>(left);
     scenario.nodes[index].right = static_cast<int64_t>(right);
   }
@@ -206,8 +206,8 @@ static const Hash& fill_digest(Scenario& scenario, size_t index)
     throw std::runtime_error("unresolved leaf range in " + scenario.id);
   }
 
-  const Hash lo = fill_digest(scenario, static_cast<size_t>(left));
-  const Hash hi = fill_digest(scenario, static_cast<size_t>(right));
+  const Hash& lo = fill_digest(scenario, static_cast<size_t>(left));
+  const Hash& hi = fill_digest(scenario, static_cast<size_t>(right));
   merkle::sha256(lo, hi, scenario.nodes[index].digest);
   scenario.nodes[index].resolved = true;
   return scenario.nodes[index].digest;
@@ -325,14 +325,13 @@ static Scenario read_scenario(const fs::path& path)
   }
 
   Scenario scenario{
-    std::move(values[0]),
-    std::move(values[2]),
-    std::move(values[3]),
-    std::move(values[4]),
-    number(5),
-    number(6),
-    number(7),
-    std::nullopt};
+    .id = std::move(values[0]),
+    .title = std::move(values[2]),
+    .description = std::move(values[3]),
+    .takeaway = std::move(values[4]),
+    .order = number(5),
+    .leaves = number(6),
+    .focus = number(7)};
 
   if (scenario.focus >= scenario.leaves)
   {
@@ -432,12 +431,13 @@ static void run_scenario(
   scenario.map_leaves =
     scenario.second_index ? *scenario.second_index + 1 : scenario.leaves;
   scenario.nodes.clear();
-  scenario.by_range.clear();
   scenario.nodes.reserve(scenario.map_leaves * 2);
-  scenario.second_root =
-    decompose(scenario, 0, scenario.map_leaves, -1, FLAG_IN_SECOND_TREE);
+  RangeIndex by_range;
+  scenario.second_root = decompose(
+    scenario, by_range, 0, scenario.map_leaves, -1, FLAG_IN_SECOND_TREE);
   scenario.first_root = scenario.second_index ?
-    decompose(scenario, 0, scenario.focus + 1, -1, FLAG_IN_FIRST_TREE) :
+    decompose(
+      scenario, by_range, 0, scenario.focus + 1, -1, FLAG_IN_FIRST_TREE) :
     scenario.second_root;
   classify_nodes(scenario, tiles, memory);
   for (size_t index = 0; index < scenario.nodes.size(); index++)

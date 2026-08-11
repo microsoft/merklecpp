@@ -224,26 +224,26 @@ const scenarioRoot = document.querySelector("#scenarios");
                     context.lineTo(current.x, current.y);
                 });
                 context.stroke();
-            }
 
-            // How the old root is reached. Wherever the two trees combine a
-            // range with a different sibling, the old tree's own edge is drawn
-            // on top, so the folds that rebuild the old root can be traced
-            // from the proof elements that feed them.
-            context.save();
-            context.lineWidth = 1.4;
-            context.strokeStyle = colors.primary;
-            context.setLineDash([3, 3]);
-            context.beginPath();
-            scenario.nodes.forEach((node, index) => {
-                if (node.parentFirst < 0) return;
-                const parent = positions[node.parentFirst];
-                const current = positions[index];
-                context.moveTo(parent.x, parent.y);
-                context.lineTo(current.x, current.y);
-            });
-            context.stroke();
-            context.restore();
+                // How the old root is reached. Wherever the two trees combine a
+                // range with a different sibling, the old tree's own edge is
+                // drawn on top, so the folds that rebuild the old root can be
+                // traced from the proof elements that feed them.
+                context.save();
+                context.lineWidth = 1.4;
+                context.strokeStyle = colors.primary;
+                context.setLineDash([3, 3]);
+                context.beginPath();
+                scenario.nodes.forEach((node, index) => {
+                    if (node.parentFirst < 0) return;
+                    const parent = positions[node.parentFirst];
+                    const current = positions[index];
+                    context.moveTo(parent.x, parent.y);
+                    context.lineTo(current.x, current.y);
+                });
+                context.stroke();
+                context.restore();
+            }
 
             const baseSize = scenario.mapLeaves > 400 ? 3 : 3.6;
             hitTargets = [];
