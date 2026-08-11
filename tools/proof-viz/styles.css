@@ -268,12 +268,13 @@ h1 {
     background: var(--frontier);
 }
 
-.swatch--computed {
-    background: var(--computed);
-}
-
 .swatch--proof {
     background: var(--proof);
+}
+
+.swatch--spine {
+    border: 1px solid var(--endpoint);
+    background: transparent;
 }
 
 .swatch--endpoint {

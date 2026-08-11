@@ -2,7 +2,7 @@ name: near-boundary
 proof: inclusion
 title: One leaf short of the next tile
 description: At 511 leaves, the first tile is durable and the next 255 leaves still form the frontier.
-takeaway: The long blue frontier is not itself a perfect subtree. The engine assembles it from smaller resident ranges before joining the green past.
+takeaway: The 255-leaf frontier is not a perfect subtree, so no single lookup answers it: seven blue resident ranges of doubling size stack up before one green 256-leaf sibling closes the proof.
 order: 4
 leaves: 511
 focus: 510
