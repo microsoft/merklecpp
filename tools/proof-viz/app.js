@@ -9,7 +9,7 @@ const scenarioRoot = document.querySelector("#scenarios");
     }
 
     const data = await response.json();
-    if (data.schemaVersion !== 4 || !Array.isArray(data.scenarios)) {
+    if (data.schemaVersion !== 5 || !Array.isArray(data.scenarios)) {
         throw new Error("Proof visualization data is missing");
     }
 
@@ -17,18 +17,26 @@ const scenarioRoot = document.querySelector("#scenarios");
     // frontier bits are what those two stores answered for that range, so a
     // node carrying both really is served by either; the proof bit marks the
     // ranges the returned proof actually used.
-    const { tile, frontier, proof, first, second } = data.flags;
+    //
+    // A consistency scene draws both trees. Ranges the smaller tree folds its
+    // proof elements into are absent from the larger tree unless its size is
+    // an aligned power of two, so they are drawn as individual nodes with no
+    // edges: they belong to a structure this map does not otherwise show.
+    const { tile, frontier, proof, first, second, inFirstTree, inSecondTree } = data.flags;
     data.scenarios.forEach((scenario) => {
         scenario.nodes = scenario.lo.map((lo, index) => {
             const bits = scenario.flags[index];
             return {
                 lo,
                 hi: scenario.hi[index],
-                depth: scenario.depth[index],
+                height: scenario.height[index],
                 parent: scenario.parent[index],
                 source: (bits & frontier) ? "frontier" : (bits & tile) ? "tile" : "computed",
                 overlap: (bits & (tile | frontier)) === (tile | frontier),
                 proof: (bits & proof) !== 0,
+                inFirst: (bits & inFirstTree) !== 0,
+                inSecond: (bits & inSecondTree) !== 0,
+                isRoot: index === scenario.firstRoot || index === scenario.secondRoot,
                 endpoint: (bits & first)
                     ? (scenario.type === "consistency" ? "A" : "T")
                     : (bits & second) ? "B" : ""
@@ -80,7 +88,7 @@ const scenarioRoot = document.querySelector("#scenarios");
         return wrapper;
     }
 
-    function tooltipText(node) {
+    function tooltipText(node, scenario) {
         const span = node.hi - node.lo;
         const roles = [];
         if (node.proof) roles.push("returned proof element");
@@ -95,14 +103,26 @@ const scenarioRoot = document.querySelector("#scenarios");
             : node.source === "frontier"
                 ? "resident frontier"
                 : "computed from child ranges";
+
+        const trees = [];
+        if (scenario.type === "consistency") {
+            if (node.inFirst && !node.inSecond) {
+                trees.push("only in the tree ending at A: rebuilt by folding proof elements");
+            } else if (node.inFirst && node.inSecond) {
+                trees.push("shared by both trees");
+            }
+            if (node.isRoot) {
+                trees.push(node.hi === scenario.focus + 1 ? "root of A" : "root of B");
+            }
+        }
         return {
             title: `[${number.format(node.lo)}, ${number.format(node.hi)})`,
-            detail: `${number.format(span)} ${span === 1 ? "leaf" : "leaves"} · ${source} · ${roles.join(" · ")}`
+            detail: `${number.format(span)} ${span === 1 ? "leaf" : "leaves"} · ${source} · ${roles.concat(trees).join(" · ")}`
         };
     }
 
-    function showTooltip(event, node) {
-        const text = tooltipText(node);
+    function showTooltip(event, node, scenario) {
+        const text = tooltipText(node, scenario);
         tooltip.replaceChildren();
         const title = document.createElement("b");
         title.textContent = text.title;
@@ -126,13 +146,13 @@ const scenarioRoot = document.querySelector("#scenarios");
         let hitTargets = [];
 
         function draw() {
-            const maxDepth = Math.max(...scenario.nodes.map((node) => node.depth));
+            const maxHeight = Math.max(...scenario.nodes.map((node) => node.height));
             const minimumWidth = Math.max(660, Math.ceil(scenario.mapLeaves * 2.35 + 88));
             const availableWidth = scroll.clientWidth - 2;
             const cssWidth = window.innerWidth > 980
                 ? availableWidth
                 : Math.max(availableWidth, minimumWidth);
-            const cssHeight = Math.max(270, (maxDepth + 1) * 22 + 64);
+            const cssHeight = Math.max(270, (maxHeight + 1) * 22 + 64);
             const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
 
             canvas.width = Math.round(cssWidth * pixelRatio);
@@ -146,9 +166,13 @@ const scenarioRoot = document.querySelector("#scenarios");
             const plot = { left: 42, right: 22, top: 25, bottom: 38 };
             const plotWidth = cssWidth - plot.left - plot.right;
             const plotHeight = cssHeight - plot.top - plot.bottom;
+            // Rank by height above the leaves, not depth below the root, so
+            // every leaf shares the bottom row: the decomposition is
+            // unbalanced, and a ragged range reaches its leaves in fewer
+            // splits than a perfect one.
             const positions = scenario.nodes.map((node) => ({
                 x: plot.left + (((node.lo + node.hi) / 2) / scenario.mapLeaves) * plotWidth,
-                y: plot.top + (node.depth / Math.max(maxDepth, 1)) * plotHeight
+                y: plot.top + ((maxHeight - node.height) / Math.max(maxHeight, 1)) * plotHeight
             }));
 
             if (scenario.covered > 0 && scenario.covered < scenario.mapLeaves) {
@@ -220,6 +244,23 @@ const scenarioRoot = document.querySelector("#scenarios");
                     baseSize
                 );
 
+                // Nodes that exist only in the tree ending at A: the ranges a
+                // verifier folds the proof back into. Ringed rather than
+                // filled, since they carry no edges in this map.
+                if (node.inFirst && !node.inSecond) {
+                    const ringSize = baseSize + 5;
+                    context.save();
+                    context.strokeStyle = colors.endpoint;
+                    context.lineWidth = 1.2;
+                    context.strokeRect(
+                        position.x - ringSize / 2,
+                        position.y - ringSize / 2,
+                        ringSize,
+                        ringSize
+                    );
+                    context.restore();
+                }
+
                 if (node.endpoint) {
                     const markerSize = baseSize + 8;
                     context.save();
@@ -272,7 +313,7 @@ const scenarioRoot = document.querySelector("#scenarios");
                 }
             }
             if (nearest) {
-                showTooltip(event, nearest.node);
+                showTooltip(event, nearest.node, scenario);
             } else {
                 hideTooltip();
             }

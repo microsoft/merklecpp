@@ -39,6 +39,8 @@ static constexpr uint32_t FLAG_FRONTIER = 1U << 1;
 static constexpr uint32_t FLAG_PROOF = 1U << 2;
 static constexpr uint32_t FLAG_FIRST = 1U << 3;
 static constexpr uint32_t FLAG_SECOND = 1U << 4;
+static constexpr uint32_t FLAG_IN_FIRST_TREE = 1U << 5;
+static constexpr uint32_t FLAG_IN_SECOND_TREE = 1U << 6;
 
 struct Scenario
 {
@@ -58,13 +60,14 @@ struct Scenario
   {
     uint64_t lo = 0;
     uint64_t hi = 0;
-    uint32_t depth = 0;
     int64_t parent = -1;
     int64_t left = -1;
     int64_t right = -1;
     uint32_t flags = 0;
     Hash digest;
     bool resolved = false;
+    uint32_t height = 0;
+    bool measured = false;
   };
   std::vector<Node> nodes;
 
@@ -72,34 +75,64 @@ struct Scenario
   /// them.
   std::vector<size_t> proof_nodes;
 
+  /// Node ids of the two roots the proof reconciles. For an inclusion proof
+  /// both name the single tree that was proven against.
+  size_t first_root = 0;
+  size_t second_root = 0;
+
   /// The full tiles that reached disk, as (level, index) pairs.
   std::vector<std::pair<uint8_t, uint64_t>> tile_files;
+
+  /// Node id of each distinct range, so the two trees share their nodes.
+  std::map<std::pair<uint64_t, uint64_t>, size_t> by_range;
 };
 
-/// @brief Lays out the RFC 6962 decomposition of [lo, hi), splitting at the
-/// largest power of two below the width.
-/// @note Shape only: which nodes a proof uses, and which store can serve them,
-/// are read back from the library rather than predicted here.
+/// @brief Adds the RFC 6962 decomposition of [lo, hi) to the node map,
+/// splitting at the largest power of two below the width.
+/// @note A consistency proof reconciles two trees, and the smaller one has a
+/// right spine of its own: the ranges the verifier folds proof elements into
+/// to recover the first root. Those ranges are absent from the larger tree
+/// whenever its size is not an aligned power of two, so both decompositions
+/// are merged here and each node records which trees it belongs to. The split
+/// point depends only on the range, so a range shared by both trees has the
+/// same children in both and is stored once.
 // NOLINTNEXTLINE(misc-no-recursion) -- mirrors the bounded binary node tree.
-static size_t build_nodes(
-  std::vector<Scenario::Node>& nodes,
+static size_t decompose(
+  Scenario& scenario,
   uint64_t lo,
   uint64_t hi,
-  uint32_t depth,
-  int64_t parent)
+  int64_t parent,
+  uint32_t membership)
 {
-  const size_t index = nodes.size();
-  nodes.push_back(Scenario::Node{lo, hi, depth, parent});
+  const auto key = std::make_pair(lo, hi);
+  const auto existing = scenario.by_range.find(key);
+  if (existing != scenario.by_range.end())
+  {
+    Scenario::Node& node = scenario.nodes[existing->second];
+    if ((node.flags & membership) != 0)
+    {
+      return existing->second;
+    }
+    node.flags |= membership;
+  }
+  else
+  {
+    const size_t added = scenario.nodes.size();
+    scenario.nodes.push_back(Scenario::Node{lo, hi, parent});
+    scenario.nodes[added].flags = membership;
+    scenario.by_range.emplace(key, added);
+  }
 
+  const size_t index = scenario.by_range.at(key);
   if (hi - lo > 1)
   {
     const uint64_t split = lo + std::bit_floor(hi - lo - 1);
-    const auto left =
-      build_nodes(nodes, lo, split, depth + 1, static_cast<int64_t>(index));
-    const auto right =
-      build_nodes(nodes, split, hi, depth + 1, static_cast<int64_t>(index));
-    nodes[index].left = static_cast<int64_t>(left);
-    nodes[index].right = static_cast<int64_t>(right);
+    const auto left = decompose(
+      scenario, lo, split, static_cast<int64_t>(index), membership);
+    const auto right = decompose(
+      scenario, split, hi, static_cast<int64_t>(index), membership);
+    scenario.nodes[index].left = static_cast<int64_t>(left);
+    scenario.nodes[index].right = static_cast<int64_t>(right);
   }
   return index;
 }
@@ -147,28 +180,110 @@ static void classify_nodes(
   }
 }
 
-/// @brief Fills in the digests of the ranges no store can serve directly.
-/// @note These are exactly the ranges the proof engine has to recombine. Nodes
-/// are laid out in pre-order, so a reverse pass always sees children first.
-static void fill_digests(Scenario& scenario)
+/// @brief Fills in the digest of a range no store could serve directly.
+/// @note These are exactly the ranges the proof engine has to recombine. The
+/// two merged decompositions share nodes, so a node can precede its children;
+/// recursing rather than sweeping the vector keeps the fold order correct.
+// NOLINTNEXTLINE(misc-no-recursion) -- bounded by the node tree depth.
+static const Hash& fill_digest(Scenario& scenario, size_t index)
 {
-  for (size_t index = scenario.nodes.size(); index-- > 0;)
+  if (scenario.nodes[index].resolved)
   {
-    Scenario::Node& node = scenario.nodes[index];
-    if (node.resolved || node.left < 0)
-    {
-      continue;
-    }
-
-    const Scenario::Node& left = scenario.nodes[node.left];
-    const Scenario::Node& right = scenario.nodes[node.right];
-    if (!left.resolved || !right.resolved)
-    {
-      throw std::runtime_error("unresolved child range in " + scenario.id);
-    }
-    merkle::sha256(left.digest, right.digest, node.digest);
-    node.resolved = true;
+    return scenario.nodes[index].digest;
   }
+  const int64_t left = scenario.nodes[index].left;
+  const int64_t right = scenario.nodes[index].right;
+  if (left < 0 || right < 0)
+  {
+    throw std::runtime_error("unresolved leaf range in " + scenario.id);
+  }
+
+  const Hash lo = fill_digest(scenario, static_cast<size_t>(left));
+  const Hash hi = fill_digest(scenario, static_cast<size_t>(right));
+  merkle::sha256(lo, hi, scenario.nodes[index].digest);
+  scenario.nodes[index].resolved = true;
+  return scenario.nodes[index].digest;
+}
+
+/// @brief Measures each node's distance to the leaves below it.
+/// @note Positions are drawn from this rather than from depth so that every
+/// leaf shares a baseline. The decomposition is unbalanced, so a ragged
+/// right-hand range sits fewer splits below the root than a perfect one, and
+/// ranking by depth would leave its leaves floating above the others.
+// NOLINTNEXTLINE(misc-no-recursion) -- bounded by the node tree depth.
+static uint32_t measure_height(Scenario& scenario, size_t index)
+{
+  if (scenario.nodes[index].measured)
+  {
+    return scenario.nodes[index].height;
+  }
+  const int64_t left = scenario.nodes[index].left;
+  const int64_t right = scenario.nodes[index].right;
+
+  uint32_t height = 0;
+  if (left >= 0 && right >= 0)
+  {
+    height = 1 +
+      std::max(
+               measure_height(scenario, static_cast<size_t>(left)),
+               measure_height(scenario, static_cast<size_t>(right)));
+  }
+  scenario.nodes[index].height = height;
+  scenario.nodes[index].measured = true;
+  return height;
+}
+
+/// @brief Drops the interior ranges that carry no information.
+/// @note What is left is every range a store could answer, every range the
+/// proof returned, the selected leaves, the two roots, and the first tree's
+/// spine. The remainder is the ragged right-hand scaffolding of the
+/// decomposition: ranges no store holds and no proof names, which exist only
+/// because the tree size is not a power of two. Edges are re-pointed at the
+/// nearest surviving ancestor so the drawn structure stays connected.
+static void prune_scaffolding(Scenario& scenario)
+{
+  static constexpr uint32_t ROLES = FLAG_PROOF | FLAG_FIRST | FLAG_SECOND;
+  static constexpr uint32_t ANSWERED = FLAG_TILE | FLAG_FRONTIER;
+
+  const size_t count = scenario.nodes.size();
+  std::vector<bool> keep(count, false);
+  for (size_t index = 0; index < count; index++)
+  {
+    const Scenario::Node& node = scenario.nodes[index];
+    keep[index] = (node.flags & (ANSWERED | ROLES)) != 0 ||
+      (node.flags & FLAG_IN_SECOND_TREE) == 0 ||
+      index == scenario.first_root || index == scenario.second_root;
+  }
+
+  std::vector<int64_t> moved(count, -1);
+  std::vector<Scenario::Node> kept;
+  kept.reserve(count);
+  for (size_t index = 0; index < count; index++)
+  {
+    if (keep[index])
+    {
+      moved[index] = static_cast<int64_t>(kept.size());
+      kept.push_back(scenario.nodes[index]);
+    }
+  }
+
+  for (Scenario::Node& node : kept)
+  {
+    int64_t parent = node.parent;
+    while (parent >= 0 && !keep[static_cast<size_t>(parent)])
+    {
+      parent = scenario.nodes[static_cast<size_t>(parent)].parent;
+    }
+    node.parent = parent < 0 ? -1 : moved[static_cast<size_t>(parent)];
+  }
+
+  for (size_t& node : scenario.proof_nodes)
+  {
+    node = static_cast<size_t>(moved[node]);
+  }
+  scenario.first_root = static_cast<size_t>(moved[scenario.first_root]);
+  scenario.second_root = static_cast<size_t>(moved[scenario.second_root]);
+  scenario.nodes = std::move(kept);
 }
 
 /// @brief Lists the full tiles that reached disk.
@@ -204,69 +319,56 @@ static Scenario read_scenario(const fs::path& path)
     "leaves",
     "focus",
     "second"};
+
   std::ifstream stream(path);
   if (!stream)
   {
     throw std::runtime_error("could not open " + path.string());
   }
-  const auto error = [&](size_t line, const std::string& message) {
-    return std::runtime_error(
-      path.string() + ":" + std::to_string(line) + ": " + message);
+  const auto fail = [&](const std::string& message) {
+    return std::runtime_error(path.string() + ": " + message);
   };
 
+  // make_viz.sh checks the lexical shape of these files, so only the
+  // constraints the model itself depends on are enforced here.
   std::array<std::string, keys.size()> values;
   for (size_t index = 0; index < keys.size(); index++)
   {
     std::string line;
-    if (!std::getline(stream, line))
-    {
-      throw error(index + 1, "expected key " + std::string(keys[index]));
-    }
-    if (!line.empty() && line.back() == '\r')
-    {
-      line.pop_back();
-    }
     const std::string prefix = std::string(keys[index]) + ": ";
-    if (line.compare(0, prefix.size(), prefix) != 0)
+    if (!std::getline(stream, line) || !line.starts_with(prefix))
     {
-      throw error(index + 1, "expected key " + std::string(keys[index]));
+      throw fail("expected key " + std::string(keys[index]));
     }
     values[index] = line.substr(prefix.size());
-    if (
-      values[index].empty() || values[index].front() == ' ' ||
-      values[index].back() == ' ' ||
-      std::any_of(
-        values[index].begin(),
-        values[index].end(),
-        [](unsigned char character) { return character < 0x20; }))
+    if (!values[index].empty() && values[index].back() == '\r')
     {
-      throw error(index + 1, "invalid value for " + std::string(keys[index]));
+      values[index].pop_back();
     }
-  }
-  std::string extra;
-  if (std::getline(stream, extra))
-  {
-    throw error(keys.size() + 1, "unexpected extra line");
   }
 
   const auto number = [&](size_t index) {
+    const std::string& text = values[index];
     size_t value = 0;
-    const auto [end, parse_error] = std::from_chars(
-      values[index].data(), values[index].data() + values[index].size(), value);
-    if (
-      parse_error != std::errc{} ||
-      end != values[index].data() + values[index].size())
+    const auto [end, parse_error] =
+      std::from_chars(text.data(), text.data() + text.size(), value);
+    if (parse_error != std::errc{} || end != text.data() + text.size())
     {
-      throw error(
-        index + 1, "invalid unsigned integer for " + std::string(keys[index]));
+      throw fail("invalid number for " + std::string(keys[index]));
     }
     return value;
   };
-  const std::string& proof = values[1];
-  if (proof != "inclusion" && proof != "consistency")
+
+  const bool consistency = values[1] == "consistency";
+  if (!consistency && values[1] != "inclusion")
   {
-    throw error(2, "proof must be inclusion or consistency");
+    throw fail("proof must be inclusion or consistency");
   }
+  if (consistency != (values[8] != "none"))
+  {
+    throw fail("a second index is required for consistency proofs only");
+  }
+
   Scenario scenario{
     std::move(values[0]),
     std::move(values[2]),
@@ -276,46 +378,20 @@ static Scenario read_scenario(const fs::path& path)
     number(6),
     number(7),
     std::nullopt};
-  const std::string& second = values[8];
 
-  if (proof == "inclusion")
-  {
-    if (second != "none")
-    {
-      throw error(9, "inclusion proof requires second: none");
-    }
-  }
-  else
-  {
-    if (second == "none")
-    {
-      throw error(9, "consistency proof requires a second index");
-    }
-    scenario.second_index = number(8);
-  }
-
-  if (path.stem() != scenario.id)
-  {
-    throw error(1, "name must match the file name");
-  }
-  if (scenario.order == 0)
-  {
-    throw error(6, "order must be greater than zero");
-  }
-  if (scenario.leaves == 0)
-  {
-    throw error(7, "leaves must be greater than zero");
-  }
   if (scenario.focus >= scenario.leaves)
   {
-    throw error(8, "focus must be less than leaves");
+    throw fail("focus must be less than leaves");
   }
-  if (
-    scenario.second_index &&
-    (scenario.focus >= *scenario.second_index ||
-     *scenario.second_index >= scenario.leaves))
+  if (consistency)
   {
-    throw error(9, "invalid consistency indices");
+    scenario.second_index = number(8);
+    if (
+      scenario.focus >= *scenario.second_index ||
+      *scenario.second_index >= scenario.leaves)
+    {
+      throw fail("consistency needs focus < second < leaves");
+    }
   }
   return scenario;
 }
@@ -401,10 +477,30 @@ static void run_scenario(
   scenario.map_leaves =
     scenario.second_index ? *scenario.second_index + 1 : scenario.leaves;
   scenario.nodes.clear();
-  scenario.nodes.reserve(scenario.map_leaves * 2 - 1);
-  build_nodes(scenario.nodes, 0, scenario.map_leaves, 0, -1);
+  scenario.by_range.clear();
+  scenario.nodes.reserve(scenario.map_leaves * 2);
+  scenario.second_root =
+    decompose(scenario, 0, scenario.map_leaves, -1, FLAG_IN_SECOND_TREE);
+  scenario.first_root = scenario.second_index ?
+    decompose(scenario, 0, scenario.focus + 1, -1, FLAG_IN_FIRST_TREE) :
+    scenario.second_root;
   classify_nodes(scenario, tiles, memory);
-  fill_digests(scenario);
+  for (size_t index = 0; index < scenario.nodes.size(); index++)
+  {
+    fill_digest(scenario, index);
+    measure_height(scenario, index);
+  }
+
+  // Edges describe the drawn tree only. A node that exists solely in the first
+  // tree has a parent there but not here, so it is left unattached and drawn
+  // on its own rather than joined into a structure it is not part of.
+  for (Scenario::Node& node : scenario.nodes)
+  {
+    if ((node.flags & FLAG_IN_SECOND_TREE) == 0)
+    {
+      node.parent = -1;
+    }
+  }
 
   // SHA-256 digests are unique, so a proof element identifies its node.
   std::map<std::string, size_t> by_digest;
@@ -430,6 +526,10 @@ static void run_scenario(
     {
       throw std::runtime_error("inclusion proof mismatch for " + scenario.id);
     }
+    if (scenario.nodes[scenario.second_root].digest != root)
+    {
+      throw std::runtime_error("root mismatch for " + scenario.id);
+    }
     for (size_t index = 0; index < proof->size(); index++)
     {
       scenario.proof_nodes.push_back(locate((*proof)[index]));
@@ -449,6 +549,14 @@ static void run_scenario(
     {
       throw std::runtime_error("consistency proof mismatch for " + scenario.id);
     }
+    // Both trees are drawn, so both roots must be nodes of the map: the folds
+    // a verifier performs all land on ranges that are on screen.
+    if (
+      scenario.nodes[scenario.first_root].digest != first_root ||
+      scenario.nodes[scenario.second_root].digest != second_root)
+    {
+      throw std::runtime_error("root mismatch for " + scenario.id);
+    }
     for (const Hash& element : proof)
     {
       scenario.proof_nodes.push_back(locate(element));
@@ -461,6 +569,7 @@ static void run_scenario(
   {
     scenario.nodes[node].flags |= FLAG_PROOF;
   }
+  prune_scaffolding(scenario);
 }
 
 static void write_data(
@@ -472,9 +581,9 @@ static void write_data(
     throw std::runtime_error("could not open " + output.string());
   }
 
-  stream << R"({"schemaVersion":4,"tileWidth":)" << TILE_WIDTH
-         << R"(,"flags":{"tile":1,"frontier":2,"proof":4,)"
-         << R"("first":8,"second":16},"scenarios":[)";
+  stream << R"({"schemaVersion":5,"tileWidth":)" << TILE_WIDTH
+         << R"(,"flags":{"tile":1,"frontier":2,"proof":4,"first":8,)"
+         << R"("second":16,"inFirstTree":32,"inSecondTree":64},"scenarios":[)";
   for (size_t scenario_index = 0; scenario_index < scenarios.size();
        scenario_index++)
   {
@@ -495,6 +604,8 @@ static void write_data(
     stream << ",\"covered\":" << scenario.covered;
     stream << ",\"frontierStart\":" << scenario.frontier_start;
     stream << ",\"mapLeaves\":" << scenario.map_leaves;
+    stream << ",\"firstRoot\":" << scenario.first_root;
+    stream << ",\"secondRoot\":" << scenario.second_root;
 
     stream << ",\"tiles\":[";
     for (size_t index = 0; index < scenario.tile_files.size(); index++)
@@ -519,7 +630,7 @@ static void write_data(
     };
     column("lo", [](const Scenario::Node& node) { return node.lo; });
     column("hi", [](const Scenario::Node& node) { return node.hi; });
-    column("depth", [](const Scenario::Node& node) { return node.depth; });
+    column("height", [](const Scenario::Node& node) { return node.height; });
     column("parent", [](const Scenario::Node& node) { return node.parent; });
     column("flags", [](const Scenario::Node& node) { return node.flags; });
 

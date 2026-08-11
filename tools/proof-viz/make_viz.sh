@@ -34,6 +34,40 @@ fi
 
 "$proof_viz" "$script_dir/scenarios" "$output_dir/data.json"
 
+# Lexical checks on the scenario files. proof_viz enforces only what the model
+# depends on, so the strict shape (exact key order, no stray whitespace or
+# control characters, no extra lines) is verified here.
+scenario_keys="name proof title description takeaway order leaves focus second"
+for scenario in "$script_dir"/scenarios/*.scenario; do
+  mapfile -t lines < <(tr -d '\r' < "$scenario")
+  if [[ ${#lines[@]} -ne 9 ]]; then
+    echo "$scenario: expected 9 lines, found ${#lines[@]}" >&2
+    exit 1
+  fi
+  index=0
+  for key in $scenario_keys; do
+    line=${lines[$index]}
+    if [[ $line != "$key: "* ]]; then
+      echo "$scenario:$((index + 1)): expected key '$key'" >&2
+      exit 1
+    fi
+    value=${line#"$key": }
+    if [[ -z $value || $value != "$(printf '%s' "$value" | tr -d '[:cntrl:]')" ]]; then
+      echo "$scenario:$((index + 1)): invalid value for '$key'" >&2
+      exit 1
+    fi
+    if [[ $value != "$(printf '%s' "$value" | sed -e 's/^ *//' -e 's/ *$//')" ]]; then
+      echo "$scenario:$((index + 1)): '$key' has leading or trailing space" >&2
+      exit 1
+    fi
+    index=$((index + 1))
+  done
+  if [[ ${lines[0]} != "name: $(basename "$scenario" .scenario)" ]]; then
+    echo "$scenario:1: name must match the file name" >&2
+    exit 1
+  fi
+done
+
 node --check "$script_dir/app.js"
 
 if [[ "$output_dir" != "$script_dir" ]]; then
