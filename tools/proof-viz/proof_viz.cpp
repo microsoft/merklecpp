@@ -3,13 +3,13 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <charconv>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <limits>
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
 #include <optional>
@@ -23,48 +23,12 @@ namespace fs = std::filesystem;
 
 using merkle::Hash;
 using merkle::tiles::CombinedHashSource;
-using merkle::tiles::HashSource;
 using merkle::tiles::MemoryHashSource;
 using merkle::tiles::ProofEngine;
 using merkle::tiles::TILE_WIDTH;
 using merkle::tiles::TileHashSource;
 using merkle::tiles::TileStore;
 using merkle::tiles::TileWriter;
-
-static_assert(
-  std::numeric_limits<size_t>::digits <=
-  std::numeric_limits<uint64_t>::digits);
-
-struct Attempt
-{
-  std::string source;
-  uint8_t level;
-  uint64_t index;
-  bool success;
-};
-
-using Attempts = std::vector<Attempt>;
-
-class TracingSource : public HashSource
-{
-public:
-  TracingSource(
-    const HashSource& source, std::string name, Attempts& attempts) :
-    source(source), name(std::move(name)), attempts(attempts)
-  {}
-
-  bool subtree_root(uint8_t level, uint64_t index, Hash& out) const override
-  {
-    const bool success = source.subtree_root(level, index, out);
-    attempts.push_back(Attempt{name, level, index, success});
-    return success;
-  }
-
-private:
-  const HashSource& source;
-  std::string name;
-  Attempts& attempts;
-};
 
 struct Scenario
 {
@@ -76,8 +40,167 @@ struct Scenario
   size_t leaves;
   size_t focus;
   std::optional<size_t> second_index;
-  Attempts attempts;
+  size_t covered = 0;
+  size_t frontier_start = 0;
+  size_t map_leaves = 0;
+
+  struct Node
+  {
+    size_t lo;
+    size_t hi;
+    size_t depth;
+    int64_t parent;
+    const char* source;
+    bool overlap = false;
+    bool proof = false;
+    char endpoint = '\0';
+  };
+  std::vector<Node> nodes;
 };
+
+// NOLINTNEXTLINE(misc-no-recursion) -- mirrors the bounded binary node tree.
+static void add_node(
+  Scenario& scenario, size_t lo, size_t hi, size_t depth, int64_t parent)
+{
+  const size_t width = hi - lo;
+  const bool complete = std::has_single_bit(width) && lo % width == 0;
+  const bool in_frontier = complete && lo >= scenario.frontier_start;
+  const bool in_tiles = complete && hi <= scenario.covered;
+  const char* source = "computed";
+  if (in_frontier)
+  {
+    source = "frontier";
+  }
+  else if (in_tiles)
+  {
+    source = "tile";
+  }
+  const size_t index = scenario.nodes.size();
+  scenario.nodes.push_back(Scenario::Node{
+    lo,
+    hi,
+    depth,
+    parent,
+    source,
+    in_frontier && in_tiles});
+
+  if (width > 1)
+  {
+    const size_t split = lo + std::bit_floor(width - 1);
+    add_node(scenario, lo, split, depth + 1, static_cast<int64_t>(index));
+    add_node(scenario, split, hi, depth + 1, static_cast<int64_t>(index));
+  }
+}
+
+static Scenario::Node* find_node(Scenario& scenario, size_t lo, size_t hi)
+{
+  const auto found = std::find_if(
+    scenario.nodes.begin(),
+    scenario.nodes.end(),
+    [&](const Scenario::Node& node) { return node.lo == lo && node.hi == hi; });
+  return found == scenario.nodes.end() ? nullptr : &*found;
+}
+
+static Scenario::Node& node_at(Scenario& scenario, size_t lo, size_t hi)
+{
+  if (Scenario::Node* node = find_node(scenario, lo, hi))
+  {
+    return *node;
+  }
+  throw std::runtime_error(
+    "proof range [" + std::to_string(lo) + ", " + std::to_string(hi) +
+    ") is absent from node map");
+}
+
+// NOLINTNEXTLINE(misc-no-recursion) -- follows one bounded root-to-leaf path.
+static void mark_inclusion(
+  Scenario& scenario, size_t lo, size_t hi, size_t focus)
+{
+  if (hi - lo == 1)
+  {
+    return;
+  }
+
+  const size_t split = lo + std::bit_floor(hi - lo - 1);
+  if (focus < split)
+  {
+    node_at(scenario, split, hi).proof = true;
+    mark_inclusion(scenario, lo, split, focus);
+  }
+  else
+  {
+    node_at(scenario, lo, split).proof = true;
+    mark_inclusion(scenario, split, hi, focus);
+  }
+}
+
+// NOLINTNEXTLINE(misc-no-recursion) -- mirrors the bounded consistency proof.
+static void mark_consistency(
+  Scenario& scenario,
+  size_t first_size,
+  size_t lo,
+  size_t hi,
+  bool complete)
+{
+  if (first_size == hi - lo)
+  {
+    if (!complete)
+    {
+      node_at(scenario, lo, hi).proof = true;
+    }
+    return;
+  }
+
+  const size_t split = lo + std::bit_floor(hi - lo - 1);
+  const size_t left_size = split - lo;
+  if (first_size <= left_size)
+  {
+    mark_consistency(scenario, first_size, lo, split, complete);
+    node_at(scenario, split, hi).proof = true;
+  }
+  else
+  {
+    mark_consistency(
+      scenario, first_size - left_size, split, hi, false);
+    node_at(scenario, lo, split).proof = true;
+  }
+}
+
+static void derive_presentation(Scenario& scenario, size_t proof_size)
+{
+  scenario.map_leaves =
+    scenario.second_index ? *scenario.second_index + 1 : scenario.leaves;
+  scenario.nodes.clear();
+  scenario.nodes.reserve(scenario.map_leaves * 2 - 1);
+  add_node(scenario, 0, scenario.map_leaves, 0, -1);
+
+  if (scenario.second_index)
+  {
+    mark_consistency(
+      scenario, scenario.focus + 1, 0, scenario.map_leaves, true);
+    node_at(scenario, scenario.focus, scenario.focus + 1).endpoint = 'A';
+    node_at(
+      scenario, *scenario.second_index, *scenario.second_index + 1)
+      .endpoint = 'B';
+  }
+  else
+  {
+    mark_inclusion(scenario, 0, scenario.map_leaves, scenario.focus);
+    node_at(scenario, scenario.focus, scenario.focus + 1).endpoint = 'T';
+  }
+
+  const auto marked_proof_nodes = static_cast<size_t>(std::count_if(
+    scenario.nodes.begin(),
+    scenario.nodes.end(),
+    [](const Scenario::Node& node) { return node.proof; }));
+  if (marked_proof_nodes != proof_size)
+  {
+    throw std::runtime_error(
+      "proof role mismatch for " + scenario.id + ": expected " +
+      std::to_string(proof_size) + ", marked " +
+      std::to_string(marked_proof_nodes));
+  }
+}
 
 static Scenario read_scenario(const fs::path& path)
 {
@@ -262,6 +385,9 @@ static void run_scenario(
     return hashes[static_cast<size_t>(index)];
   };
   writer.write_up_to(scenario.leaves, leaf_at);
+  scenario.covered = (scenario.leaves / TILE_WIDTH) * TILE_WIDTH;
+  scenario.frontier_start =
+    std::min(scenario.covered, scenario.leaves - 1);
 
   merkle::Tree oracle;
   merkle::Tree frontier;
@@ -270,38 +396,25 @@ static void run_scenario(
     oracle.insert(hashes.at(index));
     frontier.insert(hashes.at(index));
   }
-  const size_t covered = (scenario.leaves / TILE_WIDTH) * TILE_WIDTH;
-  size_t frontier_start = covered;
-  if (frontier_start >= scenario.leaves)
+  if (scenario.frontier_start > 0)
   {
-    frontier_start = scenario.leaves - 1;
-  }
-  if (frontier_start > 0)
-  {
-    frontier.flush_to(frontier_start);
+    frontier.flush_to(scenario.frontier_start);
   }
 
   const MemoryHashSource memory(frontier);
-  const TileHashSource tiles(store, covered);
-  const TracingSource traced_memory(memory, "frontier", scenario.attempts);
-  const TracingSource traced_tiles(tiles, "tile", scenario.attempts);
-  const CombinedHashSource combined(traced_memory, traced_tiles);
+  const TileHashSource tiles(store, scenario.covered);
+  const CombinedHashSource combined(memory, tiles);
   const ProofEngine engine(combined);
-  const CombinedHashSource control_combined(memory, tiles);
-  const ProofEngine control_engine(control_combined);
 
   if (!scenario.second_index)
   {
     const Hash root = oracle.root();
     const auto proof = engine.inclusion_proof(scenario.focus, scenario.leaves);
-    const auto control_proof =
-      control_engine.inclusion_proof(scenario.focus, scenario.leaves);
-    if (
-      !proof->verify(root) || *proof != *oracle.path(scenario.focus) ||
-      *proof != *control_proof)
+    if (!proof->verify(root) || *proof != *oracle.path(scenario.focus))
     {
       throw std::runtime_error("inclusion proof mismatch for " + scenario.id);
     }
+    derive_presentation(scenario, proof->size());
   }
   else
   {
@@ -310,15 +423,13 @@ static void run_scenario(
     const Hash second_root = *oracle.past_root(second_index);
     const auto proof =
       engine.consistency_proof_from_indices(scenario.focus, second_index);
-    const auto control_proof = control_engine.consistency_proof_from_indices(
-      scenario.focus, second_index);
     if (
-      proof != control_proof ||
       !ProofEngine::verify_consistency(
         scenario.focus + 1, second_index + 1, first_root, second_root, proof))
     {
       throw std::runtime_error("consistency proof mismatch for " + scenario.id);
     }
+    derive_presentation(scenario, proof.size());
   }
 }
 
@@ -331,7 +442,7 @@ static void write_data(
     throw std::runtime_error("could not open " + output.string());
   }
 
-  stream << "{\"schemaVersion\":1,\"tileWidth\":" << TILE_WIDTH
+  stream << R"({"schemaVersion":3,"tileWidth":)" << TILE_WIDTH
          << ",\"scenarios\":[";
   for (size_t scenario_index = 0; scenario_index < scenarios.size();
        scenario_index++)
@@ -342,22 +453,38 @@ static void write_data(
     stream << ",\"title\":" << std::quoted(scenario.title);
     stream << ",\"description\":" << std::quoted(scenario.description);
     stream << ",\"takeaway\":" << std::quoted(scenario.takeaway);
+    stream << ",\"type\":"
+           << std::quoted(
+                scenario.second_index ? "consistency" : "inclusion");
     stream << ",\"leaves\":" << scenario.leaves;
     stream << ",\"focus\":" << scenario.focus;
     if (scenario.second_index)
     {
       stream << ",\"secondIndex\":" << *scenario.second_index;
     }
-    stream << ",\"attempts\":[";
-    for (size_t attempt_index = 0; attempt_index < scenario.attempts.size();
-         attempt_index++)
+    stream << ",\"covered\":" << scenario.covered;
+    stream << ",\"frontierStart\":" << scenario.frontier_start;
+    stream << ",\"mapLeaves\":" << scenario.map_leaves;
+    stream << ",\"nodes\":[";
+    for (size_t node_index = 0; node_index < scenario.nodes.size(); node_index++)
     {
-      const Attempt& attempt = scenario.attempts[attempt_index];
-      stream << (attempt_index == 0 ? "{" : ",{");
-      stream << "\"source\":" << std::quoted(attempt.source)
-             << ",\"level\":" << static_cast<unsigned>(attempt.level)
-             << ",\"index\":" << attempt.index
-             << ",\"success\":" << (attempt.success ? "true" : "false") << "}";
+      const Scenario::Node& node = scenario.nodes[node_index];
+      stream << (node_index == 0 ? "{" : ",{");
+      stream << "\"lo\":" << node.lo << ",\"hi\":" << node.hi;
+      stream << ",\"depth\":" << node.depth << ",\"parent\":" << node.parent;
+      stream << ",\"source\":" << std::quoted(node.source);
+      stream << ",\"overlap\":" << (node.overlap ? "true" : "false");
+      stream << ",\"proof\":" << (node.proof ? "true" : "false");
+      stream << ",\"endpoint\":";
+      if (node.endpoint == '\0')
+      {
+        stream << "\"\"";
+      }
+      else
+      {
+        stream << '"' << node.endpoint << '"';
+      }
+      stream << "}";
     }
     stream << "]}";
   }
@@ -387,8 +514,7 @@ int main(int argc, char** argv)
     for (Scenario& scenario : scenarios)
     {
       run_scenario(temporary_directory.path() / scenario.id, scenario, hashes);
-      std::cout << scenario.id << ": " << scenario.attempts.size()
-                << " source attempts\n";
+      std::cout << scenario.id << ": " << scenario.nodes.size() << " nodes\n";
     }
     write_data(output, scenarios);
     std::cout << "wrote " << output << '\n';

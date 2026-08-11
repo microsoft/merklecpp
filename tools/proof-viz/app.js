@@ -9,12 +9,12 @@ const scenarioRoot = document.querySelector("#scenarios");
     }
 
     const data = await response.json();
-    if (data.schemaVersion !== 1 || !Array.isArray(data.scenarios)) {
+    if (data.schemaVersion !== 3 || !Array.isArray(data.scenarios)) {
         throw new Error("Proof visualization data is missing");
     }
 
     const canvasColorNames = [
-        "tile", "frontier", "computed", "route", "query", "endpoint",
+        "tile", "frontier", "computed", "proof", "endpoint",
         "edge", "boundary", "muted", "paper"
     ];
     const readCanvasColors = () => {
@@ -25,10 +25,7 @@ const scenarioRoot = document.querySelector("#scenarios");
     };
     let colors = readCanvasColors();
 
-    const state = {
-        edges: true,
-        calls: true
-    };
+    const state = { edges: true };
 
     const number = new Intl.NumberFormat("en-US");
     const tooltip = document.querySelector("#node-tooltip");
@@ -60,45 +57,15 @@ const scenarioRoot = document.querySelector("#scenarios");
         return wrapper;
     }
 
-    function sourceAnswer(attempt) {
-        return `${attempt.source} ${attempt.success ? "answered" : "missed"} [${attempt.lo}, ${attempt.hi}) at level ${attempt.level}`;
-    }
-
-    function makeAttempts(scenario) {
-        const section = document.createElement("div");
-        section.className = "attempts";
-
-        const head = document.createElement("div");
-        head.className = "attempts__head";
-        const title = document.createElement("strong");
-        title.textContent = "Resolver attempt order";
-        const note = document.createElement("span");
-        note.textContent = "hollow = miss; solid = answer";
-        head.append(title, note);
-
-        const track = document.createElement("div");
-        track.className = "attempts__track";
-        scenario.attempts.forEach((attempt, index) => {
-            const marker = document.createElement("span");
-            marker.className = `attempt attempt--${attempt.source}${attempt.success ? " is-success" : ""}`;
-            marker.title = `${index + 1}. ${sourceAnswer(attempt)}`;
-            marker.setAttribute("aria-label", marker.title);
-            track.append(marker);
-        });
-
-        section.append(head, track);
-        return section;
-    }
-
     function tooltipText(node) {
         const span = node.hi - node.lo;
         const roles = [];
-        if (node.path) roles.push("proof route");
-        if (node.proof) roles.push("proof component");
-        if (node.endpoint) roles.push(`${node.endpoint === "A" ? "earlier" : "later"} selected leaf (${node.endpoint})`);
-        if (node.queried) roles.push(`resolved #${node.queryOrder} by ${node.querySource}`);
+        if (node.proof) roles.push("returned proof element");
+        if (node.endpoint === "T") roles.push("target entry (T)");
+        if (node.endpoint === "A") roles.push("earlier selected leaf (A)");
+        if (node.endpoint === "B") roles.push("later selected leaf (B)");
         if (node.overlap) roles.push("available from both; memory selected first");
-        if (roles.length === 0) roles.push("not used by this proof");
+        if (roles.length === 0) roles.push("not returned in this proof");
 
         const source = node.source === "tile"
             ? "tile-backed"
@@ -130,108 +97,6 @@ const scenarioRoot = document.querySelector("#scenarios");
 
     function hideTooltip() {
         tooltip.hidden = true;
-    }
-
-    function splitAt(lo, hi) {
-        return lo + 2 ** Math.floor(Math.log2(hi - lo - 1));
-    }
-
-    function buildNodes(scenario) {
-        scenario.covered = Math.floor(scenario.leaves / data.tileWidth) * data.tileWidth;
-        scenario.frontierStart = Math.min(scenario.covered, scenario.leaves - 1);
-        scenario.type = scenario.secondIndex === undefined ? "inclusion" : "consistency";
-        scenario.mapLeaves = (scenario.secondIndex ?? scenario.leaves - 1) + 1;
-        const nodes = [];
-        const byRange = new Map();
-        const key = (lo, hi) => `${lo}:${hi}`;
-
-        scenario.attempts.forEach((attempt) => {
-            const width = 2 ** attempt.level;
-            attempt.lo = attempt.index * width;
-            attempt.hi = attempt.lo + width;
-        });
-
-        function add(lo, hi, depth, parent = -1) {
-            const width = hi - lo;
-            const complete = 2 ** Math.floor(Math.log2(width)) === width && lo % width === 0;
-            const inFrontier = complete && lo >= scenario.frontierStart;
-            const inTiles = complete && hi <= scenario.covered;
-            const node = {
-                lo,
-                hi,
-                depth,
-                parent,
-                source: inFrontier ? "frontier" : inTiles ? "tile" : "computed",
-                overlap: inFrontier && inTiles,
-                path: false,
-                proof: false,
-                endpoint: "",
-                queried: false,
-                queryOrder: 0,
-                querySource: ""
-            };
-            const index = nodes.push(node) - 1;
-            byRange.set(key(lo, hi), node);
-            if (width > 1) {
-                const split = splitAt(lo, hi);
-                add(lo, split, depth + 1, index);
-                add(split, hi, depth + 1, index);
-            }
-        }
-
-        const mark = (lo, hi, role) => {
-            byRange.get(key(lo, hi))[role] = true;
-        };
-
-        function markInclusion(lo, hi) {
-            mark(lo, hi, "path");
-            if (hi - lo === 1) return;
-            const split = splitAt(lo, hi);
-            if (scenario.focus < split) {
-                mark(split, hi, "proof");
-                markInclusion(lo, split);
-            } else {
-                mark(lo, split, "proof");
-                markInclusion(split, hi);
-            }
-        }
-
-        function markConsistency(firstSize, lo, hi, complete) {
-            mark(lo, hi, "path");
-            if (firstSize === hi - lo) {
-                if (!complete) mark(lo, hi, "proof");
-                return;
-            }
-            const split = splitAt(lo, hi);
-            const leftSize = split - lo;
-            if (firstSize <= leftSize) {
-                markConsistency(firstSize, lo, split, complete);
-                mark(split, hi, "proof");
-            } else {
-                markConsistency(firstSize - leftSize, split, hi, false);
-                mark(lo, split, "proof");
-            }
-        }
-
-        add(0, scenario.mapLeaves, 0);
-        if (scenario.type === "inclusion") {
-            markInclusion(0, scenario.mapLeaves);
-        } else {
-            markConsistency(scenario.focus + 1, 0, scenario.mapLeaves, true);
-            byRange.get(key(scenario.focus, scenario.focus + 1)).endpoint = "A";
-            byRange.get(key(scenario.secondIndex, scenario.secondIndex + 1)).endpoint = "B";
-        }
-
-        scenario.attempts.forEach((attempt, order) => {
-            const node = attempt.success && byRange.get(key(attempt.lo, attempt.hi));
-            if (!node) return;
-            if (!node.queried) {
-                node.queryOrder = order + 1;
-                node.querySource = attempt.source;
-            }
-            node.queried = true;
-        });
-        return nodes;
     }
 
     function createRenderer(canvas, scroll, scenario) {
@@ -297,43 +162,19 @@ const scenarioRoot = document.querySelector("#scenarios");
                 context.stroke();
             }
 
-            context.lineWidth = 1.7;
-            context.strokeStyle = colors.route;
-            context.beginPath();
-            scenario.nodes.forEach((node, index) => {
-                if (!node.path || node.parent < 0 || !scenario.nodes[node.parent].path) return;
-                const parent = positions[node.parent];
-                const current = positions[index];
-                context.moveTo(parent.x, parent.y);
-                context.lineTo(current.x, current.y);
-            });
-            context.stroke();
-
             const baseSize = scenario.mapLeaves > 400 ? 3 : 3.6;
             hitTargets = [];
             scenario.nodes.forEach((node, index) => {
                 const position = positions[index];
                 const roleSize = baseSize + 4;
 
-                if (node.proof || node.path) {
-                    context.fillStyle = colors.route;
+                if (node.proof) {
+                    context.fillStyle = colors.proof;
                     context.fillRect(
                         position.x - roleSize / 2,
                         position.y - roleSize / 2,
                         roleSize,
                         roleSize
-                    );
-                }
-
-                if (state.calls && node.queried) {
-                    const querySize = roleSize + 4;
-                    context.strokeStyle = colors.query;
-                    context.lineWidth = 2;
-                    context.strokeRect(
-                        position.x - querySize / 2,
-                        position.y - querySize / 2,
-                        querySize,
-                        querySize
                     );
                 }
 
@@ -363,7 +204,7 @@ const scenarioRoot = document.querySelector("#scenarios");
                     context.fillStyle = colors.endpoint;
                     context.lineWidth = 2;
                     context.beginPath();
-                    if (node.endpoint === "A") {
+                    if (node.endpoint !== "B") {
                         context.arc(position.x, position.y, markerSize / 2, 0, Math.PI * 2);
                     } else {
                         context.moveTo(position.x, position.y - markerSize / 2);
@@ -476,7 +317,8 @@ const scenarioRoot = document.querySelector("#scenarios");
             ? "<strong>Leaf-to-leaf consistency</strong> / A and B anchor the two tree states"
             : "<strong>Node map</strong> / root to leaves";
         const mapMeta = document.createElement("span");
-        mapMeta.textContent = `${number.format(scenario.nodes.length)} nodes · ${number.format(scenario.attempts.length)} resolver attempts`;
+        const proofElements = scenario.nodes.filter((node) => node.proof).length;
+        mapMeta.textContent = `${number.format(scenario.nodes.length)} nodes · ${number.format(proofElements)} proof elements`;
         visualHead.append(mapTitle, mapMeta);
 
         const scroll = document.createElement("div");
@@ -486,24 +328,20 @@ const scenarioRoot = document.querySelector("#scenarios");
         canvas.setAttribute("role", "img");
         canvas.setAttribute(
             "aria-label",
-            `${scenario.title}: ${number.format(scenario.mapLeaves)} proof leaves with tile, frontier, and proof-route nodes`
+            `${scenario.title}: ${number.format(scenario.mapLeaves)} proof leaves with returned proof elements highlighted`
         );
         scroll.append(canvas);
-        const attempts = makeAttempts(scenario);
-        visual.append(visualHead, scroll, attempts);
+        visual.append(visualHead, scroll);
 
         inner.append(copy, visual);
         article.append(inner);
         scenarioRoot.append(article);
 
         const renderer = createRenderer(canvas, scroll, scenario);
-        renderers.push({ ...renderer, article, attempts });
+        renderers.push({ ...renderer, article });
     }
 
-    data.scenarios.forEach((scenario, index) => {
-        scenario.nodes = buildNodes(scenario);
-        makeScene(scenario, index);
-    });
+    data.scenarios.forEach(makeScene);
 
     const filterButtons = document.querySelectorAll("[data-filter]");
     filterButtons.forEach((button) => {
@@ -525,13 +363,6 @@ const scenarioRoot = document.querySelector("#scenarios");
         renderers.forEach((renderer) => renderer.draw());
     });
 
-    document.querySelector("#toggle-calls").addEventListener("change", (event) => {
-        state.calls = event.target.checked;
-        renderers.forEach((renderer) => {
-            renderer.attempts.hidden = !state.calls;
-            renderer.draw();
-        });
-    });
 })().catch((error) => {
     console.error(error);
     const message = document.createElement("p");

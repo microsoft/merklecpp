@@ -12,8 +12,8 @@
     --tile: #00843f;
     --frontier: #276be9;
     --computed: #9ca4af;
-    --route: #d72d47;
-    --query: #f66a0a;
+    --proof: #d72d47;
+    --accent: #f66a0a;
     --endpoint: var(--ink);
     --edge: rgba(72, 86, 107, 0.2);
     --boundary: rgba(34, 40, 50, 0.48);
@@ -34,8 +34,8 @@
     --tile: #5fb488;
     --frontier: #79a3f2;
     --computed: #677384;
-    --route: #e78894;
-    --query: #ff9245;
+    --proof: #e78894;
+    --accent: #ff9245;
     --edge: rgba(156, 164, 175, 0.22);
     --boundary: rgba(206, 214, 221, 0.52);
     --tooltip: rgba(20, 24, 30, 0.97);
@@ -272,13 +272,8 @@ h1 {
     background: var(--computed);
 }
 
-.swatch--route {
-    background: var(--route);
-}
-
-.swatch--query {
-    border: 3px solid var(--query);
-    background: var(--paper-strong);
+.swatch--proof {
+    background: var(--proof);
 }
 
 .swatch--endpoint {
@@ -299,7 +294,7 @@ h1 {
 }
 
 .load-status--error {
-    color: var(--route);
+    color: var(--proof);
 }
 
 .scene__inner {
@@ -310,7 +305,7 @@ h1 {
 }
 
 .scene__index {
-    color: var(--route);
+    color: var(--proof);
 }
 
 .scene h2 {
@@ -343,7 +338,7 @@ h1 {
 .scene__takeaway {
     margin: 0;
     padding-left: 15px;
-    border-left: 3px solid var(--query);
+    border-left: 3px solid var(--accent);
     color: var(--ink);
     font-size: 17px;
     line-height: 1.4;
@@ -376,51 +371,6 @@ h1 {
 .tree-canvas {
     display: block;
     cursor: crosshair;
-}
-
-.attempts {
-    margin-top: 18px;
-    padding-top: 14px;
-    border-top: 1px solid var(--line);
-}
-
-.attempts__head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 9px;
-    color: var(--muted);
-    font-size: 11px;
-}
-
-.attempts__head strong {
-    color: var(--ink);
-    text-transform: uppercase;
-}
-
-.attempts__track {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-}
-
-.attempt {
-    width: 13px;
-    height: 13px;
-    border: 2px solid currentColor;
-}
-
-.attempt--frontier {
-    color: var(--frontier);
-}
-
-.attempt--tile {
-    color: var(--tile);
-}
-
-.attempt.is-success {
-    background: currentColor;
 }
 
 .node-tooltip {
@@ -501,8 +451,7 @@ h1 {
         justify-content: space-between;
     }
 
-    .visual-head,
-    .attempts__head {
+    .visual-head {
         align-items: flex-start;
         flex-direction: column;
         gap: 3px;

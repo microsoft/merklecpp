@@ -48,10 +48,6 @@
                         <input id="toggle-edges" type="checkbox" checked>
                         Tree edges
                     </label>
-                    <label class="toggle">
-                        <input id="toggle-calls" type="checkbox" checked>
-                        Resolver calls
-                    </label>
                 </div>
             </div>
         </section>
@@ -61,9 +57,8 @@
                 <li><span class="swatch swatch--tile"></span><b>Tile</b> durable full-tile data</li>
                 <li><span class="swatch swatch--frontier"></span><b>Frontier</b> resident in-memory data</li>
                 <li><span class="swatch swatch--computed"></span><b>Computed</b> assembled across ranges</li>
-                <li><span class="swatch swatch--route"></span><b>Proof route</b> ancestry and proof components</li>
-                <li><span class="swatch swatch--query"></span><b>Resolved</b> an actual source answer</li>
-                <li><span class="swatch swatch--endpoint"></span><b>A / B leaves</b> selected consistency endpoints</li>
+                <li><span class="swatch swatch--proof"></span><b>Proof element</b> returned in the proof</li>
+                <li><span class="swatch swatch--endpoint"></span><b>T / A / B leaves</b> target and consistency endpoints</li>
             </ul>
         </section>
 
@@ -80,9 +75,8 @@
                 <p>
                     Each scene constructs the same production-shaped fixture used by
                     <code>tiles_proofs</code>: full tiles cover the compacted prefix and
-                    an in-memory tree owns the frontier. Thin wrappers record every
-                    <code>subtree_root</code> attempt made by the real
-                    <code>ProofEngine</code>.
+                    an in-memory tree owns the frontier. The highlighted nodes are the
+                    elements returned by the real <code>ProofEngine</code>.
                 </p>
                 <p>
                     Inclusion scenes are checked byte-for-byte against
