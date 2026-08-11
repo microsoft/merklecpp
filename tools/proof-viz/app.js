@@ -37,6 +37,11 @@ const scenarioRoot = document.querySelector("#scenarios");
                 inFirst: (bits & inFirstTree) !== 0,
                 inSecond: (bits & inSecondTree) !== 0,
                 isRoot: index === scenario.firstRoot || index === scenario.secondRoot,
+                rootLabel: scenario.type !== "consistency"
+                    ? (index === scenario.secondRoot ? "root" : "")
+                    : index === scenario.firstRoot
+                        ? "old root"
+                        : index === scenario.secondRoot ? "new root" : "",
                 endpoint: (bits & first)
                     ? (scenario.type === "consistency" ? "A" : "T")
                     : (bits & second) ? "B" : ""
@@ -46,7 +51,7 @@ const scenarioRoot = document.querySelector("#scenarios");
 
     const canvasColorNames = [
         "tile", "frontier", "computed", "proof", "endpoint",
-        "edge", "boundary", "muted", "paper"
+        "edge", "boundary", "muted", "paper", "primary"
     ];
     const readCanvasColors = () => {
         const styles = getComputedStyle(document.documentElement);
@@ -264,6 +269,28 @@ const scenarioRoot = document.querySelector("#scenarios");
                         position.y - ringSize / 2,
                         ringSize,
                         ringSize
+                    );
+                    context.restore();
+                }
+
+                // The roots carry the whole claim -- a consistency proof exists
+                // to turn one into the other -- so name them on the canvas.
+                if (node.rootLabel) {
+                    const markerSize = baseSize + 9;
+                    const toLeft = position.x > cssWidth - 120;
+                    context.save();
+                    context.strokeStyle = colors.primary;
+                    context.fillStyle = colors.primary;
+                    context.lineWidth = 2;
+                    context.beginPath();
+                    context.arc(position.x, position.y, markerSize / 2, 0, Math.PI * 2);
+                    context.stroke();
+                    context.font = "700 10px 'Cascadia Code', monospace";
+                    context.textAlign = toLeft ? "right" : "left";
+                    context.fillText(
+                        node.rootLabel,
+                        position.x + (toLeft ? -1 : 1) * (markerSize / 2 + 5),
+                        position.y + 3
                     );
                     context.restore();
                 }
