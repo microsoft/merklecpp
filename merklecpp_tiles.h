@@ -30,7 +30,7 @@
 // under an algorithm-qualified directory such as sha256-256w or sha384-256w.
 // Only complete, immutable tiles are stored. Their hash values are produced by
 // the tree's existing HASH_FUNCTION, so tile-derived proofs are byte-identical
-// to those produced by merkle::TreeT (see doc/design/tlog-tiles.md).
+// to those produced by merkle::TreeT.
 //
 // Thread safety: types in this header do not synchronize access internally.
 // Callers must serialize access to each shared object, including const proof
@@ -104,7 +104,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
     /// @brief Identifies a single (full) tile within a tiled log.
     /// @note Only full, TILE_WIDTH-wide tiles are produced and consumed; the
-    /// incomplete frontier is never tiled (see doc/design/tlog-tiles.md).
+    /// incomplete frontier is never tiled.
     struct TileRef
     {
       /// @brief The level of the tile (0 == leaf hashes, maximum 63).
