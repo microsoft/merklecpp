@@ -3,7 +3,7 @@ proof: consistency
 title: Two unaligned sizes cross the boundary
 description: The 92-leaf tree state is checked as a prefix of the 288-leaf one, inside a 300-leaf backing tree.
 takeaway: Four of the eight returned hashes rebuild the old root and the rest extend it to the new one, so the old size sits wholly in the tiled past while the new size also needs the resident frontier.
-order: 10
+order: 11
 leaves: 300
 focus: 91
 second: 287

@@ -3,7 +3,7 @@ proof: consistency
 title: Two sizes inside one frontier
 description: The 270-leaf tree state is checked as a prefix of the 494-leaf one, both beyond the first tile in a 511-leaf backing tree.
 takeaway: Both roots include tiled history, but their changing suffixes are assembled from different portions of the same blue frontier.
-order: 11
+order: 12
 leaves: 511
 focus: 269
 second: 493

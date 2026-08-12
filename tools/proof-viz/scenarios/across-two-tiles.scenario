@@ -1,0 +1,9 @@
+name: across-two-tiles
+proof: inclusion
+title: A proof across two full tiles
+description: At 544 leaves two tiles are complete and only 32 leaves remain resident. Leaf 100 sits inside the first tile.
+takeaway: Nine of the ten hashes come from tile storage, doubling in width from a single leaf up to the whole second tile, and one 32-leaf frontier range closes the root.
+order: 7
+leaves: 544
+focus: 100
+second: none
