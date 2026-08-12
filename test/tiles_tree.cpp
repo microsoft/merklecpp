@@ -383,11 +383,7 @@ int main()
     expect(tt.tree_ref().min_index() == 1279, "second boundary leaf retained");
 
     for (const size_t i :
-         {(size_t)0,
-          (size_t)1000,
-          (size_t)1279,
-          (size_t)1280,
-          (size_t)1499})
+         {(size_t)0, (size_t)1000, (size_t)1279, (size_t)1280, (size_t)1499})
     {
       const auto p = tt.inclusion_proof(i, N);
       expect(

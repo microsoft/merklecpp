@@ -20,6 +20,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -50,6 +51,20 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
     /// @brief Highest tile level permitted by the tlog-tiles layout.
     static constexpr uint8_t MAX_TILE_LEVEL = 63;
+
+    // Leaf indices and counts follow two deliberate conventions. The storage
+    // and proof layers below (TileRef, TileStoreT, TileWriterT, hash sources,
+    // ProofEngineT, EntryBundleWriterT) index the on-disk log as uint64_t,
+    // matching the tlog-tiles layout. TreeT and its TiledTreeT wrapper use
+    // size_t, because those leaves are resident in memory. Conversions are
+    // confined to the boundary between the two: widening size_t to uint64_t
+    // must be lossless, while the reverse direction is range-checked before
+    // narrowing (see ProofEngineT::inclusion_proof and
+    // MemoryHashSourceT::subtree_root).
+    static_assert(
+      sizeof(size_t) <= sizeof(uint64_t),
+      "tiled storage indexes leaves as uint64_t; a size_t wider than 64 bits "
+      "would truncate when tree-level values cross into the tile layer");
 
     namespace detail
     {
@@ -1522,6 +1537,14 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
       using Writer = TileWriterT<HASH_SIZE, HASH_FUNCTION>;
       using Stats = typename Writer::Stats;
+
+      // This wrapper mirrors the core tree's index type on its own public
+      // surface, so leaf counts and indices pass through untouched and cross
+      // conventions only when they reach the tile layer.
+      static_assert(
+        std::is_same_v<decltype(Tree().num_leaves()), size_t>,
+        "TiledTreeT exposes TreeT's leaf counts and indices as size_t; adjust "
+        "its public surface if TreeT changes index type");
 
       /// @brief Configuration for a tiled tree.
       struct Config
