@@ -183,6 +183,12 @@ const scenarioRoot = document.querySelector("#scenarios");
             const plot = { left: 42, right: 22, top: 25, bottom: 38 };
             const plotWidth = cssWidth - plot.left - plot.right;
             const plotHeight = cssHeight - plot.top - plot.bottom;
+            // One physical pixel, and a snap onto that grid. A square smaller
+            // than a CSS pixel drawn at a fractional offset is spread across
+            // two physical pixels at partial alpha, which reads as washed out
+            // rather than small, so positions are aligned before filling.
+            const devicePx = 1 / pixelRatio;
+            const snap = (value) => Math.round(value * pixelRatio) / pixelRatio;
             // Rank by height above the leaves, not depth below the root, so
             // every leaf shares the bottom row: the decomposition is
             // unbalanced, and a ragged range reaches its leaves in fewer
@@ -245,7 +251,13 @@ const scenarioRoot = document.querySelector("#scenarios");
                 context.restore();
             }
 
-            const baseSize = scenario.mapLeaves > 400 ? 3 : 3.6;
+            // Tile and frontier squares are the densest thing on the canvas.
+            // Two physical pixels reads clearly and still leaves a gap beside
+            // each leaf once there are three pixels to place them in; below
+            // that the row fuses into a bar, so it falls back to the smallest
+            // mark a screen can draw.
+            const pitch = (plotWidth * pixelRatio) / scenario.mapLeaves;
+            const baseSize = devicePx * (pitch >= 3 ? 2 : 1);
             hitTargets = [];
             scenario.nodes.forEach((node, index) => {
                 const position = positions[index];
@@ -254,8 +266,8 @@ const scenarioRoot = document.querySelector("#scenarios");
                 if (node.proof) {
                     context.fillStyle = colors.proof;
                     context.fillRect(
-                        position.x - roleSize / 2,
-                        position.y - roleSize / 2,
+                        snap(position.x - roleSize / 2),
+                        snap(position.y - roleSize / 2),
                         roleSize,
                         roleSize
                     );
@@ -265,8 +277,8 @@ const scenarioRoot = document.querySelector("#scenarios");
                     const overlapSize = baseSize + 2.5;
                     context.fillStyle = colors.tile;
                     context.fillRect(
-                        position.x - overlapSize / 2,
-                        position.y - overlapSize / 2,
+                        snap(position.x - overlapSize / 2),
+                        snap(position.y - overlapSize / 2),
                         overlapSize,
                         overlapSize
                     );
@@ -278,11 +290,11 @@ const scenarioRoot = document.querySelector("#scenarios");
                 // than as data someone holds.
                 const isJoin = node.source === "computed" &&
                     !node.proof && !node.endpoint && !node.isRoot;
-                const size = isJoin ? baseSize * 0.55 : baseSize;
+                const size = isJoin ? Math.max(devicePx, baseSize - devicePx) : baseSize;
                 context.fillStyle = colors[node.source];
                 context.fillRect(
-                    position.x - size / 2,
-                    position.y - size / 2,
+                    snap(position.x - size / 2),
+                    snap(position.y - size / 2),
                     size,
                     size
                 );
