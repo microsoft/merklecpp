@@ -4,7 +4,7 @@
 #include "tiles_test_util.h"
 #include "util.h"
 
-#include <cstdint>
+#include <cstddef>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -92,7 +92,7 @@ int main()
         move_cfg.prefix = "tt_move_expected";
         const fs::path expected_prefix = fs::absolute(move_cfg.prefix);
         TiledTree source(move_cfg);
-        for (uint64_t i = 0; i < 300; i++)
+        for (size_t i = 0; i < 300; i++)
         {
           source.append(hashes[i]);
         }
@@ -107,7 +107,7 @@ int main()
         expect(
           moved.store_ref().root() == store_root(expected_prefix),
           "move: destination store retained");
-        for (uint64_t i = 300; i < 512; i++)
+        for (size_t i = 300; i < 512; i++)
         {
           moved.append(hashes[i]);
         }
@@ -147,7 +147,7 @@ int main()
       expect(
         construction_threw,
         "existing prefix: second tree rejects claimed namespace");
-      for (uint64_t i = 0; i < 256; i++)
+      for (size_t i = 0; i < 256; i++)
       {
         first.append(hashes[i]);
       }
@@ -164,7 +164,7 @@ int main()
       custom_cfg.prefix = base / "tt_custom";
       CustomTiledTree custom(custom_cfg, "custom-sha256");
       merkle::Tree reference;
-      for (uint64_t i = 0; i < 300; i++)
+      for (size_t i = 0; i < 300; i++)
       {
         custom.append(hashes[i]);
         reference.insert(hashes[i]);
@@ -213,7 +213,7 @@ int main()
       threw = false;
       try
       {
-        const auto maximum = std::numeric_limits<uint64_t>::max();
+        const auto maximum = std::numeric_limits<size_t>::max();
         (void)bounded.consistency_proof_from_indices(maximum, maximum);
       }
       catch (const std::exception&)
@@ -242,7 +242,7 @@ int main()
       missing_cfg.prefix = base / "tt_missing_compacted_tile";
       missing_cfg.compact_on_flush = true;
       TiledTree compacted(missing_cfg);
-      for (uint64_t i = 0; i < 300; i++)
+      for (size_t i = 0; i < 300; i++)
       {
         compacted.append(hashes[i]);
       }
@@ -271,12 +271,12 @@ int main()
     }
 
     // ---- Part 2: TiledTree flush, proofs over tiles + memory.
-    const uint64_t n1 = 1000; // first flush size
-    const uint64_t N = 1500; // final size
+    const size_t n1 = 1000; // first flush size
+    const size_t N = 1500; // final size
 
     // Reference: a plain (never flushed) tree with the same leaves.
     merkle::Tree ref;
-    for (uint64_t i = 0; i < N; i++)
+    for (size_t i = 0; i < N; i++)
     {
       ref.insert(hashes[i]);
     }
@@ -288,7 +288,7 @@ int main()
       TiledTree::Config dcfg;
       dcfg.prefix = base / "tt_default";
       TiledTree dtt(dcfg);
-      for (uint64_t i = 0; i < n1; i++)
+      for (size_t i = 0; i < n1; i++)
       {
         dtt.append(hashes[i]);
       }
@@ -305,7 +305,7 @@ int main()
     cfg.compact_on_flush = true;
     TiledTree tt(cfg);
 
-    for (uint64_t i = 0; i < n1; i++)
+    for (size_t i = 0; i < n1; i++)
     {
       tt.append(hashes[i]);
     }
@@ -313,7 +313,7 @@ int main()
     expect(tt.flushed_size() == 768, "flushed size");
     expect(tt.tree_ref().min_index() == 767, "compacted with boundary overlap");
 
-    for (uint64_t i = n1; i < N; i++)
+    for (size_t i = n1; i < N; i++)
     {
       tt.append(hashes[i]);
     }
@@ -322,13 +322,13 @@ int main()
 
     // Indices that are: flushed (tiles only), in the flushed-but-resident
     // overlap, and on the un-flushed resident frontier.
-    for (const uint64_t i :
-         {(uint64_t)0,
-          (uint64_t)767,
-          (uint64_t)800,
-          (uint64_t)999,
-          (uint64_t)1000,
-          (uint64_t)1499})
+    for (const size_t i :
+         {(size_t)0,
+          (size_t)767,
+          (size_t)800,
+          (size_t)999,
+          (size_t)1000,
+          (size_t)1499})
     {
       const auto p = tt.inclusion_proof(i, N);
       expect(
@@ -359,7 +359,7 @@ int main()
           n1, N, *ref.past_root(n1 - 1), ref_root, cp),
         "consistency n1->N across flush");
 
-      const uint64_t m = 500; // flushed era
+      const size_t m = 500; // flushed era
       const auto cp2 = tt.consistency_proof(m, N);
       expect(
         ProofEngine::verify_consistency(
@@ -382,12 +382,12 @@ int main()
     expect(tt.flushed_size() == 1280, "second flushed size");
     expect(tt.tree_ref().min_index() == 1279, "second boundary leaf retained");
 
-    for (const uint64_t i :
-         {(uint64_t)0,
-          (uint64_t)1000,
-          (uint64_t)1279,
-          (uint64_t)1280,
-          (uint64_t)1499})
+    for (const size_t i :
+         {(size_t)0,
+          (size_t)1000,
+          (size_t)1279,
+          (size_t)1280,
+          (size_t)1499})
     {
       const auto p = tt.inclusion_proof(i, N);
       expect(
@@ -407,7 +407,7 @@ int main()
       mcfg.prefix = base / "tt_multiple";
       mcfg.compact_on_flush = true;
       TiledTree mtt(mcfg);
-      for (uint64_t i = 0; i < 512; i++)
+      for (size_t i = 0; i < 512; i++)
       {
         mtt.append(hashes[i]);
       }
@@ -416,13 +416,13 @@ int main()
       expect(mtt.tree_ref().min_index() == 511, "multiple: one leaf retained");
 
       merkle::Tree mref;
-      for (uint64_t i = 0; i < 512; i++)
+      for (size_t i = 0; i < 512; i++)
       {
         mref.insert(hashes[i]);
       }
       const Hash mroot = mref.root();
       expect(mtt.root() == mroot, "multiple: root matches reference");
-      for (const uint64_t i : {(uint64_t)0, (uint64_t)256, (uint64_t)511})
+      for (const size_t i : {(size_t)0, (size_t)256, (size_t)511})
       {
         const auto p = mtt.inclusion_proof(i, 512);
         expect(*p == *mref.path(i), "multiple: inclusion==ref");
@@ -441,7 +441,7 @@ int main()
       rcfg.retention_margin = 300;
       rcfg.compact_on_flush = true;
       TiledTree rtt(rcfg);
-      for (uint64_t i = 0; i < n1; i++) // n1 == 1000
+      for (size_t i = 0; i < n1; i++) // n1 == 1000
       {
         rtt.append(hashes[i]);
       }
@@ -452,7 +452,7 @@ int main()
         rtt.tree_ref().min_index() == 256,
         "margin: retained >= 300 recent leaves");
 
-      for (uint64_t i = n1; i < N; i++)
+      for (size_t i = n1; i < N; i++)
       {
         rtt.append(hashes[i]);
       }
@@ -460,13 +460,13 @@ int main()
 
       // Flushed-only (0, 255), flushed-but-resident overlap (256, 767), and the
       // un-flushed frontier (1000, 1499).
-      for (const uint64_t i :
-           {(uint64_t)0,
-            (uint64_t)255,
-            (uint64_t)256,
-            (uint64_t)767,
-            (uint64_t)1000,
-            (uint64_t)1499})
+      for (const size_t i :
+           {(size_t)0,
+            (size_t)255,
+            (size_t)256,
+            (size_t)767,
+            (size_t)1000,
+            (size_t)1499})
       {
         const auto p = rtt.inclusion_proof(i, N);
         expect(
@@ -499,7 +499,7 @@ int main()
         TiledTree::Config cfg;
         cfg.prefix = base / "rb_pre";
         TiledTree rb(cfg);
-        for (uint64_t i = 0; i < 50; i++)
+        for (size_t i = 0; i < 50; i++)
         {
           rb.append(hashes[i]);
         }
@@ -515,18 +515,18 @@ int main()
         TiledTree::Config cfg;
         cfg.prefix = base / "rb";
         TiledTree rb(cfg);
-        for (uint64_t i = 0; i < 300; i++)
+        for (size_t i = 0; i < 300; i++)
         {
           rb.append(hashes[i]);
         }
         rb.flush(); // flushed_size = covered = 256
-        for (uint64_t i = 300; i < 400; i++)
+        for (size_t i = 300; i < 400; i++)
         {
           rb.append(hashes[i]);
         }
         rb.retract_to(349); // keep [0,349]
         expect(rb.size() == 350, "rb retracted to 350");
-        for (uint64_t i = 350; i < 400; i++)
+        for (size_t i = 350; i < 400; i++)
         {
           rb.append(hashes[1000 + i]); // re-append DIFFERENT leaves
         }
@@ -535,11 +535,11 @@ int main()
 
         // Reference tree of the exact post-rollback state.
         merkle::Tree exp_tree;
-        for (uint64_t i = 0; i < 350; i++)
+        for (size_t i = 0; i < 350; i++)
         {
           exp_tree.insert(hashes[i]);
         }
-        for (uint64_t i = 350; i < 400; i++)
+        for (size_t i = 350; i < 400; i++)
         {
           exp_tree.insert(hashes[1000 + i]);
         }
@@ -547,7 +547,7 @@ int main()
         expect(rb.root() == exp_root, "rb root matches reference");
 
         // Proofs for a tiled index and a frontier index match the reference.
-        for (const uint64_t i : {(uint64_t)100, (uint64_t)299, (uint64_t)399})
+        for (const size_t i : {(size_t)100, (size_t)299, (size_t)399})
         {
           const auto p = rb.inclusion_proof(i, 400);
           expect(
@@ -601,7 +601,7 @@ int main()
         cfg.prefix = base / "rb_exact_boundary";
         cfg.compact_on_flush = true;
         TiledTree rb(cfg);
-        for (uint64_t i = 0; i < 1000; i++)
+        for (size_t i = 0; i < 1000; i++)
         {
           rb.append(hashes[i]);
         }
@@ -616,7 +616,7 @@ int main()
         expect(rb.size() == 768, "rb exact immutable boundary allowed");
 
         merkle::Tree expected;
-        for (uint64_t i = 0; i < 768; i++)
+        for (size_t i = 0; i < 768; i++)
         {
           expected.insert(hashes[i]);
         }
@@ -637,7 +637,7 @@ int main()
         cfg.prefix = base / "rb_compact";
         cfg.compact_on_flush = true;
         TiledTree rb(cfg);
-        for (uint64_t i = 0; i < 1000; i++)
+        for (size_t i = 0; i < 1000; i++)
         {
           rb.append(hashes[i]);
         }
@@ -645,7 +645,7 @@ int main()
         expect(
           rb.tree_ref().min_index() == 767,
           "rb compact boundary leaf retained");
-        for (uint64_t i = 1000; i < 1200; i++)
+        for (size_t i = 1000; i < 1200; i++)
         {
           rb.append(hashes[i]);
         }
@@ -654,7 +654,7 @@ int main()
         expect(rb.size() == 1100, "rb compact frontier retract ok");
 
         merkle::Tree exp_tree;
-        for (uint64_t i = 0; i < 1100; i++)
+        for (size_t i = 0; i < 1100; i++)
         {
           exp_tree.insert(hashes[i]);
         }
@@ -682,7 +682,7 @@ int main()
         TiledTree::Config cfg;
         cfg.prefix = base / "rb_interrupted";
         TiledTree interrupted(cfg);
-        for (uint64_t i = 0; i < 512; i++)
+        for (size_t i = 0; i < 512; i++)
         {
           interrupted.append(hashes[i]);
         }
@@ -745,7 +745,7 @@ int main()
         recovered.compact();
 
         merkle::Tree expected;
-        for (uint64_t i = 0; i < 512; i++)
+        for (size_t i = 0; i < 512; i++)
         {
           expected.insert(hashes[i]);
         }
@@ -753,8 +753,8 @@ int main()
         expect(
           recovered.root() == expected_root,
           "interrupted flush root matches reference");
-        for (const uint64_t i :
-             {(uint64_t)0, (uint64_t)255, (uint64_t)256, (uint64_t)511})
+        for (const size_t i :
+             {(size_t)0, (size_t)255, (size_t)256, (size_t)511})
         {
           const auto proof = recovered.inclusion_proof(i, 512);
           expect(
@@ -769,9 +769,9 @@ int main()
       // 3f. flushed_size advances only after every required level succeeds.
       // Here all 256 level-0 tiles publish before the level-1 tile is blocked.
       {
-        constexpr uint64_t level1_size =
-          (uint64_t)merkle::tiles::TILE_WIDTH * merkle::tiles::TILE_WIDTH;
-        const auto level1_hashes = make_hashes((size_t)level1_size);
+        constexpr size_t level1_size =
+          (size_t)merkle::tiles::TILE_WIDTH * merkle::tiles::TILE_WIDTH;
+        const auto level1_hashes = make_hashes(level1_size);
 
         TiledTree::Config cfg;
         cfg.prefix = base / "rb_interrupted_level1";

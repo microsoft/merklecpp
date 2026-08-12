@@ -1536,7 +1536,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         /// @note Tile alignment may retain up to TILE_WIDTH - 1 additional
         /// tiled leaves. A zero margin retains one tiled boundary leaf so
         /// rollback to exactly immutable_size() remains possible.
-        uint64_t retention_margin = 0;
+        size_t retention_margin = 0;
 
         /// @brief If set, flush() compacts after writing tiles, dropping
         /// from memory the leaves already covered by a full tile. Off by
@@ -1583,7 +1583,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       }
 
       /// @brief The number of leaves (including flushed ones).
-      [[nodiscard]] uint64_t size() const
+      [[nodiscard]] size_t size() const
       {
         return tree.num_leaves();
       }
@@ -1599,7 +1599,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @note This is always a multiple of TILE_WIDTH. It advances only after
       /// every required tile level has been written successfully, and controls
       /// proof reads and compaction.
-      [[nodiscard]] uint64_t flushed_size() const
+      [[nodiscard]] size_t flushed_size() const
       {
         return tiles_size;
       }
@@ -1608,7 +1608,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @note A flush seals its full-tile boundary before writing. If the
       /// write fails, this may exceed flushed_size(); keep the same tree
       /// contents and retry the flush.
-      [[nodiscard]] uint64_t immutable_size() const
+      [[nodiscard]] size_t immutable_size() const
       {
         return sealed_size;
       }
@@ -1643,13 +1643,13 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       Stats flush()
       {
         Stats stats;
-        const uint64_t n = tree.num_leaves();
+        const size_t n = tree.num_leaves();
         if (n == 0)
         {
           return stats;
         }
 
-        const uint64_t covered = (n / TILE_WIDTH) * TILE_WIDTH;
+        const size_t covered = (n / TILE_WIDTH) * TILE_WIDTH;
         if (covered > sealed_size)
         {
           sealed_size = covered;
@@ -1683,10 +1683,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// leaf at flushed_size() - 1 also remains resident so retract_to() can
       /// represent a tree whose size is exactly immutable_size(). Has no effect
       /// until tiling has produced full tiles.
-      uint64_t compact()
+      size_t compact()
       {
-        const uint64_t covered = (tiles_size / TILE_WIDTH) * TILE_WIDTH;
-        uint64_t target = covered > config.retention_margin ?
+        const size_t covered = (tiles_size / TILE_WIDTH) * TILE_WIDTH;
+        size_t target = covered > config.retention_margin ?
           covered - config.retention_margin :
           0;
         target = (target / TILE_WIDTH) * TILE_WIDTH;
@@ -1699,7 +1699,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         }
         if (target > tree.min_index())
         {
-          tree.flush_to((size_t)target);
+          tree.flush_to(target);
         }
         return tree.min_index();
       }
@@ -1711,7 +1711,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// immutable_size() without advancing flushed_size().
       void retract_to(size_t index)
       {
-        if (sealed_size > 0 && (uint64_t)index < sealed_size - 1)
+        if (sealed_size > 0 && index < sealed_size - 1)
         {
           throw std::runtime_error(
             "TiledTree::retract_to: cannot roll back entries sealed for "
@@ -1723,7 +1723,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Inclusion proof for @p index in a tree of @p proof_size leaves.
       /// @note Served from tiles (flushed past) combined with the resident tree
       /// (recent frontier); @p proof_size may exceed flushed_size().
-      std::shared_ptr<Path> inclusion_proof(uint64_t index, uint64_t proof_size)
+      std::shared_ptr<Path> inclusion_proof(size_t index, size_t proof_size)
       {
         if (proof_size > size())
         {
@@ -1736,7 +1736,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       }
 
       /// @brief Consistency proof between tree sizes @p m and @p n.
-      std::vector<Hash> consistency_proof(uint64_t m, uint64_t n)
+      std::vector<Hash> consistency_proof(size_t m, size_t n)
       {
         if (n > size())
         {
@@ -1753,7 +1753,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @note Equivalent to consistency_proof(first_index + 1,
       /// second_index + 1).
       std::vector<Hash> consistency_proof_from_indices(
-        uint64_t first_index, uint64_t second_index)
+        size_t first_index, size_t second_index)
       {
         if (first_index >= size() || second_index >= size())
         {
@@ -1776,8 +1776,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       Store store;
       Writer writer;
       Tree tree;
-      uint64_t tiles_size = 0;
-      uint64_t sealed_size = 0;
+      size_t tiles_size = 0;
+      size_t sealed_size = 0;
 
       void claim_tile_namespace() const
       {
