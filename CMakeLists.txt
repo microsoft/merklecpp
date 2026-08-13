@@ -47,11 +47,11 @@ if(OPENSSL)
   target_link_libraries(merklecpp INTERFACE OpenSSL::Crypto)
 endif()
 
-add_executable(proof_viz tools/proof-viz/proof_viz.cpp)
-target_link_libraries(proof_viz PRIVATE merklecpp)
-target_include_directories(proof_viz PRIVATE test)
-
 if(BUILD_TESTING)
+  add_executable(proof_viz tools/proof-viz/proof_viz.cpp)
+  target_link_libraries(proof_viz PRIVATE merklecpp)
+  target_include_directories(proof_viz PRIVATE test)
+
   function(add_unit_test NAME SRC)
     add_executable(${NAME} ${SRC})
     target_link_libraries(${NAME} PRIVATE $<BUILD_INTERFACE:merklecpp>)

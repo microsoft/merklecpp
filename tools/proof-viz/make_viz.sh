@@ -10,7 +10,7 @@ build_type=${BUILD_TYPE:-Release}
 mkdir -p "$build_dir" "$output_dir"
 output_dir=$(cd "$output_dir" && pwd)
 cmake -S "$repo_root" -B "$build_dir" \
-  -DBUILD_TESTING=OFF \
+  -DBUILD_TESTING=ON \
   "-DCMAKE_BUILD_TYPE=$build_type"
 cmake --build "$build_dir" --target proof_viz --config "$build_type"
 
