@@ -5,6 +5,7 @@
 #include "util.h"
 
 #include <filesystem>
+#include <iostream>
 #include <merklecpp_tiles.h>
 #include <stdexcept>
 #include <vector>
@@ -40,7 +41,20 @@ static void quick_start(
 
 int main()
 {
-  const TemporaryDirectory temporary_directory("merklecpp_tiles_docs");
-  quick_start(temporary_directory.path(), make_hashes(300));
-  return 0;
+  try
+  {
+    const TemporaryDirectory temporary_directory("merklecpp_tiles_docs");
+    quick_start(temporary_directory.path(), make_hashes(300));
+    return 0;
+  }
+  catch (const std::exception& error)
+  {
+    std::cerr << "Error: " << error.what() << '\n';
+    return 1;
+  }
+  catch (...)
+  {
+    std::cerr << "Error" << '\n';
+    return 1;
+  }
 }
