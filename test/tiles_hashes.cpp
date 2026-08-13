@@ -29,7 +29,9 @@ template <
   typename ProofEngine>
 static void exercise_tiled_hash(const fs::path& prefix, const std::string& name)
 {
-  const auto hashes = make_hashesT<HASH_SIZE>(300);
+  const size_t tile_width = TiledTree::TILE_WIDTH;
+  const size_t frontier_size = tile_width > 44 ? 44 : tile_width - 1;
+  const auto hashes = make_hashesT<HASH_SIZE>(tile_width + frontier_size);
   Tree reference;
   typename TiledTree::Config config;
   config.prefix = prefix;
@@ -43,22 +45,22 @@ static void exercise_tiled_hash(const fs::path& prefix, const std::string& name)
   }
 
   expect(tree.flush().full_written == 1, name + " full tile written");
-  expect(tree.flushed_size() == 256, name + " flushed size");
+  expect(tree.flushed_size() == tile_width, name + " flushed size");
   expect(tree.root() == reference.root(), name + " root");
   expect(
     fs::file_size(tree.store_ref().root() / "tile" / "0" / "000") ==
-      (uintmax_t)merkle::tiles::TILE_WIDTH * HASH_SIZE,
+      (uintmax_t)tile_width * HASH_SIZE,
     name + " tile byte size");
 
   const auto inclusion = tree.inclusion_proof(0, tree.size());
   expect(inclusion->verify(reference.root()), name + " inclusion proof");
 
-  const auto consistency = tree.consistency_proof(256, tree.size());
+  const auto consistency = tree.consistency_proof(tile_width, tree.size());
   expect(
     ProofEngine::verify_consistency(
-      256,
+      tile_width,
       tree.size(),
-      *reference.past_root(255),
+      *reference.past_root(tile_width - 1),
       reference.root(),
       consistency),
     name + " consistency proof");
@@ -81,6 +83,12 @@ int main()
       merkle::Tree512,
       merkle::tiles::TiledTree512,
       merkle::tiles::ProofEngine512>(base / "sha512", "SHA512");
+    exercise_tiled_hash<
+      48,
+      merkle::Tree384,
+      merkle::tiles::TiledTreeT<48, merkle::sha384_openssl, 2>,
+      merkle::tiles::ProofEngine384>(
+      base / "sha384-small", "SHA384 alternate geometry");
 
     std::cout << "tiles_hashes: OK" << '\n';
   }

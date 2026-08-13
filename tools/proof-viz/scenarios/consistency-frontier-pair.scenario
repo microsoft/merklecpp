@@ -1,9 +1,9 @@
 name: consistency-frontier-pair
 proof: consistency
 title: Two sizes inside one frontier
-description: The 270-leaf tree state is checked as a prefix of the 494-leaf one, both beyond the first tile in a 511-leaf backing tree.
-takeaway: Both roots include tiled history, but their changing suffixes are assembled from different portions of the same blue frontier.
+description: The 65-leaf tree state is checked as a prefix of the 70-leaf one, both beyond the level-1 boundary in a 71-leaf backing tree.
+takeaway: Both roots include two levels of tiled history, but their changing suffixes are assembled from different portions of the same blue frontier.
 order: 12
-leaves: 511
-focus: 269
-second: 493
+leaves: 71
+focus: 64
+second: 69

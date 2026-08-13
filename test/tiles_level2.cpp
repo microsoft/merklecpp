@@ -22,11 +22,11 @@
 
 namespace fs = std::filesystem;
 using merkle::Hash;
-using merkle::tiles::TILE_WIDTH;
 using merkle::tiles::TileHashSource;
 using merkle::tiles::TileRef;
 using merkle::tiles::TileStore;
 using merkle::tiles::TileWriter;
+static constexpr size_t TILE_WIDTH = TileStore::TILE_WIDTH;
 
 static void expect(bool cond, const std::string& what)
 {

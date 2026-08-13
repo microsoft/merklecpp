@@ -284,8 +284,8 @@ int main()
         writer.write_up_to(2048, leaf_at).full_written == 1,
         "F rewrites interior hole");
       const std::vector<Hash> expected(
-        hashes.begin() + (std::ptrdiff_t)merkle::tiles::TILE_WIDTH * 3,
-        hashes.begin() + (std::ptrdiff_t)merkle::tiles::TILE_WIDTH * 4);
+        hashes.begin() + (std::ptrdiff_t)TileStore::TILE_WIDTH * 3,
+        hashes.begin() + (std::ptrdiff_t)TileStore::TILE_WIDTH * 4);
       expect(
         store.read_tile(TileRef{0, 3}) == expected, "F repaired tile contents");
       expect(tile_file_count(store) == 8, "F exact tile file count");
@@ -297,7 +297,7 @@ int main()
     // at geometrically increasing indices cannot overflow its search.
     {
       const fs::path dir = base / "g";
-      const auto hashes = make_hashes(merkle::tiles::TILE_WIDTH);
+      const auto hashes = make_hashes(TileStore::TILE_WIDTH);
       {
         TileStore store(dir);
         store.write_tile(TileRef{0, 0}, hashes);
@@ -315,7 +315,7 @@ int main()
       TileWriter writer(store);
       const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
       expect(
-        writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at).full_written ==
+        writer.write_up_to(TileStore::TILE_WIDTH, leaf_at).full_written ==
           0,
         "G bounded sparse recovery");
       expect(store.has_full_tile(0, 0), "G requested tile remains valid");
@@ -329,11 +329,11 @@ int main()
     {
       const fs::path dir = base / "h";
       TileStore store(dir);
-      const auto child_template = make_hashes(merkle::tiles::TILE_WIDTH);
+      const auto child_template = make_hashes(TileStore::TILE_WIDTH);
       std::vector<Hash> expected;
-      expected.reserve(merkle::tiles::TILE_WIDTH);
+      expected.reserve(TileStore::TILE_WIDTH);
 
-      for (uint64_t index = 0; index < merkle::tiles::TILE_WIDTH; index++)
+      for (uint64_t index = 0; index < TileStore::TILE_WIDTH; index++)
       {
         auto child = child_template;
         child[0].bytes[0] = static_cast<uint8_t>(index);
@@ -344,8 +344,8 @@ int main()
       TileWriterProbe writer(store);
       writer.mark_level_complete(
         0,
-        (uint64_t)merkle::tiles::TILE_WIDTH * merkle::tiles::TILE_WIDTH);
-      writer.mark_level_complete(1, merkle::tiles::TILE_WIDTH);
+        (uint64_t)TileStore::TILE_WIDTH * TileStore::TILE_WIDTH);
+      writer.mark_level_complete(1, TileStore::TILE_WIDTH);
 
       bool leaf_requested = false;
       const Hash unused;
@@ -353,8 +353,8 @@ int main()
         leaf_requested = true;
         return unused;
       };
-      constexpr uint64_t size = (uint64_t)merkle::tiles::TILE_WIDTH *
-        merkle::tiles::TILE_WIDTH * merkle::tiles::TILE_WIDTH;
+      constexpr uint64_t size = (uint64_t)TileStore::TILE_WIDTH *
+        TileStore::TILE_WIDTH * TileStore::TILE_WIDTH;
       const auto stats = writer.write_up_to(size, leaf_at);
 
       expect(stats.full_written == 1, "H writes one L2 tile");
@@ -379,8 +379,8 @@ int main()
         Hash384::size_bytes,
         merkle::Tree384::hash_function>;
 
-      constexpr uint64_t size = (uint64_t)merkle::tiles::TILE_WIDTH *
-        merkle::tiles::TILE_WIDTH;
+      constexpr uint64_t size =
+        (uint64_t)TileStore384::TILE_WIDTH * TileStore384::TILE_WIDTH;
       const auto hashes = make_hashesT<Hash384::size_bytes>((size_t)size);
       const auto leaf_at = [&](uint64_t index) -> const Hash384& {
         return hashes[index];
@@ -394,7 +394,7 @@ int main()
       expect(store.has_full_tile(1, 0), "I full SHA-384 L1 tile");
       const auto level1 = store.read_tile(TileRef{1, 0});
       const std::vector<Hash384> first_tile(
-        hashes.begin(), hashes.begin() + merkle::tiles::TILE_WIDTH);
+        hashes.begin(), hashes.begin() + TileStore384::TILE_WIDTH);
       expect(
         level1[0] ==
           merkle::tiles::perfect_root<

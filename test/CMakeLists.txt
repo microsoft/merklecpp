@@ -43,6 +43,7 @@ add_merklecpp_test(tiles_proofs tiles_proofs.cpp)
 add_merklecpp_test(tiles_tree tiles_tree.cpp)
 add_merklecpp_test(tiles_docs tiles_docs.cpp)
 add_merklecpp_test(tiles_entries tiles_entries.cpp)
+add_merklecpp_test(tiles_geometry tiles_geometry.cpp)
 
 if(OPENSSL)
   add_merklecpp_test(tiles_hashes tiles_hashes.cpp)

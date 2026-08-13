@@ -7,8 +7,11 @@
     <meta name="description" content="An instrumented atlas of merklecpp tile-backed inclusion and consistency proofs.">
     <title>Merkle proof atlas</title>
     <script>
-        document.documentElement.dataset.theme = localStorage.getItem("theme") ||
-            (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        const savedTheme = localStorage.getItem("proof-viz-theme");
+        document.documentElement.dataset.theme =
+            savedTheme === "dark" || savedTheme === "light"
+                ? savedTheme
+                : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     </script>
     <link rel="stylesheet" href="styles.css">
     <script src="app.js" defer></script>
@@ -27,7 +30,7 @@
             </div>
             <p class="masthead__stats" aria-label="Atlas summary">
                 <span><b id="scene-count">11</b> scenes</span>
-                <span><b id="tile-width">256</b> tile width</span>
+                <span><b id="tile-width">8</b> tile width</span>
                 <span><b>Live calls</b> evidence</span>
             </p>
         </div>
@@ -48,6 +51,10 @@
                         <input id="toggle-edges" type="checkbox" checked>
                         Tree edges
                     </label>
+                    <label class="toggle">
+                        <input id="toggle-theme" type="checkbox">
+                        Dark theme
+                    </label>
                 </div>
             </div>
         </section>
@@ -55,6 +62,7 @@
         <section class="legend-band" aria-label="Node colors">
             <ul class="legend">
                 <li><span class="swatch swatch--tile"></span><b>Tile</b> durable full-tile data</li>
+                <li><span class="swatch swatch--tile-file"></span><b>Tile file</b> thin enclosure</li>
                 <li><span class="swatch swatch--frontier"></span><b>Frontier</b> resident in-memory data</li>
                 <li><span class="swatch swatch--proof"></span><b>Proof element</b> returned in the proof</li>
                 <li><span class="swatch swatch--spine"></span><b>Ringed</b> only in the tree ending at A</li>
@@ -66,26 +74,6 @@
             <p class="load-status" role="status">Loading proof data...</p>
         </section>
 
-        <section class="method" aria-labelledby="method-title">
-            <div>
-                <p class="section-label">Method</p>
-                <h2 id="method-title">Observed, not simulated</h2>
-            </div>
-            <div class="method__copy">
-                <p>
-                    Each scene constructs the same production-shaped fixture used by
-                    <code>tiles_proofs</code>: full tiles cover the compacted prefix and
-                    an in-memory tree owns the frontier. The highlighted nodes are the
-                    elements returned by the real <code>ProofEngine</code>.
-                </p>
-                <p>
-                    Inclusion scenes are checked byte-for-byte against
-                    <code>Tree::path()</code>. The consistency scene is verified with
-                    <code>ProofEngine::verify_consistency()</code> before it reaches this
-                    page.
-                </p>
-            </div>
-        </section>
     </main>
 
     <div id="node-tooltip" class="node-tooltip" role="tooltip" hidden></div>

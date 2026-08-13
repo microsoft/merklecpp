@@ -6,6 +6,7 @@
 #include "merklecpp.h"
 #include "merklecpp_pal.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -26,9 +27,10 @@
 
 // Tiled storage for merklecpp trees, following the full-tile geometry, payload,
 // and path encoding of the C2SP tlog-tiles layout
-// (https://c2sp.org/tlog-tiles). C2SP defines SHA-256; merklecpp preserves the
-// 256-hash tile width for other SHA output sizes and separates each format
-// under an algorithm-qualified directory such as sha256-256w or sha384-256w.
+// (https://c2sp.org/tlog-tiles). C2SP defines SHA-256 and 256-hash tiles.
+// merklecpp uses that geometry by default, supports compile-time power-of-two
+// tile widths as an extension, and separates each format under an
+// algorithm-and-width-qualified directory such as sha256-256w or sha384-16w.
 // Only complete, immutable tiles are stored. Their hash values are produced by
 // the tree's existing HASH_FUNCTION, so tile-derived proofs are byte-identical
 // to those produced by merkle::TreeT.
@@ -43,11 +45,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 {
   namespace tiles
   {
-    /// @brief Number of tree levels spanned by a single tile.
-    static constexpr uint16_t TILE_HEIGHT = 8;
+    /// @brief Default number of tree levels spanned by a single tile.
+    static constexpr uint16_t DEFAULT_TILE_HEIGHT = 8;
 
-    /// @brief Number of hashes in a full tile (2**TILE_HEIGHT).
-    static constexpr uint16_t TILE_WIDTH = uint16_t{1U << TILE_HEIGHT};
+    /// @brief Default number of hashes in a full tile.
+    static constexpr uint16_t DEFAULT_TILE_WIDTH =
+      uint16_t{1U << DEFAULT_TILE_HEIGHT};
 
     /// @brief Highest tile level permitted by the tlog-tiles layout.
     static constexpr uint8_t MAX_TILE_LEVEL = 63;
@@ -73,8 +76,30 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       static constexpr std::string_view SHA512_ALGORITHM_SHORT_NAME = "sha512";
       static constexpr size_t ENTRY_LENGTH_PREFIX_SIZE = 2;
       static constexpr size_t MAX_ENTRY_SIZE = 0xFFFF;
-      static constexpr size_t MAX_ENTRY_BUNDLE_SIZE =
-        TILE_WIDTH * (ENTRY_LENGTH_PREFIX_SIZE + MAX_ENTRY_SIZE);
+
+      template <uint8_t TILE_HEIGHT_VALUE>
+      struct TileGeometry
+      {
+        static_assert(
+          TILE_HEIGHT_VALUE > 0,
+          "tile height must be greater than zero");
+        static_assert(
+          TILE_HEIGHT_VALUE < std::numeric_limits<size_t>::digits,
+          "tile width must fit in size_t");
+
+        static constexpr uint8_t HEIGHT = TILE_HEIGHT_VALUE;
+        static constexpr size_t WIDTH = size_t{1} << HEIGHT;
+        static constexpr size_t MAX_ENCODED_ENTRY_SIZE =
+          ENTRY_LENGTH_PREFIX_SIZE + MAX_ENTRY_SIZE;
+
+        static_assert(
+          WIDTH <=
+            std::numeric_limits<size_t>::max() / MAX_ENCODED_ENTRY_SIZE,
+          "maximum entry bundle size must fit in size_t");
+
+        static constexpr size_t MAX_ENTRY_BUNDLE_SIZE =
+          WIDTH * MAX_ENCODED_ENTRY_SIZE;
+      };
 
       template <typename Present>
       uint64_t contiguous_prefix_length(uint64_t limit, const Present& present)
@@ -118,8 +143,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     }
 
     /// @brief Identifies a single (full) tile within a tiled log.
-    /// @note Only full, TILE_WIDTH-wide tiles are produced and consumed; the
-    /// incomplete frontier is never tiled.
+    /// @note Only full tiles of the associated store's width are produced and
+    /// consumed; the incomplete frontier is never tiled.
     struct TileRef
     {
       /// @brief The level of the tile (0 == leaf hashes, maximum 63).
@@ -132,19 +157,24 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
-        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&),
+      uint8_t TILE_HEIGHT_VALUE = DEFAULT_TILE_HEIGHT>
     class TileWriterT;
 
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
-        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&),
+      uint8_t TILE_HEIGHT_VALUE = DEFAULT_TILE_HEIGHT>
     class EntryBundleWriterT;
 
     /// @brief Reads and writes tlog-tiles tile files on a local filesystem.
     /// @tparam HASH_SIZE Size of each hash in bytes
     /// @tparam HASH_FUNCTION The tree's node hash function (carried for use by
     /// later components; tile I/O itself does not hash).
+    /// @tparam TILE_HEIGHT_VALUE Number of tree levels represented by a tile;
+    /// the tile width is 2**TILE_HEIGHT_VALUE. The default value 8 is the C2SP
+    /// tlog-tiles geometry; other values are merklecpp extensions.
     /// @warning No internal synchronization is provided. Callers must serialize
     /// access to each store object and all writers sharing its prefix.
     /// Independent store objects may read while the serialized writer publishes
@@ -152,15 +182,36 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
-        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&),
+      uint8_t TILE_HEIGHT_VALUE = DEFAULT_TILE_HEIGHT>
     class TileStoreT
     {
-      friend class TileWriterT<HASH_SIZE, HASH_FUNCTION>;
-      friend class EntryBundleWriterT<HASH_SIZE, HASH_FUNCTION>;
+      friend class TileWriterT<
+        HASH_SIZE,
+        HASH_FUNCTION,
+        TILE_HEIGHT_VALUE>;
+      friend class EntryBundleWriterT<
+        HASH_SIZE,
+        HASH_FUNCTION,
+        TILE_HEIGHT_VALUE>;
 
     public:
       /// @brief The type of hashes stored in tiles.
       using Hash = HashT<HASH_SIZE>;
+
+      /// @brief The compile-time tile geometry.
+      using Geometry = detail::TileGeometry<TILE_HEIGHT_VALUE>;
+
+      /// @brief Number of tree levels represented by one tile.
+      static constexpr uint8_t TILE_HEIGHT = Geometry::HEIGHT;
+
+      /// @brief Number of hashes in one full tile.
+      static constexpr size_t TILE_WIDTH = Geometry::WIDTH;
+
+      static_assert(
+        HASH_SIZE > 0 &&
+          TILE_WIDTH <= std::numeric_limits<size_t>::max() / HASH_SIZE,
+        "tile byte size must fit in size_t");
 
       /// @brief Constructs a tile store below an algorithm-qualified directory
       /// under @p prefix.
@@ -186,7 +237,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       }
 
       /// @brief The format directory for @p hash_algorithm_short_name.
-      /// @note TILE_WIDTH is fixed at 256 for every hash output size.
+      /// @note The default geometry produces names such as sha256-256w.
       static std::string storage_directory_name(
         const std::string& hash_algorithm_short_name)
       {
@@ -282,7 +333,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         std::vector<Hash> hashes;
         hashes.reserve(TILE_WIDTH);
         size_t position = 0;
-        for (uint16_t i = 0; i < TILE_WIDTH; i++)
+        for (size_t i = 0; i < TILE_WIDTH; i++)
         {
           hashes.emplace_back(bytes, position);
         }
@@ -301,7 +352,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         try
         {
           (void)decode_entries(
-            read_file(path, detail::MAX_ENTRY_BUNDLE_SIZE), TILE_WIDTH);
+            read_file(path, Geometry::MAX_ENTRY_BUNDLE_SIZE), TILE_WIDTH);
           return true;
         }
         catch (const std::runtime_error&)
@@ -332,7 +383,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         uint64_t index) const
       {
         const auto path = entries_path(index);
-        const auto bytes = read_file(path, detail::MAX_ENTRY_BUNDLE_SIZE);
+        const auto bytes = read_file(path, Geometry::MAX_ENTRY_BUNDLE_SIZE);
         try
         {
           return decode_entries(bytes, TILE_WIDTH);
@@ -811,11 +862,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// @brief Computes and persists tlog-tiles tiles for a growing tree.
     /// @tparam HASH_SIZE Size of each hash in bytes
     /// @tparam HASH_FUNCTION The tree's node hash function
+    /// @tparam TILE_HEIGHT_VALUE Number of tree levels represented by a tile
     /// @note Only balanced subtrees are tiled: a level-L entry is the root of a
-    /// complete 2**(8L)-leaf subtree. Only full tiles (256 such entries) are
-    /// written; they are therefore immutable and written exactly once. Entries
-    /// beyond the last full-tile boundary remain in memory until a later flush
-    /// completes the next tile.
+    /// complete 2**(TILE_HEIGHT_VALUE*L)-leaf subtree. Only full tiles are
+    /// written; they are therefore immutable and written exactly once.
+    /// Entries beyond the last full-tile boundary remain in memory until a
+    /// later flush completes the next tile.
     /// @warning No internal synchronization is provided. Callers must serialize
     /// access to a writer and its store.
     /// @warning A writer trusts existing full tiles as output from the same
@@ -824,7 +876,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
-        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&),
+      uint8_t TILE_HEIGHT_VALUE>
     class TileWriterT
     {
     public:
@@ -832,7 +885,17 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       using Hash = HashT<HASH_SIZE>;
 
       /// @brief The associated tile store type.
-      using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
+      using Store =
+        TileStoreT<HASH_SIZE, HASH_FUNCTION, TILE_HEIGHT_VALUE>;
+
+      /// @brief The compile-time tile geometry.
+      using Geometry = typename Store::Geometry;
+
+      /// @brief Number of tree levels represented by one tile.
+      static constexpr uint8_t TILE_HEIGHT = Geometry::HEIGHT;
+
+      /// @brief Number of hashes in one full tile.
+      static constexpr size_t TILE_WIDTH = Geometry::WIDTH;
 
       /// @brief Supplies the level-0 leaf hash for a given leaf index.
       using LeafFn = std::function<const Hash&(uint64_t)>;
@@ -963,7 +1026,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           }
           else
           {
-            // Roll up the complete child full tile (256 complete entries).
+            // Roll up the complete child full tile.
             out.push_back(
               perfect_root<HASH_SIZE, HASH_FUNCTION>(
                 store.read_tile(TileRef{(uint8_t)(level - 1), g})));
@@ -1003,6 +1066,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     };
 
     /// @brief Resolves subtree roots from tlog-tiles tile files.
+    /// @tparam HASH_SIZE Size of each hash in bytes
+    /// @tparam HASH_FUNCTION The tree's node hash function
+    /// @tparam TILE_HEIGHT_VALUE Number of tree levels represented by a tile
     /// @note @p available_size is rounded down to a whole number of full tiles:
     /// only complete, durably-written full tiles are read. A complete subtree
     /// within that full-tile prefix is resolvable; anything reaching into the
@@ -1014,12 +1080,23 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
-        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&),
+      uint8_t TILE_HEIGHT_VALUE = DEFAULT_TILE_HEIGHT>
     class TileHashSourceT : public HashSourceT<HASH_SIZE, HASH_FUNCTION>
     {
     public:
       using Hash = HashT<HASH_SIZE>;
-      using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
+      using Store =
+        TileStoreT<HASH_SIZE, HASH_FUNCTION, TILE_HEIGHT_VALUE>;
+
+      /// @brief The compile-time tile geometry.
+      using Geometry = typename Store::Geometry;
+
+      /// @brief Number of tree levels represented by one tile.
+      static constexpr uint8_t TILE_HEIGHT = Geometry::HEIGHT;
+
+      /// @brief Number of hashes in one full tile.
+      static constexpr size_t TILE_WIDTH = Geometry::WIDTH;
 
       /// @brief Constructs a source over @p store for trees up to
       /// @p available_size leaves. @p available_size is rounded down to a whole
@@ -1111,7 +1188,13 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         std::vector<Hash> hashes;
       };
 
-      static constexpr size_t TILE_CACHE_SIZE = 64;
+      static constexpr size_t DEFAULT_TILE_CACHE_SIZE = 64;
+      static constexpr size_t TILE_CACHE_HASH_BUDGET =
+        DEFAULT_TILE_CACHE_SIZE * DEFAULT_TILE_WIDTH;
+      static constexpr size_t TILE_CACHE_SIZE = std::clamp(
+        TILE_CACHE_HASH_BUDGET / TILE_WIDTH,
+        size_t{1},
+        DEFAULT_TILE_CACHE_SIZE);
       mutable std::vector<TileCacheEntry> tile_cache;
 
       const std::vector<Hash>& read_tile(const TileRef& ref) const
@@ -1510,6 +1593,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     };
 
     /// @brief A merkle tree backed by tlog-tiles storage.
+    /// @tparam HASH_SIZE Size of each hash in bytes
+    /// @tparam HASH_FUNCTION The tree's node hash function
+    /// @tparam TILE_HEIGHT_VALUE Number of tree levels represented by a tile
     /// @note Appends grow an in-memory tree; flush() durably writes only full
     /// (balanced) tiles, so the incomplete frontier is never tiled and stays
     /// resident in memory. Compaction (dropping from memory the leaves already
@@ -1527,16 +1613,26 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
-        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&),
+      uint8_t TILE_HEIGHT_VALUE = DEFAULT_TILE_HEIGHT>
     class TiledTreeT
     {
     public:
       using Hash = HashT<HASH_SIZE>;
       using Tree = TreeT<HASH_SIZE, HASH_FUNCTION>;
       using Path = PathT<HASH_SIZE, HASH_FUNCTION>;
-      using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
-      using Writer = TileWriterT<HASH_SIZE, HASH_FUNCTION>;
+      using Store =
+        TileStoreT<HASH_SIZE, HASH_FUNCTION, TILE_HEIGHT_VALUE>;
+      using Writer =
+        TileWriterT<HASH_SIZE, HASH_FUNCTION, TILE_HEIGHT_VALUE>;
       using Stats = typename Writer::Stats;
+      using Geometry = typename Store::Geometry;
+
+      /// @brief Number of tree levels represented by one tile.
+      static constexpr uint8_t TILE_HEIGHT = Geometry::HEIGHT;
+
+      /// @brief Number of hashes in one full tile.
+      static constexpr size_t TILE_WIDTH = Geometry::WIDTH;
 
       // This wrapper mirrors the core tree's index type on its own public
       // surface, so leaf counts and indices pass through untouched and cross
@@ -1840,7 +1936,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       auto with_engine(Fn fn)
       {
         MemoryHashSourceT<HASH_SIZE, HASH_FUNCTION> mem(tree);
-        TileHashSourceT<HASH_SIZE, HASH_FUNCTION> tile_src(store, tiles_size);
+        TileHashSourceT<HASH_SIZE, HASH_FUNCTION, TILE_HEIGHT_VALUE> tile_src(
+          store, tiles_size);
         CombinedHashSourceT<HASH_SIZE, HASH_FUNCTION> combined(mem, tile_src);
         ProofEngineT<HASH_SIZE, HASH_FUNCTION> engine(combined);
         return fn(engine);
@@ -1849,6 +1946,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
     /// @brief Writes tlog-tiles entry bundles (raw log entries) for a growing
     /// log.
+    /// @tparam HASH_SIZE Size of each hash in bytes
+    /// @tparam HASH_FUNCTION The tree's node hash function
+    /// @tparam TILE_HEIGHT_VALUE Number of tree levels represented by a bundle
     /// @note Entry bundles are level-0 only and application-owned: merklecpp
     /// stores leaf hashes, while the raw entries (and the leaf-hash derivation
     /// linking each entry to its level-0 tile hash) are the application's
@@ -1861,11 +1961,20 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
-        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&),
+      uint8_t TILE_HEIGHT_VALUE>
     class EntryBundleWriterT
     {
     public:
-      using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
+      using Store =
+        TileStoreT<HASH_SIZE, HASH_FUNCTION, TILE_HEIGHT_VALUE>;
+      using Geometry = typename Store::Geometry;
+
+      /// @brief Number of tree levels represented by one bundle.
+      static constexpr uint8_t TILE_HEIGHT = Geometry::HEIGHT;
+
+      /// @brief Number of entries in one full bundle.
+      static constexpr size_t TILE_WIDTH = Geometry::WIDTH;
 
       /// @brief Supplies the raw bytes of the log entry at a given index.
       using EntryFn = std::function<std::vector<uint8_t>(uint64_t)>;
@@ -1945,11 +2054,17 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
     /// @brief Default tile store (SHA256, default hash function).
     using TileStore =
-      TileStoreT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
+      TileStoreT<
+        merkle::Tree::Hash::size_bytes,
+        merkle::Tree::hash_function,
+        DEFAULT_TILE_HEIGHT>;
 
     /// @brief Default tile writer (SHA256, default hash function).
     using TileWriter =
-      TileWriterT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
+      TileWriterT<
+        merkle::Tree::Hash::size_bytes,
+        merkle::Tree::hash_function,
+        DEFAULT_TILE_HEIGHT>;
 
     /// @brief Default abstract hash source (SHA256, default hash function).
     using HashSource =
@@ -1958,7 +2073,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// @brief Default tile-backed hash source (SHA256, default hash function).
     using TileHashSource = TileHashSourceT<
       merkle::Tree::Hash::size_bytes,
-      merkle::Tree::hash_function>;
+      merkle::Tree::hash_function,
+      DEFAULT_TILE_HEIGHT>;
 
     /// @brief Default proof engine (SHA256, default hash function).
     using ProofEngine =
@@ -1976,49 +2092,63 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
     /// @brief Default tiled tree (SHA256, default hash function).
     using TiledTree =
-      TiledTreeT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
+      TiledTreeT<
+        merkle::Tree::Hash::size_bytes,
+        merkle::Tree::hash_function,
+        DEFAULT_TILE_HEIGHT>;
 
     /// @brief Default entry-bundle writer (SHA256, default hash function).
     using EntryBundleWriter = EntryBundleWriterT<
       merkle::Tree::Hash::size_bytes,
-      merkle::Tree::hash_function>;
+      merkle::Tree::hash_function,
+      DEFAULT_TILE_HEIGHT>;
 
 #ifdef HAVE_OPENSSL
     /// @brief SHA384 tile store.
-    using TileStore384 = TileStoreT<48, sha384_openssl>;
+    using TileStore384 =
+      TileStoreT<48, sha384_openssl, DEFAULT_TILE_HEIGHT>;
 
     /// @brief SHA512 tile store.
-    using TileStore512 = TileStoreT<64, sha512_openssl>;
+    using TileStore512 =
+      TileStoreT<64, sha512_openssl, DEFAULT_TILE_HEIGHT>;
 
     /// @brief SHA384 tile writer.
-    using TileWriter384 = TileWriterT<48, sha384_openssl>;
+    using TileWriter384 =
+      TileWriterT<48, sha384_openssl, DEFAULT_TILE_HEIGHT>;
 
     /// @brief SHA512 tile writer.
-    using TileWriter512 = TileWriterT<64, sha512_openssl>;
+    using TileWriter512 =
+      TileWriterT<64, sha512_openssl, DEFAULT_TILE_HEIGHT>;
 
     /// @brief SHA384 hash source, tile-backed source and proof engine.
     using HashSource384 = HashSourceT<48, sha384_openssl>;
-    using TileHashSource384 = TileHashSourceT<48, sha384_openssl>;
+    using TileHashSource384 =
+      TileHashSourceT<48, sha384_openssl, DEFAULT_TILE_HEIGHT>;
     using ProofEngine384 = ProofEngineT<48, sha384_openssl>;
 
     /// @brief SHA512 hash source, tile-backed source and proof engine.
     using HashSource512 = HashSourceT<64, sha512_openssl>;
-    using TileHashSource512 = TileHashSourceT<64, sha512_openssl>;
+    using TileHashSource512 =
+      TileHashSourceT<64, sha512_openssl, DEFAULT_TILE_HEIGHT>;
     using ProofEngine512 = ProofEngineT<64, sha512_openssl>;
 
     /// @brief SHA384 memory/combined sources and tiled tree.
     using MemoryHashSource384 = MemoryHashSourceT<48, sha384_openssl>;
     using CombinedHashSource384 = CombinedHashSourceT<48, sha384_openssl>;
-    using TiledTree384 = TiledTreeT<48, sha384_openssl>;
+    using TiledTree384 =
+      TiledTreeT<48, sha384_openssl, DEFAULT_TILE_HEIGHT>;
 
     /// @brief SHA512 memory/combined sources and tiled tree.
     using MemoryHashSource512 = MemoryHashSourceT<64, sha512_openssl>;
     using CombinedHashSource512 = CombinedHashSourceT<64, sha512_openssl>;
-    using TiledTree512 = TiledTreeT<64, sha512_openssl>;
+    using TiledTree512 =
+      TiledTreeT<64, sha512_openssl, DEFAULT_TILE_HEIGHT>;
 
     /// @brief SHA384/512 entry-bundle writers.
-    using EntryBundleWriter384 = EntryBundleWriterT<48, sha384_openssl>;
-    using EntryBundleWriter512 = EntryBundleWriterT<64, sha512_openssl>;
+    using EntryBundleWriter384 =
+      EntryBundleWriterT<48, sha384_openssl, DEFAULT_TILE_HEIGHT>;
+    using EntryBundleWriter512 =
+      EntryBundleWriterT<64, sha512_openssl, DEFAULT_TILE_HEIGHT>;
 #endif
   }
 }
