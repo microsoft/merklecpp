@@ -1,0 +1,9 @@
+name: consistency-tiled-history
+proof: consistency
+title: Two sizes in tiled history
+description: The 128-leaf tree state is checked as a prefix of the 400-leaf one, both historical inside a 513-leaf backing tree with two durable tiles.
+takeaway: The current frontier begins after both checkpoints, so the complete consistency proof is recovered from green tile storage.
+order: 10
+leaves: 513
+focus: 127
+second: 399

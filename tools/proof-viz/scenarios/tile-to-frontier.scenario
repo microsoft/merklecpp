@@ -1,0 +1,9 @@
+name: tile-to-frontier
+proof: inclusion
+title: A proof leaves the tiled past
+description: Leaf 42 is already represented by the first full tile, while leaves 256-299 remain resident in memory.
+takeaway: The proof starts in green tile storage, then needs blue frontier subtrees to complete the current 300-leaf root.
+order: 2
+leaves: 300
+focus: 42
+second: none

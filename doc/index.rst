@@ -44,6 +44,12 @@ and proof resolution.
    tiles-guide
    tiles-illustrated
 
+Proof visualization
+-------------------
+
+Explore the `interactive tile and frontier proof atlas <proof-viz/>`_ to see
+which durable tiles and resident Merkle nodes supply each proof hash.
+
 API reference
 -------------
 
