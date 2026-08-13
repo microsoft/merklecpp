@@ -1,5 +1,5 @@
-merklecpp Documentation
-=======================
+merklecpp
+=========
 
 merklecpp is a header-only C++ library for creation and manipulation of Merkle
 trees. The main entry-point is the :cpp:class:`merkle::TreeT` template, which

@@ -34,7 +34,8 @@ if release is None:
         text=True,
     ).stdout.strip()
 release = release.removeprefix("v")
-version = release.split("-", maxsplit=1)[0]
+release = release.split("-", maxsplit=1)[0]
+version = release
 
 
 # -- General configuration ---------------------------------------------------
@@ -63,6 +64,7 @@ exclude_patterns = []
 # a list of builtin themes.
 #
 html_theme = 'pydata_sphinx_theme'
+html_title = f'{project} {version}'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
