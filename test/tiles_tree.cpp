@@ -766,7 +766,7 @@ int main()
       // Here all 256 level-0 tiles publish before the level-1 tile is blocked.
       {
         constexpr size_t level1_size =
-          (size_t)merkle::tiles::TILE_WIDTH * merkle::tiles::TILE_WIDTH;
+          (size_t)TileStore::TILE_WIDTH * TileStore::TILE_WIDTH;
         const auto level1_hashes = make_hashes(level1_size);
 
         TiledTree::Config cfg;

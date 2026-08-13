@@ -51,12 +51,6 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     static constexpr uint16_t DEFAULT_TILE_WIDTH =
       uint16_t{1U << DEFAULT_TILE_HEIGHT};
 
-    /// @brief Backward-compatible alias for the default tile height.
-    static constexpr uint16_t TILE_HEIGHT = DEFAULT_TILE_HEIGHT;
-
-    /// @brief Backward-compatible alias for the default tile width.
-    static constexpr uint16_t TILE_WIDTH = DEFAULT_TILE_WIDTH;
-
     /// @brief Highest tile level permitted by the tlog-tiles layout.
     static constexpr uint8_t MAX_TILE_LEVEL = 63;
 
