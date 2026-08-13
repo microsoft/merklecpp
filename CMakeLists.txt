@@ -24,6 +24,7 @@ if(CLANG_TIDY)
   if(NOT CLANG_TIDY_PROGRAM)
     message(FATAL_ERROR "clang-tidy not found")
   endif()
+  set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PROGRAM}")
 endif()
 
 add_library(merklecpp INTERFACE)
@@ -47,13 +48,13 @@ if(OPENSSL)
 endif()
 
 if(BUILD_TESTING)
+  add_executable(proof_viz tools/proof-viz/proof_viz.cpp)
+  target_link_libraries(proof_viz PRIVATE merklecpp)
+  target_include_directories(proof_viz PRIVATE test)
+
   function(add_unit_test NAME SRC)
     add_executable(${NAME} ${SRC})
     target_link_libraries(${NAME} PRIVATE $<BUILD_INTERFACE:merklecpp>)
-
-    if(CLANG_TIDY)
-      set_target_properties(${NAME} PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_PROGRAM}")
-    endif()
 
     if(PROFILE)
       target_compile_options(${NAME} PRIVATE -g -pg)

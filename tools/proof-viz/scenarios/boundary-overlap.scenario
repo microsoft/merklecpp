@@ -1,0 +1,9 @@
+name: boundary-overlap
+proof: inclusion
+title: The exact two-tile boundary
+description: At 512 leaves, both tiles are complete. Compaction deliberately retains the final leaf in memory because merklecpp never flushes the entire tree.
+takeaway: The blue target pixel has a green overlap mark: both sources can answer it, but CombinedHashSource chooses memory first; its siblings come from tiles.
+order: 5
+leaves: 512
+focus: 511
+second: none
