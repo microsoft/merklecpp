@@ -28,10 +28,10 @@ using merkle::tiles::HashSource;
 using merkle::tiles::MAX_TILE_LEVEL;
 using merkle::tiles::MemoryHashSource;
 using merkle::tiles::ProofEngine;
-using merkle::tiles::TILE_WIDTH;
 using merkle::tiles::TileHashSource;
 using merkle::tiles::TileStore;
 using merkle::tiles::TileWriter;
+static constexpr size_t TILE_WIDTH = TileStore::TILE_WIDTH;
 
 // Node roles, packed into one integer per node so the JSON stays compact.
 static constexpr uint32_t FLAG_TILE = 1U << 0;

@@ -407,7 +407,7 @@ TEST_CASE("Tile writer retries ancestor sync before publication")
   const auto fault = std::make_shared<SyncFault>();
   fault->fail_path = prefix;
   fault->failures_remaining = 1;
-  const auto full = make_hashes(decltype(store)::TILE_WIDTH);
+  const auto full = make_hashes(merkle::tiles::TileStore::TILE_WIDTH);
   const auto leaf_at = [&](uint64_t i) -> const Hash& { return full[i]; };
 
   {
