@@ -68,9 +68,9 @@ an existing one because tile files alone do not identify or restore the tree
 that produced them. Applications with externally persisted tree state can use
 the lower-level `TileStore` and `TileWriter` APIs to resume a store.
 
-See the [tiled storage guide](doc/tiles-guide.md) for a how-to covering
+See the [tiled storage guide](doc/tiles-guide.rst) for a how-to covering
 flushing, compaction, rollback, proofs, and the lower-level building blocks,
-and the [illustrated walkthrough](doc/tiles-illustrated.md) for the tile layout
+and the [illustrated walkthrough](doc/tiles-illustrated.rst) for the tile layout
 and proof algorithms.
 
 

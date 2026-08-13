@@ -44,18 +44,9 @@ version = release.split("-", maxsplit=1)[0]
 # ones.
 extensions = [
   "breathe",
-  "myst_parser",
   "sphinx.ext.githubpages",
   "sphinxcontrib.mermaid",
 ]
-
-source_suffix = {
-  '.rst': 'restructuredtext',
-  '.md': 'markdown',
-}
-
-myst_fence_as_directive = ["mermaid"]
-myst_heading_anchors = 4
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
