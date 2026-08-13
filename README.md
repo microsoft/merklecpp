@@ -89,7 +89,9 @@ including level-2 tile coverage and tile proof timing:
     cmake -S . -B build -DLONG_TESTS=ON
 
 CI enables `LONG_TESTS` in Release configurations so pull requests exercise the
-full tiled-storage matrix; Debug configurations run the short suite.
+full tiled-storage matrix; Debug configurations run the short suite. Every
+Release job publishes its `time_tiles` measurements as a table in the GitHub
+Actions job summary.
 
 | CMake option | Default | Purpose |
 |---|---:|---|

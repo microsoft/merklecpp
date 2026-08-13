@@ -167,7 +167,6 @@ int main()
       throw std::runtime_error("benchmark proof failed to verify");
     }
     std::cout << "time_tiles: OK (checksum " << sink << ")\n";
-    std::cout << "time_tiles: OK (checksum " << sink << ")\n";
   }
   catch (std::exception& ex)
   {
