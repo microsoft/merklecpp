@@ -1,0 +1,9 @@
+name: frontier-to-tile
+proof: inclusion
+title: A frontier proof reaches backward
+description: Leaf 271 sits in the 44-leaf resident frontier beyond one completed tile.
+takeaway: Most local siblings are blue, but the final left sibling is the entire 256-leaf tiled prefix, resolved in one green lookup.
+order: 3
+leaves: 300
+focus: 271
+second: none
