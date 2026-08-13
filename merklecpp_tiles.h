@@ -6,6 +6,7 @@
 #include "merklecpp.h"
 #include "merklecpp_pal.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -1190,24 +1191,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       static constexpr size_t DEFAULT_TILE_CACHE_SIZE = 64;
       static constexpr size_t TILE_CACHE_HASH_BUDGET =
         DEFAULT_TILE_CACHE_SIZE * DEFAULT_TILE_WIDTH;
-
-      static constexpr size_t tile_cache_size()
-      {
-        if constexpr (TILE_WIDTH <= DEFAULT_TILE_WIDTH)
-        {
-          return DEFAULT_TILE_CACHE_SIZE;
-        }
-        else if constexpr (TILE_WIDTH > TILE_CACHE_HASH_BUDGET)
-        {
-          return 1;
-        }
-        else
-        {
-          return TILE_CACHE_HASH_BUDGET / TILE_WIDTH;
-        }
-      }
-
-      static constexpr size_t TILE_CACHE_SIZE = tile_cache_size();
+      static constexpr size_t TILE_CACHE_SIZE = std::clamp(
+        TILE_CACHE_HASH_BUDGET / TILE_WIDTH,
+        size_t{1},
+        DEFAULT_TILE_CACHE_SIZE);
       mutable std::vector<TileCacheEntry> tile_cache;
 
       const std::vector<Hash>& read_tile(const TileRef& ref) const

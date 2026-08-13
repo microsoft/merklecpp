@@ -82,18 +82,21 @@ const scenarioRoot = document.querySelector("#scenarios");
     const number = new Intl.NumberFormat("en-US");
     const tooltip = document.querySelector("#node-tooltip");
     const renderers = [];
+    const themeToggle = document.querySelector("#toggle-theme");
+    const applyTheme = (theme) => {
+        document.documentElement.dataset.theme = theme;
+        themeToggle.checked = theme === "dark";
+        colors = readCanvasColors();
+        renderers.forEach((renderer) => renderer.draw());
+    };
 
     const systemDarkTheme = window.matchMedia("(prefers-color-scheme: dark)");
     systemDarkTheme.addEventListener(
         "change",
         (event) => {
             if (!localStorage.getItem("proof-viz-theme")) {
-                document.documentElement.dataset.theme = event.matches ? "dark" : "light";
-                const themeToggle = document.querySelector("#toggle-theme");
-                if (themeToggle) themeToggle.checked = event.matches;
+                applyTheme(event.matches ? "dark" : "light");
             }
-            colors = readCanvasColors();
-            renderers.forEach((renderer) => renderer.draw());
         }
     );
 
@@ -250,6 +253,12 @@ const scenarioRoot = document.querySelector("#scenarios");
             }
 
             if (state.edges) {
+                const visibleFrontier =
+                    Math.max(0, scenario.mapLeaves - scenario.covered);
+                const routeOutsideTree =
+                    visibleFrontier > 0 &&
+                    visibleFrontier < data.tileWidth / 2 &&
+                    scenario.tiles.length >= data.tileWidth;
                 context.lineWidth = 0.7;
                 context.strokeStyle = colors.edge;
                 context.beginPath();
@@ -258,7 +267,25 @@ const scenarioRoot = document.querySelector("#scenarios");
                     const parent = positions[node.parent];
                     const current = positions[index];
                     context.moveTo(parent.x, parent.y);
-                    context.lineTo(current.x, current.y);
+                    const parentNode = scenario.nodes[node.parent];
+                    const longBoundaryEdge =
+                        routeOutsideTree &&
+                        node.parent === scenario.secondRoot &&
+                        parentNode.height - node.height > 1 &&
+                        (node.lo === 0 || node.hi === scenario.mapLeaves);
+                    if (longBoundaryEdge) {
+                        const gutterX = node.lo === 0 ? 8 : cssWidth - 8;
+                        context.bezierCurveTo(
+                            gutterX,
+                            parent.y,
+                            gutterX,
+                            current.y,
+                            current.x,
+                            current.y
+                        );
+                    } else {
+                        context.lineTo(current.x, current.y);
+                    }
                 });
                 context.stroke();
 
@@ -532,14 +559,11 @@ const scenarioRoot = document.querySelector("#scenarios");
         renderers.forEach((renderer) => renderer.draw());
     });
 
-    const themeToggle = document.querySelector("#toggle-theme");
     themeToggle.checked = document.documentElement.dataset.theme === "dark";
     themeToggle.addEventListener("change", (event) => {
         const theme = event.target.checked ? "dark" : "light";
-        document.documentElement.dataset.theme = theme;
         localStorage.setItem("proof-viz-theme", theme);
-        colors = readCanvasColors();
-        renderers.forEach((renderer) => renderer.draw());
+        applyTheme(theme);
     });
 
 })().catch((error) => {

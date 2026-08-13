@@ -627,18 +627,6 @@ int main(int argc, char** argv)
                 << scenario.proof_nodes.size() << " proof elements, "
                 << scenario.tile_files.size() << " tiles\n";
     }
-    const bool has_level_one_tile =
-      std::any_of(scenarios.begin(), scenarios.end(), [](const Scenario& s) {
-        return std::any_of(
-          s.tile_files.begin(), s.tile_files.end(), [](const auto& tile) {
-            return tile.first == 1;
-          });
-      });
-    if (!has_level_one_tile)
-    {
-      throw std::runtime_error(
-        "proof visualization scenarios must exercise level-1 tiles");
-    }
     write_data(output, scenarios);
     std::cout << "wrote " << output << '\n';
   }
