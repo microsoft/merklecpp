@@ -134,7 +134,8 @@ static std::vector<uint8_t> read_file(const fs::path& p)
 
 static std::vector<std::vector<uint8_t>> make_entries()
 {
-  std::vector<std::vector<uint8_t>> entries(merkle::tiles::TILE_WIDTH);
+  std::vector<std::vector<uint8_t>> entries(
+    merkle::tiles::TileStore::TILE_WIDTH);
   entries[1] = {0xA5};
   entries[2] = std::vector<uint8_t>(256, 0x5A);
   for (size_t i = 3; i < entries.size(); i++)
@@ -147,7 +148,9 @@ static std::vector<std::vector<uint8_t>> make_entries()
 TEST_CASE("Tile geometry, references, and index encoding")
 {
   // 1. Tile geometry, references, and index encoding.
-  CHECK(merkle::tiles::TILE_WIDTH == (1U << merkle::tiles::TILE_HEIGHT));
+  CHECK(
+    merkle::tiles::TileStore::TILE_WIDTH ==
+    (1U << merkle::tiles::TileStore::TILE_HEIGHT));
 
   const TileRef default_ref;
   CHECK(default_ref.level == 0);
@@ -251,13 +254,13 @@ TEST_CASE("Tile store paths and hash namespaces")
   }
   TileStore384 store384(dir);
   const auto full384 =
-    make_hashesT<merkle::Tree384::Hash::size_bytes>(merkle::tiles::TILE_WIDTH);
+    make_hashesT<merkle::Tree384::Hash::size_bytes>(TileStore384::TILE_WIDTH);
   CHECK(
     store384.root().lexically_relative(dir).generic_string() == "sha384-256w");
   store384.write_tile(TileRef{0, 0}, full384);
   CHECK(
     fs::file_size(store384.tile_path(TileRef{0, 0})) ==
-    (uintmax_t)merkle::tiles::TILE_WIDTH * merkle::Tree384::Hash::size_bytes);
+    (uintmax_t)TileStore384::TILE_WIDTH * merkle::Tree384::Hash::size_bytes);
   CHECK(store384.has_full_tile(0, 0));
   CHECK(store384.read_tile(TileRef{0, 0}) == full384);
 
@@ -271,13 +274,13 @@ TEST_CASE("Tile store paths and hash namespaces")
   }
   TileStore512 store512(dir);
   const auto full512 =
-    make_hashesT<merkle::Tree512::Hash::size_bytes>(merkle::tiles::TILE_WIDTH);
+    make_hashesT<merkle::Tree512::Hash::size_bytes>(TileStore512::TILE_WIDTH);
   CHECK(
     store512.root().lexically_relative(dir).generic_string() == "sha512-256w");
   store512.write_tile(TileRef{0, 0}, full512);
   CHECK(
     fs::file_size(store512.tile_path(TileRef{0, 0})) ==
-    (uintmax_t)merkle::tiles::TILE_WIDTH * merkle::Tree512::Hash::size_bytes);
+    (uintmax_t)TileStore512::TILE_WIDTH * merkle::Tree512::Hash::size_bytes);
   CHECK(store512.has_full_tile(0, 0));
   CHECK(store512.read_tile(TileRef{0, 0}) == full512);
 #endif
@@ -292,7 +295,7 @@ TEST_CASE("Tile writes sync directory links in order")
   const fs::path prefix = dir / "durable";
   const auto fault = std::make_shared<SyncFault>();
   FaultInjectingTileStore store(prefix, fault);
-  store.write_tile(TileRef{1, 0}, make_hashes(merkle::tiles::TILE_WIDTH));
+  store.write_tile(TileRef{1, 0}, make_hashes(decltype(store)::TILE_WIDTH));
 
   const std::vector<fs::path> expected = {
     dir.parent_path(),
@@ -319,7 +322,7 @@ TEST_CASE("Failed directory-link sync is retried")
   fault->failures_remaining = 1;
   FaultInjectingTileStore store(prefix, fault);
   const TileRef ref{2, 7};
-  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  const auto full = make_hashes(decltype(store)::TILE_WIDTH);
 
   CHECK_THROWS_AS((store.write_tile(ref, full)), std::runtime_error);
   CHECK_FALSE(store.has_full_tile(ref.level, ref.index));
@@ -337,7 +340,7 @@ TEST_CASE("Visible publication can be confirmed after sync failure")
   const auto fault = std::make_shared<SyncFault>();
   FaultInjectingTileStore store(prefix, fault);
   const TileRef ref{3, 9};
-  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  const auto full = make_hashes(decltype(store)::TILE_WIDTH);
   const auto tile_directory = store.tile_path(ref).parent_path();
   fault->fail_path = tile_directory;
   fault->failures_remaining = 1;
@@ -365,7 +368,7 @@ TEST_CASE("Tile writer confirms visible tiles after sync failure")
     temporary_directory.path() / "writer_publication_retry";
   const auto fault = std::make_shared<SyncFault>();
   constexpr uint64_t growing_size =
-    (uint64_t)merkle::tiles::TILE_WIDTH * 2;
+    (uint64_t)merkle::tiles::TileStore::TILE_WIDTH * 2;
   const auto growing = make_hashes((size_t)growing_size);
   const auto leaf_at = [&](uint64_t i) -> const Hash& { return growing[i]; };
 
@@ -375,7 +378,8 @@ TEST_CASE("Tile writer confirms visible tiles after sync failure")
     retry_store.tile_path(TileRef{0, 0}).parent_path();
   fault->fail_path = destination;
   REQUIRE(
-    retry_writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at).full_written ==
+    retry_writer.write_up_to(
+      merkle::tiles::TileStore::TILE_WIDTH, leaf_at).full_written ==
     1);
 
   fault->matching_calls_before_failure = 1;
@@ -391,7 +395,8 @@ TEST_CASE("Tile writer confirms visible tiles after sync failure")
   CHECK(retry_writer.write_up_to(growing_size, leaf_at).full_written == 0);
   CHECK(fault->call_count(destination) == 4);
   const std::vector<Hash> second(
-    growing.begin() + (std::ptrdiff_t)merkle::tiles::TILE_WIDTH, growing.end());
+    growing.begin() + (std::ptrdiff_t)merkle::tiles::TileStore::TILE_WIDTH,
+    growing.end());
   CHECK(retry_store.read_tile(TileRef{0, 1}) == second);
 }
 
@@ -402,14 +407,15 @@ TEST_CASE("Tile writer retries ancestor sync before publication")
   const auto fault = std::make_shared<SyncFault>();
   fault->fail_path = prefix;
   fault->failures_remaining = 1;
-  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  const auto full = make_hashes(merkle::tiles::TileStore::TILE_WIDTH);
   const auto leaf_at = [&](uint64_t i) -> const Hash& { return full[i]; };
 
   {
     FaultInjectingTileStore failed_store(prefix, fault);
     merkle::tiles::TileWriter writer(failed_store);
     CHECK_THROWS_AS(
-      (writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at)),
+      (writer.write_up_to(
+        merkle::tiles::TileStore::TILE_WIDTH, leaf_at)),
       std::runtime_error);
     CHECK(fs::is_directory(prefix / "sha256-256w"));
     CHECK_FALSE(failed_store.has_full_tile(0, 0));
@@ -418,7 +424,8 @@ TEST_CASE("Tile writer retries ancestor sync before publication")
   FaultInjectingTileStore retry_store(prefix, fault);
   merkle::tiles::TileWriter retry_writer(retry_store);
   CHECK(
-    retry_writer.write_up_to(merkle::tiles::TILE_WIDTH, leaf_at).full_written ==
+    retry_writer.write_up_to(
+      merkle::tiles::TileStore::TILE_WIDTH, leaf_at).full_written ==
     1);
   CHECK(fault->call_count(prefix) == 2);
   CHECK(retry_store.has_full_tile(0, 0));
@@ -430,7 +437,7 @@ TEST_CASE("Replacement and directory conflicts clean up temporary files")
   // non-directory in the destination path is rejected.
   const TemporaryDirectory temporary_directory;
   const fs::path& dir = temporary_directory.path();
-  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  const auto full = make_hashes(merkle::tiles::TileStore::TILE_WIDTH);
 
   const fs::path replacement_prefix = dir / "replacement_failure";
   merkle::tiles::TileStore replacement_store(replacement_prefix);
@@ -531,7 +538,7 @@ TEST_CASE("Full tiles use raw bytes and round-trip")
   const TemporaryDirectory temporary_directory;
   merkle::tiles::TileStore store(temporary_directory.path());
   const size_t hash_size = Hash().size();
-  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  const auto full = make_hashes(decltype(store)::TILE_WIDTH);
   const TileRef full_ref{0, 0};
 
   store.write_tile(full_ref, full);
@@ -540,7 +547,7 @@ TEST_CASE("Full tiles use raw bytes and round-trip")
   CHECK_THROWS_AS((void)store.read_tile(TileRef{0, 5}), std::runtime_error);
   CHECK(
     fs::file_size(store.tile_path(full_ref)) ==
-    (uintmax_t)merkle::tiles::TILE_WIDTH * hash_size);
+    (uintmax_t)decltype(store)::TILE_WIDTH * hash_size);
 
   std::vector<uint8_t> expected_tile_bytes;
   expected_tile_bytes.reserve(full.size() * hash_size);
@@ -580,7 +587,7 @@ TEST_CASE("Entry encoding enforces bounds and round-trips")
   CHECK(encoded_entries[6] == 0x00);
   CHECK(
     merkle::tiles::TileStore::decode_entries(
-      encoded_entries, merkle::tiles::TILE_WIDTH) == entries);
+      encoded_entries, merkle::tiles::TileStore::TILE_WIDTH) == entries);
   CHECK(merkle::tiles::TileStore::decode_entries({}, 0).empty());
   CHECK_THROWS_AS(
     (merkle::tiles::TileStore::decode_entries(
@@ -652,7 +659,7 @@ TEST_CASE("Corrupt tiles and entry bundles are rejected")
   const TemporaryDirectory temporary_directory;
   merkle::tiles::TileStore store(temporary_directory.path());
   const size_t hash_size = Hash().size();
-  const auto full = make_hashes(merkle::tiles::TILE_WIDTH);
+  const auto full = make_hashes(decltype(store)::TILE_WIDTH);
   const TileRef full_ref{0, 0};
   const auto entries = make_entries();
   store.write_tile(full_ref, full);
@@ -662,7 +669,7 @@ TEST_CASE("Corrupt tiles and entry bundles are rejected")
   const auto short_tile_error = std::format(
     "unexpected tile size for {}: expected {} bytes, got {}",
     store.tile_path(full_ref).string(),
-    merkle::tiles::TILE_WIDTH * hash_size,
+    decltype(store)::TILE_WIDTH * hash_size,
     hash_size);
   CHECK_THROWS_WITH_AS(
     (void)store.read_tile(full_ref),
@@ -674,7 +681,7 @@ TEST_CASE("Corrupt tiles and entry bundles are rejected")
 
   overwrite_file(
     store.tile_path(full_ref),
-    std::vector<uint8_t>((merkle::tiles::TILE_WIDTH + 1) * hash_size, 0));
+    std::vector<uint8_t>((decltype(store)::TILE_WIDTH + 1) * hash_size, 0));
   CHECK_FALSE(store.has_full_tile(0, 0));
   CHECK_THROWS_AS((void)store.read_tile(full_ref), std::runtime_error);
 

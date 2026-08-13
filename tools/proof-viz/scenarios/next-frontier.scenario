@@ -1,9 +1,9 @@
 name: next-frontier
 proof: inclusion
-title: A new frontier after two tiles
-description: Leaf 512 is the first resident leaf after a 512-leaf tiled prefix.
-takeaway: The proof begins with one blue leaf and crosses immediately to a single green 512-leaf sibling that represents both completed tiles.
+title: A new frontier after a level-1 tile
+description: Leaf 64 is the first resident leaf after a 64-leaf tiled prefix spanning two tile levels.
+takeaway: The proof begins with one blue leaf and crosses immediately to a single green 64-leaf sibling resolved from the level-1 tile.
 order: 6
-leaves: 513
-focus: 512
+leaves: 65
+focus: 64
 second: none

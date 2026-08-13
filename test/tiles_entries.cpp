@@ -155,9 +155,9 @@ int main()
         writer.write_up_to(2048, entry_at).full_written == 1,
         "holes rewrites interior bundle");
       std::vector<std::vector<uint8_t>> expected;
-      expected.reserve(merkle::tiles::TILE_WIDTH);
-      constexpr uint64_t hole_begin = (uint64_t)merkle::tiles::TILE_WIDTH * 3;
-      constexpr uint64_t hole_end = (uint64_t)merkle::tiles::TILE_WIDTH * 4;
+      expected.reserve(TileStore::TILE_WIDTH);
+      constexpr uint64_t hole_begin = (uint64_t)TileStore::TILE_WIDTH * 3;
+      constexpr uint64_t hole_end = (uint64_t)TileStore::TILE_WIDTH * 4;
       for (uint64_t i = hole_begin; i < hole_end; i++)
       {
         expected.push_back(entry_at(i));
@@ -171,7 +171,7 @@ int main()
     {
       const fs::path dir = base / "esparse";
       const std::vector<std::vector<uint8_t>> bundle(
-        merkle::tiles::TILE_WIDTH, {0x42});
+        TileStore::TILE_WIDTH, {0x42});
       {
         TileStore store(dir);
         store.write_entry_bundle(0, bundle);
@@ -188,7 +188,7 @@ int main()
       TileStore store(dir);
       EntryBundleWriter writer(store);
       expect(
-        writer.write_up_to(merkle::tiles::TILE_WIDTH, entry_at).full_written ==
+        writer.write_up_to(TileStore::TILE_WIDTH, entry_at).full_written ==
           0,
         "sparse bounded recovery");
       expect(

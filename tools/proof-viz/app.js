@@ -12,6 +12,10 @@ const scenarioRoot = document.querySelector("#scenarios");
     if (data.schemaVersion !== 5 || !Array.isArray(data.scenarios)) {
         throw new Error("Proof visualization data is missing");
     }
+    const tileHeight = Math.log2(data.tileWidth);
+    if (!Number.isInteger(tileHeight)) {
+        throw new Error("Tile width must be a power of two");
+    }
 
     // Nodes arrive as parallel columns with one bitmask each. The tile and
     // frontier bits are what those two stores answered for that range, so a
@@ -78,15 +82,21 @@ const scenarioRoot = document.querySelector("#scenarios");
     const number = new Intl.NumberFormat("en-US");
     const tooltip = document.querySelector("#node-tooltip");
     const renderers = [];
+    const themeToggle = document.querySelector("#toggle-theme");
+    const applyTheme = (theme) => {
+        document.documentElement.dataset.theme = theme;
+        themeToggle.checked = theme === "dark";
+        colors = readCanvasColors();
+        renderers.forEach((renderer) => renderer.draw());
+    };
 
-    window.matchMedia("(prefers-color-scheme: dark)").addEventListener(
+    const systemDarkTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    systemDarkTheme.addEventListener(
         "change",
         (event) => {
-            if (!localStorage.getItem("theme")) {
-                document.documentElement.dataset.theme = event.matches ? "dark" : "light";
+            if (!localStorage.getItem("proof-viz-theme")) {
+                applyTheme(event.matches ? "dark" : "light");
             }
-            colors = readCanvasColors();
-            renderers.forEach((renderer) => renderer.draw());
         }
     );
 
@@ -198,6 +208,30 @@ const scenarioRoot = document.querySelector("#scenarios");
                 y: plot.top + ((maxHeight - node.height) / Math.max(maxHeight, 1)) * plotHeight
             }));
 
+            scenario.tiles.forEach(([level, index]) => {
+                const tileSpan = data.tileWidth ** (level + 1);
+                const lo = index * tileSpan;
+                const hi = lo + tileSpan;
+                if (hi > scenario.mapLeaves) return;
+
+                const x = plot.left + (lo / scenario.mapLeaves) * plotWidth;
+                const right = plot.left + (hi / scenario.mapLeaves) * plotWidth;
+                const y = plot.top +
+                    ((maxHeight - level * tileHeight) / Math.max(maxHeight, 1)) * plotHeight;
+                const inset = 2;
+                const boxHeight = 14;
+                context.save();
+                context.strokeStyle = colors.tile;
+                context.lineWidth = 0.65;
+                context.strokeRect(
+                    snap(x + inset),
+                    snap(y - boxHeight / 2),
+                    snap(right - x - inset * 2),
+                    boxHeight
+                );
+                context.restore();
+            });
+
             if (scenario.covered > 0 && scenario.covered < scenario.mapLeaves) {
                 const boundaryX = plot.left + (scenario.covered / scenario.mapLeaves) * plotWidth;
                 context.save();
@@ -219,6 +253,12 @@ const scenarioRoot = document.querySelector("#scenarios");
             }
 
             if (state.edges) {
+                const visibleFrontier =
+                    Math.max(0, scenario.mapLeaves - scenario.covered);
+                const routeOutsideTree =
+                    visibleFrontier > 0 &&
+                    visibleFrontier <= data.tileWidth / 2 &&
+                    scenario.tiles.length >= data.tileWidth;
                 context.lineWidth = 0.7;
                 context.strokeStyle = colors.edge;
                 context.beginPath();
@@ -227,7 +267,25 @@ const scenarioRoot = document.querySelector("#scenarios");
                     const parent = positions[node.parent];
                     const current = positions[index];
                     context.moveTo(parent.x, parent.y);
-                    context.lineTo(current.x, current.y);
+                    const parentNode = scenario.nodes[node.parent];
+                    const longBoundaryEdge =
+                        routeOutsideTree &&
+                        node.parent === scenario.secondRoot &&
+                        parentNode.height - node.height > 1 &&
+                        (node.lo === 0 || node.hi === scenario.mapLeaves);
+                    if (longBoundaryEdge) {
+                        const gutterX = node.lo === 0 ? 8 : cssWidth - 8;
+                        context.bezierCurveTo(
+                            gutterX,
+                            parent.y,
+                            gutterX,
+                            current.y,
+                            current.x,
+                            current.y
+                        );
+                    } else {
+                        context.lineTo(current.x, current.y);
+                    }
                 });
                 context.stroke();
 
@@ -251,13 +309,11 @@ const scenarioRoot = document.querySelector("#scenarios");
                 context.restore();
             }
 
-            // Tile and frontier squares are the densest thing on the canvas.
-            // Two physical pixels reads clearly and still leaves a gap beside
-            // each leaf once there are three pixels to place them in; below
-            // that the row fuses into a bar, so it falls back to the smallest
-            // mark a screen can draw.
-            const pitch = (plotWidth * pixelRatio) / scenario.mapLeaves;
-            const baseSize = devicePx * (pitch >= 3 ? 2 : 1);
+            // Scale marks with the available leaf spacing. The small atlas
+            // scenarios can carry clearer nodes, while the cap preserves gaps
+            // in denser rows.
+            const pitch = plotWidth / scenario.mapLeaves;
+            const baseSize = Math.max(devicePx * 2, Math.min(4, pitch * 0.36));
             hitTargets = [];
             scenario.nodes.forEach((node, index) => {
                 const position = positions[index];
@@ -501,6 +557,13 @@ const scenarioRoot = document.querySelector("#scenarios");
     document.querySelector("#toggle-edges").addEventListener("change", (event) => {
         state.edges = event.target.checked;
         renderers.forEach((renderer) => renderer.draw());
+    });
+
+    themeToggle.checked = document.documentElement.dataset.theme === "dark";
+    themeToggle.addEventListener("change", (event) => {
+        const theme = event.target.checked ? "dark" : "light";
+        localStorage.setItem("proof-viz-theme", theme);
+        applyTheme(theme);
     });
 
 })().catch((error) => {

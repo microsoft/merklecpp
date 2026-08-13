@@ -1,9 +1,9 @@
 name: consistency-boundary
 proof: consistency
 title: Consistency across the flush line
-description: The 256-leaf tree state is checked as a prefix of the 300-leaf one, on opposite sides of the flush line.
-takeaway: The old tree is exactly the left subtree of the new one, so the proof is a single hash covering the 44 remaining leaves and verifying is one step: sha256 of the old root and that hash.
+description: The 64-leaf tree state is checked as a prefix of the 70-leaf one, on opposite sides of the level-1 flush line.
+takeaway: The old tree is exactly the left subtree of the new one, so the proof is a single hash covering the 6 remaining leaves and verifying is one step: sha256 of the old root and that hash.
 order: 8
-leaves: 300
-focus: 255
-second: 299
+leaves: 70
+focus: 63
+second: 69
