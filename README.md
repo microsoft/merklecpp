@@ -38,7 +38,7 @@ tile-derived inclusion proof is byte-identical to one from
 
     merkle::tiles::TiledTree::Config cfg;
     cfg.prefix = "/var/log/mylog";       // tile files live here
-    cfg.retention_margin = 1024;         // keep the most recent leaves in memory
+    cfg.retention_margin = 1024;         // retain at least 1024 tiled leaves too
     cfg.compact_on_flush = true;         // opt in to dropping already-tiled leaves
 
     merkle::tiles::TiledTree log(cfg);
@@ -51,16 +51,22 @@ tile-derived inclusion proof is byte-identical to one from
     log.flush();
 
     // Proofs are served from tiles + the resident tree, even for flushed leaves.
+    assert(log.size() > 0);
     auto inclusion = log.inclusion_proof(/*index=*/0, log.size());
     assert(inclusion->verify(log.root()));
 
-    auto consistency = log.consistency_proof(/*m=*/100, /*n=*/log.size());
+    if (log.size() > 1)
+    {
+      auto consistency =
+        log.consistency_proof(/*m=*/log.size() / 2, /*n=*/log.size());
+    }
 
-`TiledTree` creates a new tiled tree: the configured directory may exist, but
-its `tile` subdirectory must be absent or empty. It deliberately rejects
-existing tile data because tile files alone do not identify or restore the
-tree that produced them. Applications with externally persisted tree state can
-use the lower-level `TileStore` and `TileWriter` APIs to resume a store.
+`TiledTree` creates a new tiled tree. The configured prefix may exist, but the
+default alias requires `<prefix>/sha256-256w/tile` not to exist, even as an
+empty directory. Construction atomically claims that tile namespace and rejects
+an existing one because tile files alone do not identify or restore the tree
+that produced them. Applications with externally persisted tree state can use
+the lower-level `TileStore` and `TileWriter` APIs to resume a store.
 
 See the [tiled storage guide](doc/tiles-guide.md) for a how-to covering
 flushing, compaction, rollback, proofs, and the lower-level building blocks,
@@ -70,20 +76,29 @@ and proof algorithms.
 
 ## Building and testing
 
-Enable the test suite with CMake's `BUILD_TESTING` option:
+Tests are built by default. Configure, build, and run them with:
 
-    cmake -S . -B build -DBUILD_TESTING=ON
+    cmake -S . -B build
     cmake --build build
-    ctest --test-dir build
+    cmake -E chdir build ctest
 
 Some tile coverage is intentionally long-running. `LONG_TESTS` is off by
 default for local builds; turn it on when you want the full tile stress suite,
 including level-2 tile coverage and tile proof timing:
 
-    cmake -S . -B build -DBUILD_TESTING=ON -DLONG_TESTS=ON
+    cmake -S . -B build -DLONG_TESTS=ON
 
-The repository CI enables `LONG_TESTS` so pull requests continue to exercise the
-full tiled-storage matrix.
+CI enables `LONG_TESTS` in Release configurations so pull requests exercise the
+full tiled-storage matrix; Debug configurations run the short suite.
+
+| CMake option | Default | Purpose |
+|---|---:|---|
+| `BUILD_TESTING` | `ON` | Build tests; set `OFF` for a library-only build |
+| `LONG_TESTS` | `OFF` | Include level-2 tile and `time_tiles` coverage |
+| `OPENSSL` | `OFF` | Enable OpenSSL hashes, SHA-384/512 tiled aliases, and tests |
+| `CLANG_TIDY` | `OFF` | Run clang-tidy while compiling tests |
+| `TRACE` | `OFF` | Enable internal Merkle-tree trace output |
+| `PROFILE` | `OFF` | Add profiling flags to test targets |
 
 
 ## Contributing

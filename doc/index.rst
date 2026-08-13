@@ -19,8 +19,36 @@ example:
     :end-before: SNIPPET_END: OpenSSL-SHA256
     :dedent: 2
 
+Tiled storage
+-------------
+
+The optional :code:`merklecpp_tiles.h` companion persists complete tree ranges
+as immutable `tlog-tiles <https://c2sp.org/tlog-tiles>`_ files. Given a storage
+directory and a batch of leaf hashes, the basic lifecycle is:
+
+.. literalinclude:: ../test/tiles_docs.cpp
+    :language: cpp
+    :start-after: SNIPPET_START: TiledTree-Quick-Start
+    :end-before: SNIPPET_END: TiledTree-Quick-Start
+    :dedent: 2
+
+Continue with the :doc:`practical guide <tiles-guide>` for configuration and
+lifecycle operations, then use the
+:doc:`illustrated walkthrough <tiles-illustrated>` to understand tile geometry
+and proof resolution.
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tiled storage
+
+   tiles-guide
+   tiles-illustrated
+
+API reference
+-------------
+
 Trees
------
+~~~~~
 
 .. doxygenclass:: merkle::TreeT
    :project: merklecpp
@@ -30,21 +58,21 @@ Trees
    :project: merklecpp
 
 Hashes
-------
+~~~~~~
 
 .. doxygenstruct:: merkle::HashT
    :project: merklecpp
    :members:
 
 Paths
------
+~~~~~
 
 .. doxygenclass:: merkle::PathT
    :project: merklecpp
    :members:
 
 Hash functions
---------------
+~~~~~~~~~~~~~~
 
 By default, merklecpp uses its built-in SHA256 function
 (:cpp:func:`merkle::sha256`) for node hashes. For convenience, merklecpp also
@@ -57,11 +85,6 @@ To enable these bindings, merklecpp requires the compiler macro
 
 .. doxygenfunction:: merkle::sha256_openssl
    :project: merklecpp
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
 
 Indices and tables
 ==================

@@ -4,14 +4,28 @@ This page builds a visual model of how an append-only Merkle tree moves from
 memory into immutable tile files, and how proofs continue to work across both
 places.
 
-> [!IMPORTANT]
-> **Every example on this page uses an imaginary tile width of 32 entries
-> purely to keep the diagrams readable.**
+For API usage and operational guidance, start with the
+[practical tiled-storage guide](tiles-guide.md).
+
+> **Important:** Every example on this page uses an imaginary tile width of 32
+> entries purely to keep the diagrams readable.
 >
 > The merklecpp implementation remains fixed at `TILE_WIDTH = 256` and
 > `TILE_HEIGHT = 8`. A width of 32 is not a configuration option, and this page
 > does not propose changing the code, file format, defaults, or examples
 > elsewhere. Unless a section explicitly says "illustrative", use 256.
+
+## Contents
+
+- [The scaled-down model](#the-scaled-down-model)
+- [What `flush()` and `compact()` each do](#what-flush-and-compact-each-do)
+- [What is inside a tile file?](#what-is-inside-a-tile-file)
+- [On-disk file layout](#on-disk-file-layout)
+- [Tree growth, one snapshot at a time](#tree-growth-one-snapshot-at-a-time)
+- [How a proof finds a subtree root](#how-a-proof-finds-a-subtree-root)
+- [Inclusion proofs](#inclusion-proof-1-entirely-from-one-tile)
+- [Consistency proofs](#consistency-proofs-the-idea)
+- [The complete mental model](#the-complete-mental-model)
 
 ## The scaled-down model
 
@@ -40,7 +54,8 @@ The scaling changes only the numbers in the drawings. The rules are the same:
 
 - `h7` is the hash of leaf 7.
 - `R[a, b)` is the Merkle root of the half-open leaf range `[a, b)`.
-- `tile/L/NNN` is tile index `NNN` at tile level `L`.
+- `tile/L/NNN` is tile index `NNN` at tile level `L`, relative to the
+  algorithm-qualified store directory.
 - "Resident" means the in-memory tree can still expand that range to answer
   proof requests.
 - "Compacted" means the in-memory tree retains enough summary hashes to keep
@@ -166,14 +181,15 @@ After an illustrative 1,030-leaf tree is flushed, the full-tile boundary is
 
 ```text
 prefix/
-  tile/
-    0/
-      000        # h0       ... h31
-      001        # h32      ... h63
-      ...
-      031        # h992     ... h1023
-    1/
-      000        # R[0,32), R[32,64), ... R[992,1024)
+  sha256-256w/   # default SHA-256 store
+    tile/
+      0/
+        000      # h0       ... h31
+        001      # h32      ... h63
+        ...
+        031      # h992     ... h1023
+      1/
+        000      # R[0,32), R[32,64), ... R[992,1024)
 ```
 
 Leaves `[1024, 1030)` do not appear in a tile file because they do not complete
@@ -197,8 +213,9 @@ flowchart TB
   classDef computed fill:#ede9fe,stroke:#7c3aed,color:#111827
 ```
 
-The optional `tile/entries/` bundles are omitted here. They store raw
-application entries, not Merkle tree nodes, and do not change proof generation.
+The optional `sha256-256w/tile/entries/` bundles are omitted here. They store
+raw application entries, not Merkle tree nodes, and do not change proof
+generation.
 
 ## Tree growth, one snapshot at a time
 
@@ -678,13 +695,11 @@ each hash belongs.
 | `P3` | `R[0, 16)` | tile | Complete both the old and new left sides |
 | `P4` | `R[32, 40)` | memory | Extend the new reconstruction to size 40 |
 
-Verification evolves two accumulators:
-
-The verifier uses the bit structure of `m` and `n` to decide which accumulator
-each proof hash updates. Intuitively, `P0` seeds a subtree shared by both
-histories and `P3` completes that shared old-tree boundary. `P1`, `P2`, and
-`P4` cover leaves at or beyond the old size, so they extend only the new
-accumulator.
+Verification evolves two accumulators. The verifier uses the bit structure of
+`m` and `n` to decide which accumulator each proof hash updates. Intuitively,
+`P0` seeds a subtree shared by both histories and `P3` completes that shared
+old-tree boundary. `P1`, `P2`, and `P4` cover leaves at or beyond the old size,
+so they extend only the new accumulator.
 
 ```mermaid
 flowchart TB

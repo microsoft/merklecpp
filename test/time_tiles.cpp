@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#include "tiles_test_util.h"
 #include "util.h"
 
 #include <chrono>
@@ -8,15 +9,13 @@
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
-#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <merklecpp.h>
 #include <merklecpp_tiles.h>
-#include <string>
+#include <stdexcept>
 #include <vector>
 
-namespace fs = std::filesystem;
 using merkle::Hash;
 using merkle::tiles::TiledTree;
 
@@ -54,8 +53,7 @@ int main()
   const std::size_t num_proofs = 10000;
 #endif
 
-  const fs::path dir = fs::temp_directory_path() /
-    ("merklecpp_time_tiles_" + std::to_string((unsigned long long)seed));
+  const TemporaryDirectory temporary_directory("merklecpp_time_tiles");
 
   // Accumulator that consumes each proof, so the work is not optimised away.
   volatile uint64_t sink = 0;
@@ -67,7 +65,7 @@ int main()
     const auto hashes = make_hashes(num_leaves);
 
     TiledTree::Config cfg;
-    cfg.prefix = dir;
+    cfg.prefix = temporary_directory.path();
     TiledTree log(cfg);
 
     // 1. Append: grow the in-memory tree.
@@ -168,24 +166,17 @@ int main()
     {
       throw std::runtime_error("benchmark proof failed to verify");
     }
-
     std::cout << "time_tiles: OK (checksum " << sink << ")\n";
-
-    std::error_code ec;
-    fs::remove_all(dir, ec);
+    std::cout << "time_tiles: OK (checksum " << sink << ")\n";
   }
   catch (std::exception& ex)
   {
     std::cout << "Error: " << ex.what() << '\n';
-    std::error_code ec;
-    fs::remove_all(dir, ec);
     return 1;
   }
   catch (...)
   {
     std::cout << "Error" << '\n';
-    std::error_code ec;
-    fs::remove_all(dir, ec);
     return 1;
   }
 

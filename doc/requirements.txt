@@ -1,4 +1,5 @@
 sphinx >= 3.0
+myst-parser
 sphinx_rtd_theme
 sphinx-autobuild
 sphinxcontrib-mermaid
