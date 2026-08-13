@@ -258,7 +258,7 @@ h1 {
 }
 
 .swatch--tile-file {
-    border: 1px dashed var(--tile);
+    border: 1px solid var(--tile);
     background: transparent;
 }
 

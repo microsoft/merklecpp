@@ -83,11 +83,14 @@ const scenarioRoot = document.querySelector("#scenarios");
     const tooltip = document.querySelector("#node-tooltip");
     const renderers = [];
 
-    window.matchMedia("(prefers-color-scheme: dark)").addEventListener(
+    const systemDarkTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    systemDarkTheme.addEventListener(
         "change",
         (event) => {
-            if (!localStorage.getItem("theme")) {
+            if (!localStorage.getItem("proof-viz-theme")) {
                 document.documentElement.dataset.theme = event.matches ? "dark" : "light";
+                const themeToggle = document.querySelector("#toggle-theme");
+                if (themeToggle) themeToggle.checked = event.matches;
             }
             colors = readCanvasColors();
             renderers.forEach((renderer) => renderer.draw());
@@ -215,9 +218,8 @@ const scenarioRoot = document.querySelector("#scenarios");
                 const inset = 2;
                 const boxHeight = 14;
                 context.save();
-                context.setLineDash([4, 3]);
                 context.strokeStyle = colors.tile;
-                context.lineWidth = 1;
+                context.lineWidth = 0.65;
                 context.strokeRect(
                     snap(x + inset),
                     snap(y - boxHeight / 2),
@@ -280,13 +282,11 @@ const scenarioRoot = document.querySelector("#scenarios");
                 context.restore();
             }
 
-            // Tile and frontier squares are the densest thing on the canvas.
-            // Two physical pixels reads clearly and still leaves a gap beside
-            // each leaf once there are three pixels to place them in; below
-            // that the row fuses into a bar, so it falls back to the smallest
-            // mark a screen can draw.
-            const pitch = (plotWidth * pixelRatio) / scenario.mapLeaves;
-            const baseSize = devicePx * (pitch >= 3 ? 2 : 1);
+            // Scale marks with the available leaf spacing. The small atlas
+            // scenarios can carry clearer nodes, while the cap preserves gaps
+            // in denser rows.
+            const pitch = plotWidth / scenario.mapLeaves;
+            const baseSize = Math.max(devicePx * 2, Math.min(4, pitch * 0.36));
             hitTargets = [];
             scenario.nodes.forEach((node, index) => {
                 const position = positions[index];
@@ -529,6 +529,16 @@ const scenarioRoot = document.querySelector("#scenarios");
 
     document.querySelector("#toggle-edges").addEventListener("change", (event) => {
         state.edges = event.target.checked;
+        renderers.forEach((renderer) => renderer.draw());
+    });
+
+    const themeToggle = document.querySelector("#toggle-theme");
+    themeToggle.checked = document.documentElement.dataset.theme === "dark";
+    themeToggle.addEventListener("change", (event) => {
+        const theme = event.target.checked ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+        localStorage.setItem("proof-viz-theme", theme);
+        colors = readCanvasColors();
         renderers.forEach((renderer) => renderer.draw());
     });
 

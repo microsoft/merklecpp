@@ -7,8 +7,11 @@
     <meta name="description" content="An instrumented atlas of merklecpp tile-backed inclusion and consistency proofs.">
     <title>Merkle proof atlas</title>
     <script>
-        document.documentElement.dataset.theme = localStorage.getItem("theme") ||
-            (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        const savedTheme = localStorage.getItem("proof-viz-theme");
+        document.documentElement.dataset.theme =
+            savedTheme === "dark" || savedTheme === "light"
+                ? savedTheme
+                : (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     </script>
     <link rel="stylesheet" href="styles.css">
     <script src="app.js" defer></script>
@@ -48,6 +51,10 @@
                         <input id="toggle-edges" type="checkbox" checked>
                         Tree edges
                     </label>
+                    <label class="toggle">
+                        <input id="toggle-theme" type="checkbox">
+                        Dark theme
+                    </label>
                 </div>
             </div>
         </section>
@@ -55,7 +62,7 @@
         <section class="legend-band" aria-label="Node colors">
             <ul class="legend">
                 <li><span class="swatch swatch--tile"></span><b>Tile</b> durable full-tile data</li>
-                <li><span class="swatch swatch--tile-file"></span><b>Tile file</b> dashed enclosure</li>
+                <li><span class="swatch swatch--tile-file"></span><b>Tile file</b> thin enclosure</li>
                 <li><span class="swatch swatch--frontier"></span><b>Frontier</b> resident in-memory data</li>
                 <li><span class="swatch swatch--proof"></span><b>Proof element</b> returned in the proof</li>
                 <li><span class="swatch swatch--spine"></span><b>Ringed</b> only in the tree ending at A</li>
