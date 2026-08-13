@@ -11,6 +11,8 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import os
+import pathlib
+import subprocess
 import sys
 sys.path.insert(0, os.path.abspath('.'))
 
@@ -21,8 +23,18 @@ project = 'merklecpp'
 copyright = '2021, Microsoft'
 author = 'Christoph M. Wintersteiger'
 
-# The full version, including alpha/beta/rc tags
-release = '1.0.0'
+repository_root = pathlib.Path(__file__).resolve().parent.parent
+release = os.environ.get("MERKLECPP_DOC_VERSION")
+if release is None:
+    release = subprocess.run(
+        ["git", "describe", "--tags", "--always", "--dirty"],
+        cwd=repository_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+release = release.removeprefix("v")
+version = release.split("-", maxsplit=1)[0]
 
 
 # -- General configuration ---------------------------------------------------
@@ -73,9 +85,6 @@ breathe_domain_by_extension = {"h" : "cpp"}
 
 
 def setup(self):
-    import subprocess
-    import pathlib
-
     srcdir = pathlib.Path(self.srcdir)
 
     breathe_projects["merklecpp"] = str(srcdir / breathe_projects["merklecpp"])
