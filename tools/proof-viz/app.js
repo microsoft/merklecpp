@@ -257,7 +257,7 @@ const scenarioRoot = document.querySelector("#scenarios");
                     Math.max(0, scenario.mapLeaves - scenario.covered);
                 const routeOutsideTree =
                     visibleFrontier > 0 &&
-                    visibleFrontier < data.tileWidth / 2 &&
+                    visibleFrontier <= data.tileWidth / 2 &&
                     scenario.tiles.length >= data.tileWidth;
                 context.lineWidth = 0.7;
                 context.strokeStyle = colors.edge;
