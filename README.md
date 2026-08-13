@@ -29,10 +29,10 @@ The companion header `merklecpp_tiles.h` adds optional, header-only support for
 persisting a tree as [tlog-tiles](https://c2sp.org/tlog-tiles) tile files
 *progressively* (optionally dropping already-tiled leaves from memory) and for
 retrieving inclusion and consistency proofs from those tiles, from the in-memory
-tree, or from a combination of the two. The hashing is unchanged: tiles and tile-derived proofs are templated on
-the tree's existing hash function, so a tile-derived inclusion proof is
-byte-identical to one from `merkle::Tree::path()` and verifies with the same
-`merkle::Path::verify()`.
+tree, or from a combination of the two. The hashing is unchanged: tiles and
+tile-derived proofs are templated on the tree's existing hash function, so a
+tile-derived inclusion proof is byte-identical to one from
+`merkle::Tree::path()` and verifies with the same `merkle::Path::verify()`.
 
     #include <merklecpp_tiles.h>
 
@@ -64,15 +64,15 @@ use the lower-level `TileStore` and `TileWriter` APIs to resume a store.
 
 See the [tiled storage guide](doc/tiles-guide.md) for a how-to covering
 flushing, compaction, rollback, proofs, and the lower-level building blocks,
-and [doc/design/tlog-tiles.md](doc/design/tlog-tiles.md) for the full design,
-file/directory layout, and the proof algorithms.
+and the [illustrated walkthrough](doc/tiles-illustrated.md) for the tile layout
+and proof algorithms.
 
 
 ## Building and testing
 
-Enable the test suite with CMake's `TESTS` option:
+Enable the test suite with CMake's `BUILD_TESTING` option:
 
-    cmake -S . -B build -DTESTS=ON
+    cmake -S . -B build -DBUILD_TESTING=ON
     cmake --build build
     ctest --test-dir build
 
@@ -80,7 +80,7 @@ Some tile coverage is intentionally long-running. `LONG_TESTS` is off by
 default for local builds; turn it on when you want the full tile stress suite,
 including level-2 tile coverage and tile proof timing:
 
-    cmake -S . -B build -DTESTS=ON -DLONG_TESTS=ON
+    cmake -S . -B build -DBUILD_TESTING=ON -DLONG_TESTS=ON
 
 The repository CI enables `LONG_TESTS` so pull requests continue to exercise the
 full tiled-storage matrix.

@@ -4,6 +4,7 @@
 #include "util.h"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <ctime>
@@ -30,13 +31,13 @@ static double secs_since(
 }
 
 // Uniform random in [0, bound).
-static uint64_t rand_below(uint64_t bound)
+static std::size_t rand_below(std::size_t bound)
 {
   if (bound == 0)
   {
     return 0;
   }
-  return (uint64_t)((std::rand() / (RAND_MAX + 1.0)) * (double)bound);
+  return (std::size_t)((std::rand() / (RAND_MAX + 1.0)) * (double)bound);
 }
 
 int main()
@@ -46,11 +47,11 @@ int main()
   std::cout << "seed=" << seed << '\n';
 
 #ifndef NDEBUG
-  const uint64_t num_leaves = 50000;
-  const uint64_t num_proofs = 100;
+  const std::size_t num_leaves = 50000;
+  const std::size_t num_proofs = 100;
 #else
-  const uint64_t num_leaves = 1000000;
-  const uint64_t num_proofs = 10000;
+  const std::size_t num_leaves = 1000000;
+  const std::size_t num_proofs = 10000;
 #endif
 
   const fs::path dir = fs::temp_directory_path() /
@@ -71,7 +72,7 @@ int main()
 
     // 1. Append: grow the in-memory tree.
     auto t = std::chrono::high_resolution_clock::now();
-    for (uint64_t i = 0; i < num_leaves; i++)
+    for (std::size_t i = 0; i < num_leaves; i++)
     {
       log.append(hashes[i]);
     }
@@ -90,11 +91,11 @@ int main()
               << (uint64_t)((double)stats.full_written / flush_s)
               << " tiles/sec)\n";
 
-    const uint64_t n = log.size();
+    const std::size_t n = log.size();
 
     // 3. Inclusion proofs while everything is still resident (memory path).
     t = std::chrono::high_resolution_clock::now();
-    for (uint64_t k = 0; k < num_proofs; k++)
+    for (std::size_t k = 0; k < num_proofs; k++)
     {
       sink += log.inclusion_proof(rand_below(n), n)->size();
     }
@@ -105,7 +106,7 @@ int main()
 
     // 4. Consistency proofs while resident (memory path).
     t = std::chrono::high_resolution_clock::now();
-    for (uint64_t k = 0; k < num_proofs; k++)
+    for (std::size_t k = 0; k < num_proofs; k++)
     {
       sink += log.consistency_proof(1 + rand_below(n - 1), n).size();
     }
@@ -116,14 +117,14 @@ int main()
 
     // 5. Compact: drop tiled leaves from memory.
     t = std::chrono::high_resolution_clock::now();
-    const uint64_t min_idx = log.compact();
+    const std::size_t min_idx = log.compact();
     const double compact_s = secs_since(t);
     std::cout << "compact            : dropped " << min_idx
               << " leaves from memory in " << compact_s << " sec\n";
 
     // 6. Inclusion proofs for evicted leaves: served from the on-disk tiles.
     t = std::chrono::high_resolution_clock::now();
-    for (uint64_t k = 0; k < num_proofs; k++)
+    for (std::size_t k = 0; k < num_proofs; k++)
     {
       sink += log.inclusion_proof(rand_below(min_idx), n)->size();
     }
@@ -135,7 +136,7 @@ int main()
 
     // 7. Consistency proofs spanning the tiled (evicted) past.
     t = std::chrono::high_resolution_clock::now();
-    for (uint64_t k = 0; k < num_proofs; k++)
+    for (std::size_t k = 0; k < num_proofs; k++)
     {
       sink += log.consistency_proof(1 + rand_below(min_idx - 1), n).size();
     }
@@ -147,13 +148,13 @@ int main()
 
     // 8. Baseline: identical inclusion proofs from a plain in-memory Tree.
     merkle::Tree ref;
-    for (uint64_t i = 0; i < num_leaves; i++)
+    for (std::size_t i = 0; i < num_leaves; i++)
     {
       ref.insert(hashes[i]);
     }
     ref.root();
     t = std::chrono::high_resolution_clock::now();
-    for (uint64_t k = 0; k < num_proofs; k++)
+    for (std::size_t k = 0; k < num_proofs; k++)
     {
       sink += ref.path(rand_below(n))->size();
     }

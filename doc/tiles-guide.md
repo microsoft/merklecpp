@@ -7,9 +7,10 @@ in-memory tree, or from a combination of the two — so proofs stay available ev
 after old entries are dropped from memory.
 
 It builds on the [tlog-tiles](https://c2sp.org/tlog-tiles) file/directory layout
-but is **not** trying to be wire-compatible with external tlog-tiles clients. See
-[`design/tlog-tiles.md`](design/tlog-tiles.md) for the design and internals; this
-page is a practical how-to.
+but is **not** trying to be wire-compatible with external tlog-tiles clients.
+This page is a practical how-to; see the
+[illustrated walkthrough](tiles-illustrated.md) for a visual model of the tile
+layout and proof algorithms.
 
 ## Contents
 
@@ -25,7 +26,7 @@ page is a practical how-to.
 
 ## Requirements and a note on hashing
 
-- C++17 (the header uses `<filesystem>` and small platform-specific file-sync
+- C++20 (the header uses `<filesystem>` and small platform-specific file-sync
   calls for durable tile writes).
 - Include the companion header; it pulls in `merklecpp.h` for you:
 
@@ -76,8 +77,8 @@ for (const merkle::Hash& leaf : batch)
 // Persist newly-complete tiles to disk.
 log.flush();
 
-merkle::Hash root = log.root();          // current Merkle root
-uint64_t      n    = log.size();         // number of leaves
+merkle::Hash root = log.root();   // current Merkle root
+auto         n    = log.size();   // number of leaves
 
 // Inclusion proof for leaf 0 in the tree of `n` leaves.
 auto inclusion = log.inclusion_proof(/*index=*/0, /*size=*/n);
@@ -149,7 +150,7 @@ finalized tiles are reused rather than rewritten.
 
 ```cpp
 log.compact();                      // free memory now
-uint64_t resident_from = log.tree_ref().min_index();
+auto resident_from = log.tree_ref().min_index();
 ```
 
 ## Rollback
@@ -320,6 +321,7 @@ Under the configured `prefix`:
 Tile indices use the tlog-tiles path encoding: zero-padded 3-digit groups with
 all but the last prefixed by `x` (e.g. index `1234067` -> `x001/x234/067`). Every
 tile is full (256-wide), final, and immutable. Entries beyond the last full-tile
-boundary remain in memory. See
-[`design/tlog-tiles.md`](design/tlog-tiles.md) for the full specification of the
-geometry and proof algorithms.
+boundary remain in memory. See the
+[tlog-tiles specification](https://c2sp.org/tlog-tiles) for the standard
+geometry and the [illustrated walkthrough](tiles-illustrated.md) for how
+merklecpp stores and resolves those tiles.
