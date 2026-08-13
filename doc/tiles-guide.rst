@@ -112,6 +112,19 @@ complete since the previous call. Full tiles are immutable: written once after
 all 256 entries are final and never rewritten. The remaining frontier stays in
 memory until it crosses the next full-tile boundary.
 
+The writer also keeps an opportunistic per-level FIFO of perfect roots computed
+from the exact hashes passed to each successful durable tile write. A parent
+roll-up consumes matching roots in order instead of reading and hashing those
+child tiles again. Each active level retains at most one tile width of roots
+(256 with the default geometry). This changes neither the tile format nor the
+source of truth: a fresh or moved ``TiledTree``, a resumed ``TileWriter``, a
+pre-existing tile, an index gap, an interrupted write, an evicted root, or any
+other cache miss reads the immutable child tile and recomputes its root. The
+tradeoff is one perfect-root calculation during each normal tile write in
+exchange for avoiding the concentrated read-and-hash work at parent boundaries.
+The FIFO adds no synchronization; the external locking requirements above still
+apply.
+
 Tile files are written through unique temporary files, synced, then published
 with an atomic replace. On POSIX, file contents are synced, each newly created
 directory is made durable by syncing its parent, and the destination directory
@@ -166,6 +179,40 @@ Protect compacted tile files from external deletion or truncation. Once a
 tile's leaves are no longer resident, ``flush()`` cannot regenerate a missing or
 malformed copy and throws an error naming the first non-resident leaf. Restore
 the tile from backup; retrying alone cannot recover it.
+
+Performance exploration
+-----------------------
+
+``LONG_TESTS=ON`` builds ``time_tiles_continuous``. It runs 512 cycles of 256
+appends (131,072 total) against ``TiledTree``, timing each append followed by one
+``flush()`` and one ``compact()`` per cycle. A matching plain ``merkle::Tree``
+control times the same appends and calls ``flush_to(max_index())`` every 256
+leaves; it performs no tile flush or roll-up. Both roots are checked against the
+same reference.
+
+The same executable separately measures a level-0 durable write, reads of 256
+child tiles, the 65,280 SHA-256 operations needed for their perfect roots, and a
+level-1 durable write. Set ``TILE_PERF_OUTPUT_DIR`` to select the artifact
+directory:
+
+.. code:: console
+
+   cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DLONG_TESTS=ON
+   cmake --build build-release --target time_tiles_continuous
+   TILE_PERF_OUTPUT_DIR="$PWD/tile-performance" \
+     ./build-release/test/time_tiles_continuous
+   python3 tools/summarize_tile_performance.py tile-performance \
+     --viewer tools/tile-performance-viewer.html --markdown
+
+The output directory contains per-event CSV, per-cycle CSV, and a JSON summary.
+Open ``tools/tile-performance-viewer.html`` locally and choose the event CSV for
+an interactive canvas plot with linear/log scales and data-driven roll-up
+markers. Individual append observations subtract a median back-to-back
+``steady_clock`` calibration recorded in the JSON; because append operations are
+close to timer resolution, treat those values as comparative exploration rather
+than standalone microbenchmarks. Generated CSV/JSON results are measurements,
+not source, and must not be committed. Release CI runs the benchmark once,
+validates and summarizes those files, then uploads them with the tracked viewer.
 
 .. code:: cpp
 

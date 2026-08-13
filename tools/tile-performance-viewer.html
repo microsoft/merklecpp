@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>merklecpp tiled-storage performance explorer</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f8fa;
+      --panel: #fff;
+      --text: #1f2328;
+      --muted: #59636e;
+      --border: #d1d9e0;
+      --append: #276be9;
+      --flush: #00843f;
+      --compact: #f66a0a;
+      --rollup: #d72d47;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.45 system-ui, sans-serif;
+    }
+    main { max-width: 1500px; margin: auto; }
+    h1 { margin: 0 0 4px; font-size: 24px; }
+    p { color: var(--muted); margin: 0 0 18px; }
+    .toolbar, .chart {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px 24px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    label { display: inline-flex; gap: 7px; align-items: center; }
+    input[type=file] { max-width: 360px; }
+    select, input[type=file] {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 6px 8px;
+    }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; }
+    .swatch { width: 12px; height: 12px; border-radius: 2px; }
+    .chart { min-height: 620px; position: relative; }
+    canvas { display: block; width: 100%; height: 570px; }
+    #status { margin-top: 10px; color: var(--muted); }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --panel: #161b22; --text: #f0f6fc;
+        --muted: #8b949e; --border: #30363d;
+      }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Tiled-storage performance explorer</h1>
+  <p>Load <code>tile-performance-events.csv</code>. Append latency uses the right Y axis; flush and compact use the left.</p>
+  <section class="toolbar">
+    <label>Events CSV <input id="file" type="file" accept=".csv,text/csv"></label>
+    <label>Scale
+      <select id="scale">
+        <option value="log">log</option>
+        <option value="linear">linear</option>
+      </select>
+    </label>
+    <label><input id="tiled" type="checkbox" checked> tiled</label>
+    <label><input id="control" type="checkbox"> tree control</label>
+    <span class="legend">
+      <label><span class="swatch" style="background:#276be9"></span>append</label>
+      <label><span class="swatch" style="background:#00843f"></span>flush</label>
+      <label><span class="swatch" style="background:#f66a0a"></span>compact</label>
+      <label><span class="swatch" style="background:#d72d47"></span>roll-up</label>
+    </span>
+  </section>
+  <section class="chart">
+    <canvas id="plot" aria-label="Tile performance latency plot"></canvas>
+    <div id="status">Choose the generated events CSV to begin.</div>
+  </section>
+</main>
+<script>
+(() => {
+  "use strict";
+  const colors = {
+    append: "#276be9", flush: "#00843f", compact: "#f66a0a", rollup: "#d72d47"
+  };
+  const canvas = document.querySelector("#plot");
+  const context = canvas.getContext("2d");
+  const status = document.querySelector("#status");
+  const controls = ["scale", "tiled", "control"].map(id => document.querySelector(`#${id}`));
+  let events = [];
+
+  function parseCsv(text) {
+    const lines = text.trim().split(/\r?\n/);
+    const expected = "series,event_index,cycle,leaf_count,operation,duration_ns,rollup";
+    if (lines.shift() !== expected) throw new Error("Unexpected events CSV schema");
+    return lines.map(line => {
+      const values = line.split(",");
+      if (values.length !== 7) throw new Error("Malformed events CSV row");
+      return {
+        series: values[0],
+        eventIndex: Number(values[1]),
+        cycle: Number(values[2]),
+        leaves: Number(values[3]),
+        operation: values[4],
+        milliseconds: Number(values[5]) / 1e6,
+        rollup: values[6] === "1"
+      };
+    });
+  }
+
+  function resize() {
+    const ratio = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.round(rect.width * ratio));
+    canvas.height = Math.max(1, Math.round(rect.height * ratio));
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    draw();
+  }
+
+  function extent(values) {
+    let maximum = 0;
+    let minimum = Infinity;
+    for (const value of values) {
+      if (value > maximum) maximum = value;
+      if (value > 0 && value < minimum) minimum = value;
+    }
+    return {minimum: minimum === Infinity ? 0.000001 : minimum, maximum: maximum || 1};
+  }
+
+  function axisTransform(value, range, logarithmic) {
+    if (!logarithmic) return value / range.maximum;
+    const floor = Math.max(range.minimum, 0.000001);
+    const low = Math.log10(floor);
+    const high = Math.log10(Math.max(range.maximum, floor * 10));
+    return (Math.log10(Math.max(value, floor)) - low) / (high - low);
+  }
+
+  function drawAxis(x, top, bottom, range, side, logarithmic) {
+    context.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue("--border");
+    context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--muted");
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(x, top);
+    context.lineTo(x, bottom);
+    context.stroke();
+    context.font = "12px system-ui";
+    context.textAlign = side === "left" ? "right" : "left";
+    const align = side === "left" ? -8 : 8;
+    const formatDuration = value => {
+      if (range.maximum < 0.001) return `${(value * 1e6).toFixed(0)} ns`;
+      if (range.maximum < 1) return `${(value * 1e3).toFixed(2)} us`;
+      return `${value.toFixed(value < 10 ? 2 : 1)} ms`;
+    };
+    for (let tick = 0; tick <= 4; tick++) {
+      const fraction = tick / 4;
+      const y = bottom - fraction * (bottom - top);
+      const value = logarithmic
+        ? 10 ** (Math.log10(range.minimum) + fraction *
+            (Math.log10(Math.max(range.maximum, range.minimum * 10)) - Math.log10(range.minimum)))
+        : fraction * range.maximum;
+      context.fillText(formatDuration(value), x + align, y + 4);
+    }
+  }
+
+  function draw() {
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    context.clearRect(0, 0, width, height);
+    if (!events.length) return;
+
+    const showTiled = document.querySelector("#tiled").checked;
+    const showControl = document.querySelector("#control").checked;
+    const selected = events.filter(event =>
+      (event.series === "tiled" && showTiled) ||
+      (event.series === "tree-control" && showControl));
+    if (!selected.length) return;
+
+    const logarithmic = document.querySelector("#scale").value === "log";
+    const margin = {left: 82, right: 82, top: 24, bottom: 48};
+    const left = margin.left;
+    const right = width - margin.right;
+    const top = margin.top;
+    const bottom = height - margin.bottom;
+    let maxLeaves = 1;
+    for (const event of selected) maxLeaves = Math.max(maxLeaves, event.leaves);
+    const appendRange = extent(selected.filter(e => e.operation === "append").map(e => e.milliseconds));
+    const ioRange = extent(selected.filter(e => e.operation !== "append").map(e => e.milliseconds));
+    const x = leaves => left + leaves / maxLeaves * (right - left);
+    const y = (value, range) =>
+      bottom - axisTransform(value, range, logarithmic) * (bottom - top);
+
+    context.save();
+    context.beginPath();
+    context.rect(left, top, right - left, bottom - top);
+    context.clip();
+    context.globalAlpha = showTiled && showControl ? 0.55 : 0.8;
+
+    for (const operation of ["append", "flush", "compact"]) {
+      const points = selected.filter(event => event.operation === operation);
+      context.fillStyle = colors[operation];
+      const radius = operation === "append" ? 0.65 : 2.2;
+      const range = operation === "append" ? appendRange : ioRange;
+      for (const point of points) {
+        context.fillRect(
+          x(point.leaves) - radius,
+          y(point.milliseconds, range) - radius,
+          radius * 2,
+          radius * 2);
+      }
+    }
+
+    context.globalAlpha = 0.9;
+    context.strokeStyle = colors.rollup;
+    context.lineWidth = 1.5;
+    for (const event of selected.filter(event => event.rollup)) {
+      const marker = x(event.leaves);
+      context.beginPath();
+      context.moveTo(marker, top);
+      context.lineTo(marker, bottom);
+      context.stroke();
+    }
+    context.restore();
+
+    drawAxis(left, top, bottom, ioRange, "left", logarithmic);
+    drawAxis(right, top, bottom, appendRange, "right", logarithmic);
+    context.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--muted");
+    context.textAlign = "center";
+    context.fillText(`leaf count (0 - ${maxLeaves.toLocaleString()})`, (left + right) / 2, height - 12);
+    status.textContent =
+      `${selected.length.toLocaleString()} events rendered; ` +
+      `${selected.filter(event => event.rollup).length} data-driven roll-up markers.`;
+  }
+
+  document.querySelector("#file").addEventListener("change", async event => {
+    try {
+      const file = event.target.files[0];
+      if (!file) return;
+      events = parseCsv(await file.text());
+      draw();
+    } catch (error) {
+      events = [];
+      status.textContent = error.message;
+      draw();
+    }
+  });
+  controls.forEach(control => control.addEventListener("change", draw));
+  window.addEventListener("resize", resize);
+  resize();
+})();
+</script>
+</body>
+</html>

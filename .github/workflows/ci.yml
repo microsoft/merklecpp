@@ -93,7 +93,9 @@ jobs:
     - name: Test
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       shell: bash
-      run: ctest -VV -C ${{ matrix.build_type }} --timeout 300 -E '^time_tiles$'
+      run: |
+        ctest -VV -C ${{ matrix.build_type }} --timeout 300 \
+          -E '^time_tiles(_continuous)?$'
 
     - name: Run tile benchmark
       if: matrix.build_type == 'Release'
@@ -101,7 +103,10 @@ jobs:
       shell: bash
       run: |
         set -o pipefail
-        ctest -VV -C ${{ matrix.build_type }} --timeout 300 -R '^time_tiles$' \
+        mkdir -p tile-performance
+        TILE_PERF_OUTPUT_DIR="$PWD/tile-performance" \
+          ctest -VV -C ${{ matrix.build_type }} --timeout 900 \
+            -R '^time_tiles(_continuous)?$' \
           2>&1 | tee time_tiles-output.txt
 
     - name: Publish tile benchmark summary
@@ -159,3 +164,19 @@ jobs:
           printf '| `%s` | %s |\n' "$operation" "$result" \
             >> "$GITHUB_STEP_SUMMARY"
         done <<< "$results"
+
+        python "$GITHUB_WORKSPACE/tools/summarize_tile_performance.py" \
+          tile-performance \
+          --viewer "$GITHUB_WORKSPACE/tools/tile-performance-viewer.html" \
+          --markdown >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload tile performance exploration
+      if: always() && matrix.build_type == 'Release'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: tile-performance-${{ matrix.os }}-${{ matrix.compiler }}-openssl-${{ matrix.openssl }}
+        path: |
+          build/${{ matrix.build_type }}/tile-performance/
+          tools/tile-performance-viewer.html
+        if-no-files-found: error
+        retention-days: 14
