@@ -94,12 +94,12 @@ Colors used below
 
      classDef tile fill:#00843f,stroke:#00843f,color:#ffffff
      classDef memory fill:#276be9,stroke:#276be9,color:#ffffff
-     classDef both fill:#276be9,stroke:#00843f,stroke-width:3px,color:#ffffff
+     classDef both fill:#276be9,stroke:#00843f,stroke-width:6px,color:#ffffff
      classDef summary fill:#9ca4af,stroke:#677384,color:#222832
      classDef target fill:#222832,stroke:#222832,stroke-width:3px,color:#ffffff
-     classDef proofTile fill:#d72d47,stroke:#00843f,stroke-width:3px,color:#ffffff
-     classDef proofMemory fill:#d72d47,stroke:#276be9,stroke-width:3px,color:#ffffff
-     classDef proofComputed fill:#d72d47,stroke:#9ca4af,stroke-width:3px,color:#ffffff
+     classDef proofTile fill:#d72d47,stroke:#00843f,stroke-width:6px,color:#ffffff
+     classDef proofMemory fill:#d72d47,stroke:#276be9,stroke-width:6px,color:#ffffff
+     classDef proofComputed fill:#d72d47,stroke:#9ca4af,stroke-width:6px,color:#ffffff
 
 What ``flush()`` and ``compact()`` each do
 ------------------------------------------
@@ -124,7 +124,7 @@ Appending, flushing, and compacting are separate operations:
 
      classDef tile fill:#00843f,stroke:#00843f,color:#ffffff
      classDef memory fill:#276be9,stroke:#276be9,color:#ffffff
-     classDef both fill:#276be9,stroke:#00843f,stroke-width:3px,color:#ffffff
+     classDef both fill:#276be9,stroke:#00843f,stroke-width:6px,color:#ffffff
      classDef summary fill:#9ca4af,stroke:#677384,color:#222832
 
 ``flush()`` does not compact by default. Setting ``compact_on_flush = true`` makes
@@ -296,7 +296,7 @@ memory:
      B --> M
 
      classDef memory fill:#276be9,stroke:#276be9,color:#ffffff
-     classDef both fill:#276be9,stroke:#00843f,stroke-width:3px,color:#ffffff
+     classDef both fill:#276be9,stroke:#00843f,stroke-width:6px,color:#ffffff
      classDef computed fill:#9ca4af,stroke:#677384,color:#222832
 
 At this point a proof may be answered entirely from memory even though a tile
@@ -326,7 +326,7 @@ as the rollback boundary:
 
      classDef tile fill:#00843f,stroke:#00843f,color:#ffffff
      classDef memory fill:#276be9,stroke:#276be9,color:#ffffff
-     classDef both fill:#276be9,stroke:#00843f,stroke-width:3px,color:#ffffff
+     classDef both fill:#276be9,stroke:#00843f,stroke-width:6px,color:#ffffff
      classDef summary fill:#9ca4af,stroke:#677384,color:#222832
      classDef computed fill:#9ca4af,stroke:#677384,color:#222832
 
@@ -368,7 +368,7 @@ Before the second flush:
 
      classDef tile fill:#00843f,stroke:#00843f,color:#ffffff
      classDef memory fill:#276be9,stroke:#276be9,color:#ffffff
-     classDef both fill:#276be9,stroke:#00843f,stroke-width:3px,color:#ffffff
+     classDef both fill:#276be9,stroke:#00843f,stroke-width:6px,color:#ffffff
      classDef computed fill:#9ca4af,stroke:#677384,color:#222832
 
 After the second flush and compaction:
@@ -391,7 +391,7 @@ After the second flush and compaction:
 
      classDef tile fill:#00843f,stroke:#00843f,color:#ffffff
      classDef memory fill:#276be9,stroke:#276be9,color:#ffffff
-     classDef both fill:#276be9,stroke:#00843f,stroke-width:3px,color:#ffffff
+     classDef both fill:#276be9,stroke:#00843f,stroke-width:6px,color:#ffffff
      classDef computed fill:#9ca4af,stroke:#677384,color:#222832
 
 Snapshot D: 70 leaves
@@ -417,7 +417,7 @@ This is the first snapshot with a full illustrative level-1 tile:
 
      classDef tile fill:#00843f,stroke:#00843f,color:#ffffff
      classDef memory fill:#276be9,stroke:#276be9,color:#ffffff
-     classDef both fill:#276be9,stroke:#00843f,stroke-width:3px,color:#ffffff
+     classDef both fill:#276be9,stroke:#00843f,stroke-width:6px,color:#ffffff
      classDef computed fill:#9ca4af,stroke:#677384,color:#222832
 
 Snapshot summary
@@ -515,7 +515,7 @@ Every required hash is reconstructed from ``tile/0/000``:
 
      classDef tile fill:#00843f,stroke:#00843f,color:#ffffff
      classDef target fill:#222832,stroke:#222832,stroke-width:3px,color:#ffffff
-     classDef proofTile fill:#d72d47,stroke:#00843f,stroke-width:3px,color:#ffffff
+     classDef proofTile fill:#d72d47,stroke:#00843f,stroke-width:6px,color:#ffffff
 
 The proof payload is ordered from the leaf toward the root:
 
@@ -563,8 +563,8 @@ The target and its nearby siblings are in the resident frontier. The old
      classDef memory fill:#276be9,stroke:#276be9,color:#ffffff
      classDef computed fill:#9ca4af,stroke:#677384,color:#222832
      classDef target fill:#222832,stroke:#222832,stroke-width:3px,color:#ffffff
-     classDef proofTile fill:#d72d47,stroke:#00843f,stroke-width:3px,color:#ffffff
-     classDef proofMemory fill:#d72d47,stroke:#276be9,stroke-width:3px,color:#ffffff
+     classDef proofTile fill:#d72d47,stroke:#00843f,stroke-width:6px,color:#ffffff
+     classDef proofMemory fill:#d72d47,stroke:#276be9,stroke-width:6px,color:#ffffff
 
 The mixed proof payload is:
 
@@ -659,7 +659,7 @@ backed by the level-1 tile. The proof needs only the new right-hand frontier:
      JOIN --> NEW
 
      classDef tile fill:#00843f,stroke:#00843f,color:#ffffff
-     classDef proofComputed fill:#d72d47,stroke:#9ca4af,stroke-width:3px,color:#ffffff
+     classDef proofComputed fill:#d72d47,stroke:#9ca4af,stroke-width:6px,color:#ffffff
      classDef computed fill:#9ca4af,stroke:#677384,color:#222832
      classDef result fill:#0a7d91,stroke:#0a7d91,stroke-width:3px,color:#ffffff
 
@@ -717,8 +717,8 @@ node in the 68-leaf tree. The proof decomposes the relevant ranges:
 
      classDef tile fill:#00843f,stroke:#00843f,color:#ffffff
      classDef computed fill:#9ca4af,stroke:#677384,color:#222832
-     classDef proofTile fill:#d72d47,stroke:#00843f,stroke-width:3px,color:#ffffff
-     classDef proofMemory fill:#d72d47,stroke:#276be9,stroke-width:3px,color:#ffffff
+     classDef proofTile fill:#d72d47,stroke:#00843f,stroke-width:6px,color:#ffffff
+     classDef proofMemory fill:#d72d47,stroke:#276be9,stroke-width:6px,color:#ffffff
 
 The proof vector contains hashes only; the range labels are shown here to make
 the algorithm visible. Given ``m = 23`` and ``n = 68``, the verifier derives
@@ -773,7 +773,7 @@ new accumulator to the right.
      G --> V
 
      classDef computed fill:#9ca4af,stroke:#677384,color:#222832
-     classDef proofTile fill:#d72d47,stroke:#00843f,stroke-width:3px,color:#ffffff
+     classDef proofTile fill:#d72d47,stroke:#00843f,stroke-width:6px,color:#ffffff
      classDef result fill:#0a7d91,stroke:#0a7d91,stroke-width:3px,color:#ffffff
 
 This example is mixed in a useful way:
@@ -819,7 +819,7 @@ The complete mental model
 
      classDef tile fill:#00843f,stroke:#00843f,color:#ffffff
      classDef memory fill:#276be9,stroke:#276be9,color:#ffffff
-     classDef both fill:#276be9,stroke:#00843f,stroke-width:3px,color:#ffffff
+     classDef both fill:#276be9,stroke:#00843f,stroke-width:6px,color:#ffffff
      classDef summary fill:#9ca4af,stroke:#677384,color:#222832
      classDef computed fill:#9ca4af,stroke:#677384,color:#222832
      classDef result fill:#0a7d91,stroke:#0a7d91,stroke-width:3px,color:#ffffff
