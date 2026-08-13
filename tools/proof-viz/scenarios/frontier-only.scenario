@@ -1,9 +1,9 @@
 name: frontier-only
 proof: inclusion
 title: Before the first tile
-description: With 192 leaves, no full 256-entry tile exists. Every subtree request is answered by the resident tree.
+description: With 7 leaves, no full 8-entry tile exists. Every subtree request is answered by the resident tree.
 takeaway: The red route never changes source: the target, proof siblings, and root reduction all stay in the blue frontier.
 order: 1
-leaves: 192
-focus: 37
+leaves: 7
+focus: 3
 second: none

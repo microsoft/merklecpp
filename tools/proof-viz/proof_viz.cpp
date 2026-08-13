@@ -28,9 +28,19 @@ using merkle::tiles::HashSource;
 using merkle::tiles::MAX_TILE_LEVEL;
 using merkle::tiles::MemoryHashSource;
 using merkle::tiles::ProofEngine;
-using merkle::tiles::TileHashSource;
-using merkle::tiles::TileStore;
-using merkle::tiles::TileWriter;
+static constexpr uint8_t TILE_HEIGHT = 3;
+using TileHashSource = merkle::tiles::TileHashSourceT<
+  Hash::size_bytes,
+  merkle::Tree::hash_function,
+  TILE_HEIGHT>;
+using TileStore = merkle::tiles::TileStoreT<
+  Hash::size_bytes,
+  merkle::Tree::hash_function,
+  TILE_HEIGHT>;
+using TileWriter = merkle::tiles::TileWriterT<
+  Hash::size_bytes,
+  merkle::Tree::hash_function,
+  TILE_HEIGHT>;
 static constexpr size_t TILE_WIDTH = TileStore::TILE_WIDTH;
 
 // Node roles, packed into one integer per node so the JSON stays compact.
@@ -616,6 +626,18 @@ int main(int argc, char** argv)
       std::cout << scenario.id << ": " << scenario.nodes.size() << " nodes, "
                 << scenario.proof_nodes.size() << " proof elements, "
                 << scenario.tile_files.size() << " tiles\n";
+    }
+    const bool has_level_one_tile =
+      std::any_of(scenarios.begin(), scenarios.end(), [](const Scenario& s) {
+        return std::any_of(
+          s.tile_files.begin(), s.tile_files.end(), [](const auto& tile) {
+            return tile.first == 1;
+          });
+      });
+    if (!has_level_one_tile)
+    {
+      throw std::runtime_error(
+        "proof visualization scenarios must exercise level-1 tiles");
     }
     write_data(output, scenarios);
     std::cout << "wrote " << output << '\n';

@@ -1,9 +1,9 @@
 name: consistency-frontier-only
 proof: consistency
 title: Two sizes before tiling
-description: The 48-leaf tree state is checked as a prefix of the 150-leaf one, inside a 192-leaf backing tree that has not completed its first tile.
+description: The 3-leaf tree state is checked as a prefix of the 6-leaf one, inside a 7-leaf backing tree that has not completed its first tile.
 takeaway: Every component is answered by the resident frontier, even though neither size is the backing tree's current one.
 order: 9
-leaves: 192
-focus: 47
-second: 149
+leaves: 7
+focus: 2
+second: 5
