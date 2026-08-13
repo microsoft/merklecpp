@@ -20,6 +20,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -30,7 +31,7 @@
 // under an algorithm-qualified directory such as sha256-256w or sha384-256w.
 // Only complete, immutable tiles are stored. Their hash values are produced by
 // the tree's existing HASH_FUNCTION, so tile-derived proofs are byte-identical
-// to those produced by merkle::TreeT (see doc/design/tlog-tiles.md).
+// to those produced by merkle::TreeT.
 //
 // Thread safety: types in this header do not synchronize access internally.
 // Callers must serialize access to each shared object, including const proof
@@ -50,6 +51,20 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
     /// @brief Highest tile level permitted by the tlog-tiles layout.
     static constexpr uint8_t MAX_TILE_LEVEL = 63;
+
+    // Leaf indices and counts follow two deliberate conventions. The storage
+    // and proof layers below (TileRef, TileStoreT, TileWriterT, hash sources,
+    // ProofEngineT, EntryBundleWriterT) index the on-disk log as uint64_t,
+    // matching the tlog-tiles layout. TreeT and its TiledTreeT wrapper use
+    // size_t, because those leaves are resident in memory. Conversions are
+    // confined to the boundary between the two: widening size_t to uint64_t
+    // must be lossless, while the reverse direction is range-checked before
+    // narrowing (see ProofEngineT::inclusion_proof and
+    // MemoryHashSourceT::subtree_root).
+    static_assert(
+      sizeof(size_t) <= sizeof(uint64_t),
+      "tiled storage indexes leaves as uint64_t; a size_t wider than 64 bits "
+      "would truncate when tree-level values cross into the tile layer");
 
     namespace detail
     {
@@ -104,7 +119,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
     /// @brief Identifies a single (full) tile within a tiled log.
     /// @note Only full, TILE_WIDTH-wide tiles are produced and consumed; the
-    /// incomplete frontier is never tiled (see doc/design/tlog-tiles.md).
+    /// incomplete frontier is never tiled.
     struct TileRef
     {
       /// @brief The level of the tile (0 == leaf hashes, maximum 63).
@@ -256,11 +271,12 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         std::vector<uint8_t> bytes = read_file(path, expected);
         if (bytes.size() != expected)
         {
-          throw std::runtime_error(std::format(
-            "unexpected tile size for {}: expected {} bytes, got {}",
-            path.string(),
-            expected,
-            bytes.size()));
+          throw std::runtime_error(
+            std::format(
+              "unexpected tile size for {}: expected {} bytes, got {}",
+              path.string(),
+              expected,
+              bytes.size()));
         }
 
         std::vector<Hash> hashes;
@@ -323,8 +339,9 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         }
         catch (const std::runtime_error& error)
         {
-          throw std::runtime_error(std::format(
-            "invalid entry bundle {}: {}", path.string(), error.what()));
+          throw std::runtime_error(
+            std::format(
+              "invalid entry bundle {}: {}", path.string(), error.what()));
         }
       }
 
@@ -485,6 +502,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           throw std::runtime_error(
             "hash algorithm short name does not match hash size");
         }
+        prefix = std::filesystem::absolute(prefix);
         prefix /= storage_directory_name(hash_algorithm_short_name);
         return prefix;
       }
@@ -604,10 +622,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         const bool exists = std::filesystem::exists(directory, ec);
         if (ec)
         {
-          throw std::runtime_error(std::format(
-            "cannot inspect directory {}: {}",
-            directory.string(),
-            ec.message()));
+          throw std::runtime_error(
+            std::format(
+              "cannot inspect directory {}: {}",
+              directory.string(),
+              ec.message()));
         }
         if (exists)
         {
@@ -615,16 +634,19 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
             std::filesystem::is_directory(directory, ec);
           if (ec)
           {
-            throw std::runtime_error(std::format(
-              "cannot inspect directory {}: {}",
-              directory.string(),
-              ec.message()));
+            throw std::runtime_error(
+              std::format(
+                "cannot inspect directory {}: {}",
+                directory.string(),
+                ec.message()));
           }
           if (!is_directory)
           {
-            throw std::runtime_error(std::format(
-              "cannot create directory {}: path exists and is not a directory",
-              directory.string()));
+            throw std::runtime_error(
+              std::format(
+                "cannot create directory {}: path exists and is not a "
+                "directory",
+                directory.string()));
           }
         }
         else
@@ -632,10 +654,11 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           const bool created = std::filesystem::create_directory(directory, ec);
           if (ec)
           {
-            throw std::runtime_error(std::format(
-              "cannot create directory {}: {}",
-              directory.string(),
-              ec.message()));
+            throw std::runtime_error(
+              std::format(
+                "cannot create directory {}: {}",
+                directory.string(),
+                ec.message()));
           }
           if (!created && !std::filesystem::is_directory(directory, ec))
           {
@@ -1041,8 +1064,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
 
       /// @brief Resolves a complete subtree known to lie within the full-tile
       /// prefix, reading the highest-level full tile that holds it (and rolling
-      /// up); descends to lower full tiles when a higher-level full tile has not
-      /// completed. Terminates because full level-0 tiles always cover the
+      /// up); descends to lower full tiles when a higher-level full tile has
+      /// not completed. Terminates because full level-0 tiles always cover the
       /// prefix.
       void resolve(uint8_t level, uint64_t index, Hash& out) const
       {
@@ -1061,8 +1084,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         const uint8_t r = level % TILE_HEIGHT;
         const uint64_t first = index << r; // first level-L entry
         const uint64_t n = first / TILE_WIDTH; // level-L tile index
-        const unsigned full_shift = static_cast<unsigned>(TILE_HEIGHT) *
-          (static_cast<unsigned>(L) + 1U);
+        const unsigned full_shift =
+          static_cast<unsigned>(TILE_HEIGHT) * (static_cast<unsigned>(L) + 1U);
         const uint64_t full_tiles =
           full_shift >= 64 ? 0 : (available_size >> full_shift);
 
@@ -1118,8 +1141,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// HASH_FUNCTION, so an inclusion proof is byte-identical to the one
     /// produced by merkle::TreeT::path()/past_path() and verifies with
     /// PathT::verify().
-    /// @warning Thread safety is inherited from the supplied HashSourceT. Callers
-    /// must serialize operations when the source is shared.
+    /// @warning Thread safety is inherited from the supplied HashSourceT.
+    /// Callers must serialize operations when the source is shared.
     template <
       size_t HASH_SIZE,
       void HASH_FUNCTION(
@@ -1486,6 +1509,344 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       const Source& secondary;
     };
 
+    /// @brief A merkle tree backed by tlog-tiles storage.
+    /// @note Appends grow an in-memory tree; flush() durably writes only full
+    /// (balanced) tiles, so the incomplete frontier is never tiled and stays
+    /// resident in memory. Compaction (dropping from memory the leaves already
+    /// covered by a full tile) is optional: enable it per flush with
+    /// Config::compact_on_flush, or call compact() explicitly; it never drops
+    /// the un-tiled frontier. Proofs are served from the combination of the
+    /// resident tree (frontier) and the full tiles (compacted past).
+    /// @note TiledTree creates a new tiled tree and cannot reopen one from tile
+    /// files alone. Construction atomically claims a previously absent tile
+    /// namespace because the files do not identify their tree or record enough
+    /// state to restore it. Use TileWriter directly only when the caller owns
+    /// and restores that state.
+    /// @warning No internal synchronization is provided. Callers must serialize
+    /// all access to a shared tree, including proof operations.
+    template <
+      size_t HASH_SIZE,
+      void HASH_FUNCTION(
+        const HashT<HASH_SIZE>&, const HashT<HASH_SIZE>&, HashT<HASH_SIZE>&)>
+    class TiledTreeT
+    {
+    public:
+      using Hash = HashT<HASH_SIZE>;
+      using Tree = TreeT<HASH_SIZE, HASH_FUNCTION>;
+      using Path = PathT<HASH_SIZE, HASH_FUNCTION>;
+      using Store = TileStoreT<HASH_SIZE, HASH_FUNCTION>;
+      using Writer = TileWriterT<HASH_SIZE, HASH_FUNCTION>;
+      using Stats = typename Writer::Stats;
+
+      // This wrapper mirrors the core tree's index type on its own public
+      // surface, so leaf counts and indices pass through untouched and cross
+      // conventions only when they reach the tile layer.
+      static_assert(
+        std::is_same_v<decltype(Tree().num_leaves()), size_t>,
+        "TiledTreeT exposes TreeT's leaf counts and indices as size_t; adjust "
+        "its public surface if TreeT changes index type");
+
+      /// @brief Configuration for a tiled tree.
+      struct Config
+      {
+        /// @brief Root directory for a new tiled tree.
+        /// @note The directory itself may exist, but its algorithm-qualified
+        /// tile subdirectory must be absent.
+        std::filesystem::path prefix;
+
+        /// @brief Number of most-recent leaves to keep resident when
+        /// compacting (i.e. a minimum never dropped from memory).
+        /// @note Tile alignment may retain up to TILE_WIDTH - 1 additional
+        /// tiled leaves. A zero margin retains one tiled boundary leaf so
+        /// rollback to exactly immutable_size() remains possible.
+        size_t retention_margin = 0;
+
+        /// @brief If set, flush() compacts after writing tiles, dropping
+        /// from memory the leaves already covered by a full tile. Off by
+        /// default: tiles are written but the tree keeps every leaf resident.
+        bool compact_on_flush = false;
+      };
+
+      explicit TiledTreeT(Config config) :
+        config(std::move(config)), store(this->config.prefix), writer(store)
+      {
+        claim_tile_namespace();
+      }
+
+      /// @brief Constructs a tiled tree with an explicit storage namespace.
+      /// @note Required for custom hash functions whose algorithm name cannot
+      /// be inferred by TileStoreT.
+      TiledTreeT(Config config, const std::string& hash_algorithm_short_name) :
+        config(std::move(config)),
+        store(this->config.prefix, hash_algorithm_short_name),
+        writer(store)
+      {
+        claim_tile_namespace();
+      }
+
+      TiledTreeT(const TiledTreeT&) = delete;
+      TiledTreeT& operator=(const TiledTreeT&) = delete;
+
+      /// @brief Moves a tiled tree, rebinding its writer to the moved store.
+      TiledTreeT(TiledTreeT&& other) noexcept :
+        config(std::move(other.config)),
+        store(std::move(other.store)),
+        writer(store),
+        tree(std::move(other.tree)),
+        tiles_size(std::exchange(other.tiles_size, 0)),
+        sealed_size(std::exchange(other.sealed_size, 0))
+      {}
+
+      TiledTreeT& operator=(TiledTreeT&&) = delete;
+
+      /// @brief Appends a leaf hash.
+      void append(const Hash& leaf_hash)
+      {
+        tree.insert(leaf_hash);
+      }
+
+      /// @brief The number of leaves (including flushed ones).
+      [[nodiscard]] size_t size() const
+      {
+        return tree.num_leaves();
+      }
+
+      /// @brief The current Merkle root.
+      Hash root()
+      {
+        return tree.root();
+      }
+
+      /// @brief The number of leaves covered by the last fully successful
+      /// flush.
+      /// @note This is always a multiple of TILE_WIDTH. It advances only after
+      /// every required tile level has been written successfully, and controls
+      /// proof reads and compaction.
+      [[nodiscard]] size_t flushed_size() const
+      {
+        return tiles_size;
+      }
+
+      /// @brief The rollback seal for ranges a flush may have published.
+      /// @note A flush seals its full-tile boundary before writing. If the
+      /// write fails, this may exceed flushed_size(); keep the same tree
+      /// contents and retry the flush.
+      [[nodiscard]] size_t immutable_size() const
+      {
+        return sealed_size;
+      }
+
+      /// @brief Access to the underlying tree.
+      /// @warning Mutating the tree directly bypasses tiled-tree bookkeeping.
+      /// In particular, direct retraction can make flushed_size() and
+      /// immutable_size() exceed size() and can make flushed_size() regress.
+      /// Use TiledTreeT operations whenever they are available.
+      Tree& tree_ref()
+      {
+        return tree;
+      }
+
+      /// @brief Access to the underlying tile store.
+      /// @warning Files written or changed through this reference are trusted
+      /// by later flushes without checking that their hashes match this tree.
+      /// Mismatched files can silently invalidate proofs after compaction.
+      Store& store_ref()
+      {
+        return store;
+      }
+
+      /// @brief Writes newly-complete full tiles to disk; compacts only if
+      /// Config::compact_on_flush is set.
+      /// @return Counts of the full tiles written by this flush
+      /// @note The full-tile boundary is made immutable before any tile write.
+      /// Only after every required tile level succeeds does flushed_size()
+      /// advance to that boundary. On failure, immutable_size() may advance
+      /// while flushed_size() does not; the tree remains resident and the flush
+      /// can be retried without rewriting finalized tiles.
+      Stats flush()
+      {
+        Stats stats;
+        const size_t n = tree.num_leaves();
+        if (n == 0)
+        {
+          return stats;
+        }
+
+        const size_t covered = (n / TILE_WIDTH) * TILE_WIDTH;
+        if (covered > sealed_size)
+        {
+          sealed_size = covered;
+        }
+
+        stats = writer.write_up_to(n, [this](uint64_t i) -> const Hash& {
+          if (i < tree.min_index())
+          {
+            throw std::runtime_error(std::format(
+              "TiledTree::flush: cannot regenerate a missing or malformed "
+              "tile from non-resident leaf {}",
+              i));
+          }
+          return tree.leaf((size_t)i);
+        });
+        tiles_size = covered;
+
+        if (config.compact_on_flush)
+        {
+          compact();
+        }
+        return stats;
+      }
+
+      /// @brief Drops old leaves covered by durably-written full tiles, keeping
+      /// at least retention_margin recent leaves and a tiled boundary leaf.
+      /// @return The new minimum (smallest still-resident) leaf index
+      /// @note Only leaves covered by a full tile are dropped, so the un-tiled
+      /// frontier is always retained in memory and inclusion/consistency proofs
+      /// remain available (the past from tiles, the frontier from memory). The
+      /// leaf at flushed_size() - 1 also remains resident so retract_to() can
+      /// represent a tree whose size is exactly immutable_size(). Has no effect
+      /// until tiling has produced full tiles.
+      size_t compact()
+      {
+        const size_t covered = (tiles_size / TILE_WIDTH) * TILE_WIDTH;
+        size_t target = covered > config.retention_margin ?
+          covered - config.retention_margin :
+          0;
+        target = (target / TILE_WIDTH) * TILE_WIDTH;
+        // TreeT cannot retract below min_index(). Keep the final tiled leaf
+        // resident so rollback to a size of exactly immutable_size() remains
+        // representable after compaction.
+        if (covered > 0 && target == covered)
+        {
+          target--;
+        }
+        if (target > tree.min_index())
+        {
+          tree.flush_to(target);
+        }
+        return tree.min_index();
+      }
+
+      /// @brief Rolls the tree back so that @p index becomes the last leaf,
+      /// removing all leaves after it (same semantics as TreeT::retract_to).
+      /// @note Only full tiles are immutable: this throws if the resulting size
+      /// would be smaller than immutable_size(). A failed flush may advance
+      /// immutable_size() without advancing flushed_size().
+      void retract_to(size_t index)
+      {
+        if (sealed_size > 0 && index < sealed_size - 1)
+        {
+          throw std::runtime_error(
+            "TiledTree::retract_to: cannot roll back entries sealed for "
+            "immutable tiles (resulting size < immutable size)");
+        }
+        tree.retract_to(index);
+      }
+
+      /// @brief Inclusion proof for @p index in a tree of @p proof_size leaves.
+      /// @note Served from tiles (flushed past) combined with the resident tree
+      /// (recent frontier); @p proof_size may exceed flushed_size().
+      std::shared_ptr<Path> inclusion_proof(size_t index, size_t proof_size)
+      {
+        if (proof_size > size())
+        {
+          throw std::runtime_error(
+            "inclusion proof size exceeds current tree size");
+        }
+        return with_engine([&](const auto& engine) {
+          return engine.inclusion_proof(index, proof_size);
+        });
+      }
+
+      /// @brief Consistency proof between tree sizes @p m and @p n.
+      std::vector<Hash> consistency_proof(size_t m, size_t n)
+      {
+        if (n > size())
+        {
+          throw std::runtime_error(
+            "consistency proof size exceeds current tree size");
+        }
+        return with_engine(
+          [&](const auto& engine) { return engine.consistency_proof(m, n); });
+      }
+
+      /// @brief Consistency proof between the trees whose last leaves are at
+      /// indices @p first_index and @p second_index (first_index <=
+      /// second_index).
+      /// @note Equivalent to consistency_proof(first_index + 1,
+      /// second_index + 1).
+      std::vector<Hash> consistency_proof_from_indices(
+        size_t first_index, size_t second_index)
+      {
+        if (first_index >= size() || second_index >= size())
+        {
+          throw std::runtime_error(
+            "consistency proof index exceeds current tree size");
+        }
+        if (first_index > second_index)
+        {
+          throw std::runtime_error(
+            "first consistency proof index exceeds second index");
+        }
+        return with_engine([&](const auto& engine) {
+          return engine.consistency_proof_from_indices(
+            first_index, second_index);
+        });
+      }
+
+    protected:
+      Config config;
+      Store store;
+      Writer writer;
+      Tree tree;
+      size_t tiles_size = 0;
+      size_t sealed_size = 0;
+
+      void claim_tile_namespace() const
+      {
+        const auto tile_root = store.root() / "tile";
+        std::error_code ec;
+        std::filesystem::create_directories(tile_root.parent_path(), ec);
+        if (ec)
+        {
+          throw std::runtime_error(std::format(
+            "TiledTree: cannot create tile namespace parent {}: {}",
+            tile_root.parent_path().string(),
+            ec.message()));
+        }
+        const bool claimed = std::filesystem::create_directory(tile_root, ec);
+        if (ec)
+        {
+          throw std::runtime_error(std::format(
+            "TiledTree: cannot claim tile namespace {}: {}",
+            tile_root.string(),
+            ec.message()));
+        }
+        if (!claimed)
+        {
+          throw std::runtime_error(
+            "TiledTree: tile namespace already exists; reopening or sharing "
+            "a tiled tree is not supported");
+        }
+      }
+
+      /// @brief Builds a proof engine over the combined resident-tree
+      /// (frontier) and full-tile (flushed past) source, and invokes @p fn with
+      /// it.
+      /// @note The sources and engine are stack-local; @p fn must consume the
+      /// engine before returning (proofs are returned by value, holding hash
+      /// copies, so the result outlives the engine).
+      template <typename Fn>
+      auto with_engine(Fn fn)
+      {
+        MemoryHashSourceT<HASH_SIZE, HASH_FUNCTION> mem(tree);
+        TileHashSourceT<HASH_SIZE, HASH_FUNCTION> tile_src(store, tiles_size);
+        CombinedHashSourceT<HASH_SIZE, HASH_FUNCTION> combined(mem, tile_src);
+        ProofEngineT<HASH_SIZE, HASH_FUNCTION> engine(combined);
+        return fn(engine);
+      }
+    };
+
     /// @brief Writes tlog-tiles entry bundles (raw log entries) for a growing
     /// log.
     /// @note Entry bundles are level-0 only and application-owned: merklecpp
@@ -1613,10 +1974,51 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       merkle::Tree::Hash::size_bytes,
       merkle::Tree::hash_function>;
 
+    /// @brief Default tiled tree (SHA256, default hash function).
+    using TiledTree =
+      TiledTreeT<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>;
+
     /// @brief Default entry-bundle writer (SHA256, default hash function).
     using EntryBundleWriter = EntryBundleWriterT<
       merkle::Tree::Hash::size_bytes,
       merkle::Tree::hash_function>;
 
+#ifdef HAVE_OPENSSL
+    /// @brief SHA384 tile store.
+    using TileStore384 = TileStoreT<48, sha384_openssl>;
+
+    /// @brief SHA512 tile store.
+    using TileStore512 = TileStoreT<64, sha512_openssl>;
+
+    /// @brief SHA384 tile writer.
+    using TileWriter384 = TileWriterT<48, sha384_openssl>;
+
+    /// @brief SHA512 tile writer.
+    using TileWriter512 = TileWriterT<64, sha512_openssl>;
+
+    /// @brief SHA384 hash source, tile-backed source and proof engine.
+    using HashSource384 = HashSourceT<48, sha384_openssl>;
+    using TileHashSource384 = TileHashSourceT<48, sha384_openssl>;
+    using ProofEngine384 = ProofEngineT<48, sha384_openssl>;
+
+    /// @brief SHA512 hash source, tile-backed source and proof engine.
+    using HashSource512 = HashSourceT<64, sha512_openssl>;
+    using TileHashSource512 = TileHashSourceT<64, sha512_openssl>;
+    using ProofEngine512 = ProofEngineT<64, sha512_openssl>;
+
+    /// @brief SHA384 memory/combined sources and tiled tree.
+    using MemoryHashSource384 = MemoryHashSourceT<48, sha384_openssl>;
+    using CombinedHashSource384 = CombinedHashSourceT<48, sha384_openssl>;
+    using TiledTree384 = TiledTreeT<48, sha384_openssl>;
+
+    /// @brief SHA512 memory/combined sources and tiled tree.
+    using MemoryHashSource512 = MemoryHashSourceT<64, sha512_openssl>;
+    using CombinedHashSource512 = CombinedHashSourceT<64, sha512_openssl>;
+    using TiledTree512 = TiledTreeT<64, sha512_openssl>;
+
+    /// @brief SHA384/512 entry-bundle writers.
+    using EntryBundleWriter384 = EntryBundleWriterT<48, sha384_openssl>;
+    using EntryBundleWriter512 = EntryBundleWriterT<64, sha512_openssl>;
+#endif
   }
 }
