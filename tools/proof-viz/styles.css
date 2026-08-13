@@ -84,8 +84,7 @@ code {
 
 .masthead__inner,
 .control-band__inner,
-.scene__inner,
-.method {
+.scene__inner {
     padding-inline: var(--page-gutter);
 }
 
@@ -223,12 +222,6 @@ h1 {
     background: var(--surface);
 }
 
-.method h2 {
-    margin: 5px 0 0;
-    font-size: 31px;
-    line-height: 1.1;
-}
-
 .legend {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -262,6 +255,11 @@ h1 {
 
 .swatch--tile {
     background: var(--tile);
+}
+
+.swatch--tile-file {
+    border: 1px dashed var(--tile);
+    background: transparent;
 }
 
 .swatch--frontier {
@@ -396,37 +394,17 @@ h1 {
     font-size: 12px;
 }
 
-.method {
-    display: grid;
-    grid-template-columns: minmax(200px, 280px) minmax(0, 760px);
-    gap: 32px;
-    padding-block: 48px;
-}
-
-.method__copy {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 24px;
-    color: var(--muted);
-}
-
-.method__copy p {
-    margin: 0;
-}
-
 @media (max-width: 760px) {
     body {
         font-size: 14px;
     }
 
-    .scene__inner,
-    .method {
+    .scene__inner {
         grid-template-columns: 1fr;
     }
 
     .masthead__inner,
-    .scene__inner,
-    .method {
+    .scene__inner {
         padding-block: 32px;
     }
 

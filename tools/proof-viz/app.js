@@ -12,6 +12,10 @@ const scenarioRoot = document.querySelector("#scenarios");
     if (data.schemaVersion !== 5 || !Array.isArray(data.scenarios)) {
         throw new Error("Proof visualization data is missing");
     }
+    const tileHeight = Math.log2(data.tileWidth);
+    if (!Number.isInteger(tileHeight)) {
+        throw new Error("Tile width must be a power of two");
+    }
 
     // Nodes arrive as parallel columns with one bitmask each. The tile and
     // frontier bits are what those two stores answered for that range, so a
@@ -197,6 +201,31 @@ const scenarioRoot = document.querySelector("#scenarios");
                 x: plot.left + (((node.lo + node.hi) / 2) / scenario.mapLeaves) * plotWidth,
                 y: plot.top + ((maxHeight - node.height) / Math.max(maxHeight, 1)) * plotHeight
             }));
+
+            scenario.tiles.forEach(([level, index]) => {
+                const tileSpan = data.tileWidth ** (level + 1);
+                const lo = index * tileSpan;
+                const hi = lo + tileSpan;
+                if (hi > scenario.mapLeaves) return;
+
+                const x = plot.left + (lo / scenario.mapLeaves) * plotWidth;
+                const right = plot.left + (hi / scenario.mapLeaves) * plotWidth;
+                const y = plot.top +
+                    ((maxHeight - level * tileHeight) / Math.max(maxHeight, 1)) * plotHeight;
+                const inset = 2;
+                const boxHeight = 14;
+                context.save();
+                context.setLineDash([4, 3]);
+                context.strokeStyle = colors.tile;
+                context.lineWidth = 1;
+                context.strokeRect(
+                    snap(x + inset),
+                    snap(y - boxHeight / 2),
+                    snap(right - x - inset * 2),
+                    boxHeight
+                );
+                context.restore();
+            });
 
             if (scenario.covered > 0 && scenario.covered < scenario.mapLeaves) {
                 const boundaryX = plot.left + (scenario.covered / scenario.mapLeaves) * plotWidth;
