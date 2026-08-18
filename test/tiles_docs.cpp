@@ -18,21 +18,28 @@ static void quick_start(
   const fs::path& storage_directory, const std::vector<Hash>& batch)
 {
   /// SNIPPET_START: TiledTree-Quick-Start
-  TiledTree::Config config;
-  config.prefix = storage_directory;
-  config.compact_on_flush = true;
+  TiledTree::Config cfg;
+  cfg.prefix = storage_directory;
 
-  TiledTree log(config);
-  for (const auto& leaf_hash : batch)
+  TiledTree log(cfg);
+  for (const Hash& leaf : batch)
   {
-    log.append(leaf_hash);
+    log.append(leaf);
   }
 
+  // Persist newly-complete tiles to disk.
   log.flush();
 
-  const auto root = log.root();
-  const auto proof = log.inclusion_proof(0, log.size());
-  if (!proof->verify(root))
+  const auto n = log.size();
+  if (n == 0)
+  {
+    throw std::runtime_error("expected at least one leaf");
+  }
+  const Hash root = log.root();
+
+  // Inclusion proof for leaf 0 in the tree of n leaves.
+  const auto inclusion = log.inclusion_proof(0, n);
+  if (!inclusion->verify(root))
   {
     throw std::runtime_error("inclusion proof did not verify");
   }

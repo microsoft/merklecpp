@@ -70,46 +70,23 @@ sharing a prefix must also be serialized. Independent ``TileStore`` objects may
 read that prefix concurrently with the single serialized writer because tiles
 are published atomically and only appear at their final path when complete.
 
+.. _tiled-tree-quick-start:
+
 Quick start: ``TiledTree``
 --------------------------
 
 ``TiledTree`` is the high-level wrapper: append leaf hashes, flush them to disk
-(which writes tiles), and ask for proofs.
+(which writes tiles), and ask for proofs. This example is included directly
+from the ``tiles_docs`` test so the documented code is compiled and run.
 
-.. code:: cpp
-
-   #include <merklecpp_tiles.h>
-
-   merkle::tiles::TiledTree::Config cfg;
-   cfg.prefix = "/var/log/mylog";   // directory for tile files
-
-   merkle::tiles::TiledTree log(cfg);
-
-   // Append leaf hashes (compute these from your entries however you like).
-   for (const merkle::Hash& leaf : batch)
-     log.append(leaf);
-
-   // Persist newly-complete tiles to disk.
-   log.flush();
-
-   auto         n    = log.size();   // number of leaves
-   assert(n > 0);
-   merkle::Hash root = log.root();   // current Merkle root
-
-   // Inclusion proof for leaf 0 in the tree of `n` leaves.
-   auto inclusion = log.inclusion_proof(/*index=*/0, /*size=*/n);
-   assert(inclusion->verify(root));
-
-   // Consistency proof that an earlier non-empty size is a prefix of size n.
-   if (n > 1)
-   {
-     auto consistency = log.consistency_proof(/*m=*/n / 2, /*n=*/n);
-   }
+.. literalinclude:: ../test/tiles_docs.cpp
+   :language: cpp
+   :start-after: SNIPPET_START: TiledTree-Quick-Start
+   :end-before: SNIPPET_END: TiledTree-Quick-Start
+   :dedent: 2
 
 This example assumes ``batch`` is non-empty. ``root()`` throws on an empty tree;
 ``size()``, ``flush()``, and ``compact()`` are safe at size 0.
-The `compiled quick-start test <../test/tiles_docs.cpp>`__ exercises the same
-lifecycle and supplies the documentation landing page's literal include.
 
 ``TiledTree`` can be move-constructed, but it cannot be copied or assigned. Move
 construction keeps its writer bound to the destination tree's tile store.

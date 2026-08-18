@@ -23,17 +23,10 @@ Tiled storage
 -------------
 
 The optional :code:`merklecpp_tiles.h` companion persists complete tree ranges
-as immutable `tlog-tiles <https://c2sp.org/tlog-tiles>`_ files. Given a storage
-directory and a batch of leaf hashes, the basic lifecycle is:
-
-.. literalinclude:: ../test/tiles_docs.cpp
-    :language: cpp
-    :start-after: SNIPPET_START: TiledTree-Quick-Start
-    :end-before: SNIPPET_END: TiledTree-Quick-Start
-    :dedent: 2
-
-Continue with the :doc:`practical guide <tiles-guide>` for configuration and
-lifecycle operations, then use the
+as immutable `tlog-tiles <https://c2sp.org/tlog-tiles>`_ files. Start with the
+compiled :ref:`tiled-tree-quick-start`, then continue through the
+:doc:`practical guide <tiles-guide>` for configuration and lifecycle operations.
+Use the
 :doc:`illustrated walkthrough <tiles-illustrated>` to understand tile geometry
 and proof resolution.
 
