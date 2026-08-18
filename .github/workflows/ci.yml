@@ -93,4 +93,69 @@ jobs:
     - name: Test
       working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
       shell: bash
-      run: ctest -VV -C ${{ matrix.build_type }} --timeout 300
+      run: ctest -VV -C ${{ matrix.build_type }} --timeout 300 -E '^time_tiles$'
+
+    - name: Run tile benchmark
+      if: matrix.build_type == 'Release'
+      working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
+      shell: bash
+      run: |
+        set -o pipefail
+        ctest -VV -C ${{ matrix.build_type }} --timeout 300 -R '^time_tiles$' \
+          2>&1 | tee time_tiles-output.txt
+
+    - name: Publish tile benchmark summary
+      if: always() && matrix.build_type == 'Release'
+      working-directory: ${{github.workspace}}/build/${{ matrix.build_type }}
+      shell: bash
+      run: |
+        if [ ! -f time_tiles-output.txt ]; then
+          echo "The time_tiles benchmark did not run." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+        fi
+
+        results=$(
+          sed -n -E \
+            '/^[[:space:]]*[0-9]+: (seed=|append[[:space:]]|flush[[:space:]]|inclusion[[:space:]]|consistency|compact[[:space:]]|time_tiles:)/ {
+              s/^[[:space:]]*[0-9]+: //
+              p
+            }' \
+            time_tiles-output.txt
+        )
+
+        if ! grep -q '^time_tiles: OK' <<< "$results"; then
+          echo "The time_tiles benchmark did not produce a complete result." \
+            >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+        fi
+
+        seed=$(sed -n 's/^seed=//p' <<< "$results")
+        {
+          echo "## Tiled-storage performance"
+          echo
+          echo "| Configuration | Value |"
+          echo "|---|---|"
+          echo "| Runner | \`${{ matrix.os }}\` |"
+          echo "| Architecture | \`${{ runner.arch }}\` |"
+          echo "| Compiler | \`${{ matrix.compiler }}\` |"
+          echo "| OpenSSL | \`${{ matrix.openssl }}\` |"
+          echo "| Commit | \`${GITHUB_SHA}\` |"
+          echo "| Seed | \`${seed}\` |"
+          echo
+          echo "| Operation | Result |"
+          echo "|---|---|"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        while IFS= read -r line; do
+          case "$line" in
+            seed=*|time_tiles:*)
+              continue
+              ;;
+          esac
+          operation=${line%%:*}
+          result=${line#*:}
+          operation=$(sed 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "$operation")
+          result=$(sed 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "$result")
+          printf '| `%s` | %s |\n' "$operation" "$result" \
+            >> "$GITHUB_STEP_SUMMARY"
+        done <<< "$results"

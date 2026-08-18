@@ -1,5 +1,5 @@
-merklecpp Documentation
-=======================
+merklecpp
+=========
 
 merklecpp is a header-only C++ library for creation and manipulation of Merkle
 trees. The main entry-point is the :cpp:class:`merkle::TreeT` template, which
@@ -19,14 +19,35 @@ example:
     :end-before: SNIPPET_END: OpenSSL-SHA256
     :dedent: 2
 
+Tiled storage
+-------------
+
+The optional :code:`merklecpp_tiles.h` companion persists complete tree ranges
+as immutable `tlog-tiles <https://c2sp.org/tlog-tiles>`_ files. Start with the
+compiled :ref:`tiled-tree-quick-start`, then continue through the
+:doc:`practical guide <tiles-guide>` for configuration and lifecycle operations.
+Use the
+:doc:`illustrated walkthrough <tiles-illustrated>` to understand tile geometry
+and proof resolution.
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tiled storage
+
+   tiles-guide
+   tiles-illustrated
+
 Proof visualization
 -------------------
 
 Explore the `interactive tile and frontier proof atlas <proof-viz/>`_ to see
 which durable tiles and resident Merkle nodes supply each proof hash.
 
+API reference
+-------------
+
 Trees
------
+~~~~~
 
 .. doxygenclass:: merkle::TreeT
    :project: merklecpp
@@ -36,21 +57,21 @@ Trees
    :project: merklecpp
 
 Hashes
-------
+~~~~~~
 
 .. doxygenstruct:: merkle::HashT
    :project: merklecpp
    :members:
 
 Paths
------
+~~~~~
 
 .. doxygenclass:: merkle::PathT
    :project: merklecpp
    :members:
 
 Hash functions
---------------
+~~~~~~~~~~~~~~
 
 By default, merklecpp uses its built-in SHA256 function
 (:cpp:func:`merkle::sha256`) for node hashes. For convenience, merklecpp also
@@ -63,11 +84,6 @@ To enable these bindings, merklecpp requires the compiler macro
 
 .. doxygenfunction:: merkle::sha256_openssl
    :project: merklecpp
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
 
 Indices and tables
 ==================
