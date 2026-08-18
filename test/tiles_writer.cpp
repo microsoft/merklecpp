@@ -65,6 +65,18 @@ public:
   }
 };
 
+template <typename Writer>
+class RootFifoProbe : public Writer
+{
+public:
+  using Writer::Writer;
+
+  [[nodiscard]] size_t fifo_size(uint8_t level) const
+  {
+    return this->root_fifo_size(level);
+  }
+};
+
 static void overwrite_file(
   const fs::path& path, const std::vector<uint8_t>& bytes)
 {
@@ -417,6 +429,168 @@ int main()
       std::cout << "I (SHA-384 writer): OK" << '\n';
     }
 #endif
+
+    // ---- J. Newly written child roots roll up from a bounded FIFO.
+    {
+      using SmallStore = merkle::tiles::TileStoreT<
+        Hash::size_bytes,
+        merkle::Tree::hash_function,
+        2>;
+      using SmallWriter = merkle::tiles::TileWriterT<
+        Hash::size_bytes,
+        merkle::Tree::hash_function,
+        2>;
+
+      const auto hashes = make_hashes(16);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
+      SmallStore store(base / "j");
+      RootFifoProbe<SmallWriter> writer(store);
+      const auto stats = writer.write_up_to(hashes.size(), leaf_at);
+
+      expect(stats.full_written == 5, "J four L0 tiles and one L1 tile");
+      expect(stats.root_fifo_hits == 4, "J parent consumes four cached roots");
+      expect(stats.root_fifo_misses == 0, "J parent needs no durable reads");
+      expect(writer.fifo_size(0) == 0, "J child FIFO consumed");
+      expect(
+        writer.fifo_size(1) <= SmallStore::TILE_WIDTH,
+        "J FIFO remains bounded");
+
+      std::cout << "J (FIFO hit): OK" << '\n';
+    }
+
+    // ---- K. A fresh writer falls back for pre-existing child tiles.
+    {
+      using SmallStore = merkle::tiles::TileStoreT<
+        Hash::size_bytes,
+        merkle::Tree::hash_function,
+        2>;
+      using SmallWriter = merkle::tiles::TileWriterT<
+        Hash::size_bytes,
+        merkle::Tree::hash_function,
+        2>;
+
+      const auto hashes = make_hashes(16);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
+      SmallStore store(base / "k");
+      {
+        SmallWriter first(store);
+        expect(
+          first.write_up_to(8, leaf_at).full_written == 2,
+          "K first writer publishes two children");
+      }
+
+      SmallWriter restarted(store);
+      const auto stats = restarted.write_up_to(hashes.size(), leaf_at);
+      expect(stats.full_written == 3, "K restart writes two children and parent");
+      expect(stats.root_fifo_hits == 2, "K restart uses new child roots");
+      expect(
+        stats.root_fifo_misses == 2,
+        "K restart recomputes pre-existing child roots");
+
+      std::cout << "K (restart fallback): OK" << '\n';
+    }
+
+    // ---- L. A gap in newly written indices invalidates FIFO continuity.
+    {
+      using SmallStore = merkle::tiles::TileStoreT<
+        Hash::size_bytes,
+        merkle::Tree::hash_function,
+        2>;
+      using SmallWriter = merkle::tiles::TileWriterT<
+        Hash::size_bytes,
+        merkle::Tree::hash_function,
+        2>;
+
+      const auto hashes = make_hashes(16);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
+      SmallStore store(base / "l");
+      store.write_tile(
+        TileRef{0, 1},
+        std::vector<Hash>(hashes.begin() + 4, hashes.begin() + 8));
+
+      SmallWriter writer(store);
+      const auto stats = writer.write_up_to(hashes.size(), leaf_at);
+      expect(stats.full_written == 4, "L writes three children and parent");
+      expect(stats.root_fifo_hits == 2, "L uses post-gap child roots");
+      expect(
+        stats.root_fifo_misses == 2,
+        "L recomputes roots across pre-existing gap");
+
+      std::cout << "L (gap fallback): OK" << '\n';
+    }
+
+    // ---- M. Retry with a fresh writer after a parent-write failure falls back.
+    {
+      using SmallStore = merkle::tiles::TileStoreT<
+        Hash::size_bytes,
+        merkle::Tree::hash_function,
+        2>;
+      using SmallWriter = merkle::tiles::TileWriterT<
+        Hash::size_bytes,
+        merkle::Tree::hash_function,
+        2>;
+
+      const auto hashes = make_hashes(16);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
+      SmallStore store(base / "m");
+      const fs::path blocker = store.tile_path(TileRef{1, 0});
+      fs::create_directories(blocker);
+      {
+        SmallWriter interrupted(store);
+        bool threw = false;
+        try
+        {
+          (void)interrupted.write_up_to(hashes.size(), leaf_at);
+        }
+        catch (const std::exception&)
+        {
+          threw = true;
+        }
+        expect(threw, "M blocked parent write throws");
+        expect(store.has_full_tile(0, 3), "M child tiles remain durable");
+      }
+
+      fs::remove(blocker);
+      SmallWriter retry(store);
+      const auto stats = retry.write_up_to(hashes.size(), leaf_at);
+      expect(stats.full_written == 1, "M retry writes only parent");
+      expect(stats.root_fifo_hits == 0, "M retry has no stale FIFO state");
+      expect(
+        stats.root_fifo_misses == 4,
+        "M retry recomputes every durable child root");
+
+      std::cout << "M (failure fallback): OK" << '\n';
+    }
+
+    // ---- N. Moving a writer preserves cursors but drops opportunistic roots.
+    {
+      using SmallStore = merkle::tiles::TileStoreT<
+        Hash::size_bytes,
+        merkle::Tree::hash_function,
+        2>;
+      using SmallWriter = merkle::tiles::TileWriterT<
+        Hash::size_bytes,
+        merkle::Tree::hash_function,
+        2>;
+
+      const auto hashes = make_hashes(16);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
+      SmallStore store(base / "n");
+      SmallWriter original(store);
+      expect(
+        original.write_up_to(12, leaf_at).full_written == 3,
+        "N original writer publishes three children");
+
+      SmallWriter moved(std::move(original));
+      const auto stats = moved.write_up_to(hashes.size(), leaf_at);
+      expect(stats.full_written == 2, "N moved writer writes child and parent");
+      expect(stats.root_fifo_hits == 1, "N moved writer uses post-move root");
+      expect(
+        stats.root_fifo_misses == 3,
+        "N moved writer recomputes pre-move child roots");
+
+      std::cout << "N (move fallback): OK" << '\n';
+    }
 
     std::cout << "tiles_writer: OK" << '\n';
   }

@@ -800,15 +800,23 @@ int main()
           interrupted.immutable_size() == level1_size,
           "level-1 interrupted flush seals attempted boundary");
 
+        TiledTree recovered(std::move(interrupted));
         fs::remove(blocker);
+        const auto retry_stats = recovered.flush();
         expect(
-          interrupted.flush().full_written == 1,
+          retry_stats.full_written == 1,
           "level-1 interrupted retry writes only the missing roll-up");
         expect(
-          interrupted.flushed_size() == level1_size,
+          retry_stats.root_fifo_hits == 0,
+          "level-1 moved retry has no writer FIFO state");
+        expect(
+          retry_stats.root_fifo_misses == TileStore::TILE_WIDTH,
+          "level-1 moved retry recomputes durable child roots");
+        expect(
+          recovered.flushed_size() == level1_size,
           "level-1 interrupted retry advances flushed size");
         expect(
-          interrupted.store_ref().has_full_tile(1, 0),
+          recovered.store_ref().has_full_tile(1, 0),
           "level-1 interrupted retry publishes roll-up");
 
         merkle::Tree expected;
@@ -818,9 +826,9 @@ int main()
         }
         const Hash expected_root = expected.root();
         expect(
-          interrupted.root() == expected_root,
+          recovered.root() == expected_root,
           "level-1 interrupted root matches reference");
-        const auto proof = interrupted.inclusion_proof(0, level1_size);
+        const auto proof = recovered.inclusion_proof(0, level1_size);
         expect(
           *proof == *expected.path(0),
           "level-1 interrupted inclusion matches reference");

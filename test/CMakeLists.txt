@@ -52,6 +52,7 @@ endif()
 if(LONG_TESTS)
   add_merklecpp_test(tiles_level2 tiles_level2.cpp)
   add_merklecpp_test(time_tiles time_tiles.cpp)
+  add_merklecpp_test(time_tiles_continuous time_tiles_continuous.cpp)
   set(TILES_LEVEL2_TIMEOUT 900)
   if(WIN32)
     set(TILES_LEVEL2_TIMEOUT 3600)
@@ -59,6 +60,7 @@ if(LONG_TESTS)
   set_tests_properties(
     ${MERKLECPP_TEST_PREFIX}tiles_level2
     ${MERKLECPP_TEST_PREFIX}time_tiles
+    ${MERKLECPP_TEST_PREFIX}time_tiles_continuous
     PROPERTIES TIMEOUT ${TILES_LEVEL2_TIMEOUT}
   )
 endif()

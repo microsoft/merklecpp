@@ -90,13 +90,16 @@ including level-2 tile coverage and tile proof timing:
 
 CI enables `LONG_TESTS` in Release configurations so pull requests exercise the
 full tiled-storage matrix; Debug configurations run the short suite. Every
-Release job publishes its `time_tiles` measurements as a table in the GitHub
-Actions job summary.
+Release job publishes its `time_tiles` measurements and the continuous
+tiled-storage performance exploration as tables in the GitHub Actions job
+summary. The downloadable artifact includes machine-readable event/cycle data
+and `tools/tile-performance-viewer.html`; no generated benchmark results are
+tracked.
 
 | CMake option | Default | Purpose |
 |---|---:|---|
 | `BUILD_TESTING` | `ON` | Build tests; set `OFF` for a library-only build |
-| `LONG_TESTS` | `OFF` | Include level-2 tile and `time_tiles` coverage |
+| `LONG_TESTS` | `OFF` | Include level-2 tile and tile performance coverage |
 | `OPENSSL` | `OFF` | Enable OpenSSL hashes, SHA-384/512 tiled aliases, and tests |
 | `CLANG_TIDY` | `OFF` | Run clang-tidy while compiling tests |
 | `TRACE` | `OFF` | Enable internal Merkle-tree trace output |

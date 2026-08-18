@@ -11,6 +11,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -868,6 +869,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
     /// written; they are therefore immutable and written exactly once.
     /// Entries beyond the last full-tile boundary remain in memory until a
     /// later flush completes the next tile.
+    /// @note After a tile is durable, its root is retained in a bounded
+    /// per-level FIFO for the next parent roll-up. The FIFO is only a performance
+    /// optimisation: every miss recomputes the root from the immutable child
+    /// tile, so restarts and discontinuities do not affect correctness or format.
     /// @warning No internal synchronization is provided. Callers must serialize
     /// access to a writer and its store.
     /// @warning A writer trusts existing full tiles as output from the same
@@ -905,10 +910,28 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       {
         /// @brief Number of full tiles written.
         uint64_t full_written = 0;
+
+        /// @brief Number of child-tile roots consumed from the write FIFO.
+        uint64_t root_fifo_hits = 0;
+
+        /// @brief Number of child-tile roots recomputed from durable tiles.
+        uint64_t root_fifo_misses = 0;
       };
 
       /// @brief Constructs a writer over @p store.
       explicit TileWriterT(Store& store) : store(store) {}
+
+      TileWriterT(const TileWriterT&) = default;
+      TileWriterT& operator=(const TileWriterT&) = delete;
+
+      /// @brief Moves writer progress while dropping opportunistic FIFO state.
+      TileWriterT(TileWriterT&& other) noexcept :
+        store(other.store),
+        next_full(std::move(other.next_full)),
+        cursor_inited(std::move(other.cursor_inited))
+      {}
+
+      TileWriterT& operator=(TileWriterT&&) = delete;
 
       /// @brief Writes all newly-complete full tiles for a tree of @p size
       /// leaves.
@@ -954,9 +977,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
             {
               continue; // immutable: never rewrite an existing full tile
             }
-            store.write_tile(
-              TileRef{level, n},
-              collect(level, n * TILE_WIDTH, TILE_WIDTH, leaf_at));
+            auto hashes = collect(
+              level, n * static_cast<uint64_t>(TILE_WIDTH), TILE_WIDTH, leaf_at, stats);
+            store.write_tile(TileRef{level, n}, hashes);
+            cache_written_root(level, n, hashes);
             stats.full_written++;
           }
           if (full_tiles > next_full[level])
@@ -979,6 +1003,15 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Per-level flag indicating next_full has been initialised.
       std::vector<uint8_t> cursor_inited;
 
+      struct RootFifo
+      {
+        uint64_t first_index = 0;
+        std::deque<Hash> roots;
+      };
+
+      /// @brief Recently written roots, bounded to one tile width per level.
+      std::vector<RootFifo> root_fifos;
+
       /// @brief Number of complete level-@p level entries for a tree of @p
       /// size.
       static uint64_t entries_at_level(uint64_t size, uint8_t level)
@@ -997,6 +1030,69 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           next_full.resize(needed, 0);
           cursor_inited.resize(needed, 0);
         }
+        if (root_fifos.size() < needed)
+        {
+          root_fifos.resize(needed);
+        }
+      }
+
+      /// @brief Number of roots currently retained for @p level.
+      [[nodiscard]] size_t root_fifo_size(uint8_t level) const
+      {
+        return level < root_fifos.size() ? root_fifos[level].roots.size() : 0;
+      }
+
+      void cache_written_root(
+        uint8_t level, uint64_t index, const std::vector<Hash>& hashes)
+      {
+        ensure_level(level);
+        auto& fifo = root_fifos[level];
+        const auto fifo_size = static_cast<uint64_t>(fifo.roots.size());
+        const bool index_follows_fifo =
+          !fifo.roots.empty() &&
+          fifo_size <=
+            std::numeric_limits<uint64_t>::max() - fifo.first_index &&
+          fifo.first_index + fifo_size == index;
+        if (!index_follows_fifo)
+        {
+          fifo.roots.clear();
+          fifo.first_index = index;
+        }
+
+        fifo.roots.push_back(
+          perfect_root<HASH_SIZE, HASH_FUNCTION>(hashes));
+        if (fifo.roots.size() > TILE_WIDTH)
+        {
+          fifo.roots.pop_front();
+          fifo.first_index++;
+        }
+      }
+
+      bool consume_cached_root(uint8_t level, uint64_t index, Hash& out)
+      {
+        if (level >= root_fifos.size())
+        {
+          return false;
+        }
+
+        auto& fifo = root_fifos[level];
+        while (!fifo.roots.empty() && fifo.first_index < index)
+        {
+          fifo.roots.pop_front();
+          fifo.first_index++;
+        }
+        if (fifo.roots.empty() || fifo.first_index != index)
+        {
+          return false;
+        }
+
+        out = fifo.roots.front();
+        fifo.roots.pop_front();
+        if (!fifo.roots.empty())
+        {
+          fifo.first_index++;
+        }
+        return true;
       }
 
       /// @brief Length of the confirmed contiguous prefix, bounded by @p limit.
@@ -1013,7 +1109,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         uint8_t level,
         uint64_t first_entry,
         uint64_t count,
-        const LeafFn& leaf_at)
+        const LeafFn& leaf_at,
+        Stats& stats)
       {
         std::vector<Hash> out;
         out.reserve(count);
@@ -1026,10 +1123,20 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
           }
           else
           {
-            // Roll up the complete child full tile.
-            out.push_back(
-              perfect_root<HASH_SIZE, HASH_FUNCTION>(
-                store.read_tile(TileRef{(uint8_t)(level - 1), g})));
+            Hash root;
+            if (consume_cached_root((uint8_t)(level - 1), g, root))
+            {
+              stats.root_fifo_hits++;
+            }
+            else
+            {
+              // The FIFO is only an optimisation; durable child tiles are the
+              // source of truth after restarts, gaps, failures, and eviction.
+              root = perfect_root<HASH_SIZE, HASH_FUNCTION>(
+                store.read_tile(TileRef{(uint8_t)(level - 1), g}));
+              stats.root_fifo_misses++;
+            }
+            out.push_back(root);
           }
         }
         return out;

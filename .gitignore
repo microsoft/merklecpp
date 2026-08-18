@@ -354,6 +354,10 @@ doc/html
 doc/xml
 build*/
 _codeql_build_dir/
+
+# Tile performance exploration output
+tile-performance-*.csv
+tile-performance-*.json
 _codeql_detected_source_root
 coverage*.info
 coverage_html/
