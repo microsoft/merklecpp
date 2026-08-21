@@ -1126,6 +1126,10 @@ namespace merkle
                          << std::endl;);
         if (cur->height == height)
         {
+          if (!cur->left || !cur->right)
+          {
+            throw std::runtime_error("unexpected null child node");
+          }
           if (!f(cur, go_right))
           {
             continue;
@@ -1544,9 +1548,9 @@ namespace merkle
         throw std::runtime_error("serialised tree size exceeds size_t");
       }
 
-      const size_t restored_num_leaf_nodes =
+      const auto restored_num_leaf_nodes =
         static_cast<size_t>(serialised_num_leaf_nodes);
-      const size_t restored_num_flushed =
+      const auto restored_num_flushed =
         static_cast<size_t>(serialised_num_flushed);
       if (restored_num_leaf_nodes == 0 && restored_num_flushed != 0)
       {

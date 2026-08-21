@@ -1045,13 +1045,18 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       }
 
       /// @brief Rebinds a moved writer to its destination store.
+      // members are moved individually so the store reference can be rebound.
+      // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
       TileWriterT(Store& store, TileWriterT&& other) noexcept :
-        store(store), trust_existing_tiles(other.trust_existing_tiles)
+        store(store),
+        next_full(std::move(other.next_full)),
+        cursor_inited(std::move(other.cursor_inited)),
+        trust_existing_tiles(other.trust_existing_tiles)
       {
-        if (!trust_existing_tiles)
+        if (trust_existing_tiles)
         {
-          next_full = std::move(other.next_full);
-          cursor_inited = std::move(other.cursor_inited);
+          next_full.clear();
+          cursor_inited.clear();
         }
       }
 
@@ -2049,7 +2054,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       size_t sealed_size = 0;
 
       TiledTreeT(
-        FrontierTag,
+        [[maybe_unused]] FrontierTag tag,
         Config config,
         const std::string& hash_algorithm_short_name,
         const std::vector<uint8_t>& serialised_tree) :
@@ -2062,7 +2067,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       }
 
       TiledTreeT(
-        ResumeTag,
+        [[maybe_unused]] ResumeTag tag,
         Config config,
         const std::string& hash_algorithm_short_name,
         const std::vector<uint8_t>& serialised_tree,
@@ -2140,7 +2145,7 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
             "retention margin");
         }
 
-        const uint64_t last_tile =
+        const auto last_tile =
           static_cast<uint64_t>(full_tile_boundary / TILE_WIDTH - 1);
         const auto hashes = store.read_tile(TileRef{0, last_tile});
         if (hashes.back() != tree.leaf(full_tile_boundary - 1))
