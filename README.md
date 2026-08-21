@@ -80,6 +80,29 @@ are treated as untrusted and replaced when a later flush reaches them. The
 application remains responsible for establishing namespace ownership and
 matching the serialized tree to the trusted tiles.
 
+If tiles are not ready yet, restore the logical tree first and populate the
+namespace independently. This does not claim or inspect the namespace; the
+caller must establish exclusive ownership:
+
+    auto log = merkle::tiles::TiledTree::from_frontier(
+      cfg,
+      "sha256",
+      serialised_tree);
+
+    merkle::tiles::TileStore repair_store(cfg.prefix, "sha256");
+    auto repair = merkle::tiles::TileWriter::repair(
+      repair_store,
+      trusted_full_tile_boundary);
+    repair.write_up_to(target_size, leaf_at);
+
+    // After the repair writer is quiesced:
+    log.adopt_tile_prefix(target_full_tile_boundary);
+
+The independent writer can run in the background. The caller must serialize
+writers for the namespace and quiesce them before adoption. Until the repaired
+prefix overlaps the resident frontier, root computation and appends remain
+available but tile-dependent proofs and flushes of non-resident history fail.
+
 See the [tiled storage guide](doc/tiles-guide.rst) for a how-to covering
 flushing, compaction, rollback, proofs, and the lower-level building blocks,
 and the [illustrated walkthrough](doc/tiles-illustrated.rst) for the tile layout

@@ -211,6 +211,105 @@ int main()
         "first resumed boundary");
     }
 
+    // A compacted frontier can run without tiles while an independent writer
+    // repairs the namespace. Once the repair is quiesced, adopting its complete
+    // prefix enables proofs and normal incremental flushing.
+    {
+      SmallCcfTiledTree::Config config;
+      config.prefix = base / "frontier_only";
+
+      SmallCcfTiledTree::Tree frontier;
+      for (size_t i = 0; i < 40; i++)
+      {
+        frontier.insert(hashes[i]);
+      }
+      const Hash frontier_root = frontier.root();
+      frontier.flush_to(24);
+      const auto serialised_frontier = serialise(frontier);
+
+      auto restored = SmallCcfTiledTree::from_frontier(
+        config, hash_namespace, serialised_frontier);
+      expect(restored.size() == 40, "frontier-only size");
+      expect(restored.root() == frontier_root, "frontier-only root");
+      expect(restored.flushed_size() == 0, "frontier-only tile boundary");
+      expect(
+        restored.immutable_size() == 0, "frontier-only immutable boundary");
+      expect(
+        !fs::exists(config.prefix), "frontier-only restore performs no I/O");
+      expect_throws(
+        [&]() { (void)restored.inclusion_proof(0, restored.size()); },
+        "proof before tile adoption");
+      expect_throws(
+        [&]() { (void)restored.flush(); }, "flush before tile repair");
+      expect(
+        restored.immutable_size() == 0,
+        "failed frontier-only flush seals nothing");
+      expect(
+        !fs::exists(config.prefix),
+        "failed frontier-only flush performs no I/O");
+
+      SmallCcfTiledTree::Store repair_store(config.prefix, hash_namespace);
+      expect_throws(
+        [&]() { (void)SmallCcfTiledTree::Writer::repair(repair_store, 1); },
+        "unaligned repair boundary");
+      repair_store.write_tile(
+        TileRef{0, 0}, std::vector<Hash>(SmallCcfTiledTree::TILE_WIDTH));
+
+      const auto leaf_at = [&](uint64_t index) -> const Hash& {
+        return hashes[static_cast<size_t>(index)];
+      };
+      {
+        auto repair = SmallCcfTiledTree::Writer::repair(repair_store, 0);
+        expect(
+          repair.write_up_to(24, leaf_at).full_written == 7,
+          "initial background repair");
+      }
+      const std::vector<Hash> first_tile(
+        hashes.begin(), hashes.begin() + SmallCcfTiledTree::TILE_WIDTH);
+      expect(
+        repair_store.read_tile(TileRef{0, 0}) == first_tile,
+        "repair replaces untrusted tile");
+      expect_throws(
+        [&]() { restored.adopt_tile_prefix(24); },
+        "partial prefix does not reach resident frontier");
+
+      {
+        auto repair = SmallCcfTiledTree::Writer::repair(repair_store, 24);
+        expect(
+          repair.write_up_to(40, leaf_at).full_written == 5,
+          "continued background repair");
+      }
+      repair_store.write_tile(
+        TileRef{0, 10}, std::vector<Hash>(SmallCcfTiledTree::TILE_WIDTH));
+
+      restored.adopt_tile_prefix(40);
+      expect(restored.flushed_size() == 40, "adopted tile boundary");
+      expect(restored.immutable_size() == 40, "adopted immutable boundary");
+      expect(
+        restored.inclusion_proof(0, restored.size())->verify(frontier_root),
+        "proof after tile adoption");
+      expect_throws(
+        [&]() { restored.adopt_tile_prefix(36); },
+        "tile adoption cannot regress");
+
+      for (size_t i = 40; i < 44; i++)
+      {
+        restored.append(hashes[i]);
+      }
+      expect(
+        restored.flush().full_written == 1,
+        "normal flush replaces untrusted suffix");
+      const std::vector<Hash> next_tile(
+        hashes.begin() + 40, hashes.begin() + 44);
+      expect(
+        repair_store.read_tile(TileRef{0, 10}) == next_tile,
+        "normal flush publishes authoritative suffix");
+      const Hash extended_root = restored.root();
+      expect(
+        restored.inclusion_proof(0, restored.size())->verify(extended_root),
+        "proof after resumed growth");
+    }
+
     // A compacted tree must retain the configured overlap with its tile prefix.
     {
       CcfTiledTree::Config config;

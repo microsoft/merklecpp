@@ -129,15 +129,77 @@ Merkle history. The boundary cannot be inferred from the tree's ``min_index()``
 or from the files on disk. Existing files beyond it are excluded from proof
 reads and replaced from the restored tree when a later ``flush()`` reaches them.
 
-The lower-level ``TileWriter`` still intentionally resumes existing full tiles
-and trusts the caller to supply the same tree and hash function. A fresh writer
-scans the requested range in order, stopping at the first missing or malformed
-file, so an interior hole is rewritten rather than hidden by later files.
+An ordinary lower-level ``TileWriter`` intentionally resumes existing full
+tiles and trusts the caller to supply the same tree and hash function. A fresh
+writer scans the requested range in order, stopping at the first missing or
+malformed file, so an interior hole is rewritten rather than hidden by later
+files.
+
+Restoring while tiles are populated or repaired
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An application need not block logical tree recovery on tile reconstruction.
+``from_frontier()`` restores only the serialized tree and binds the configured
+namespace without inspecting, creating, or trusting it:
+
+.. code:: cpp
+
+   auto log = merkle::tiles::TiledTree::from_frontier(
+     cfg,
+     "sha256",
+     serialised_tree);
+
+``root()``, ``size()``, and ``append()`` are immediately available.
+``flushed_size()`` and ``immutable_size()`` start at zero. If the serialized
+tree has already discarded old leaves, proofs requiring that history and
+``flush()`` fail clearly until a complete tile prefix overlaps the resident
+frontier. The application must establish exclusive ownership of the namespace;
+unlike fresh construction, this factory does not claim it.
+
+Populate or repair the namespace with an independent store and a repair writer:
+
+.. code:: cpp
+
+   merkle::tiles::TileStore repair_store(cfg.prefix, "sha256");
+   auto repair = merkle::tiles::TileWriter::repair(
+     repair_store,
+     trusted_full_tile_boundary);
+
+   repair.write_up_to(
+     target_size,
+     [&](uint64_t i) -> const merkle::Hash& { return authoritative_leaf(i); });
+
+The trusted boundary must be tile-aligned. Tiles below it are preserved; every
+tile at or beyond it is replaced from the supplied authoritative leaves as the
+writer reaches that tile. This makes the same API suitable for an absent
+namespace, a stale suffix, or a namespace whose untrusted portion needs repair.
+The application remains responsible for validating the trusted prefix.
+
+The independent writer may run on a background thread because it owns a
+separate ``TileStore`` and does not access the ``TiledTree``. Do not run it
+concurrently with ``log.flush()`` or another writer for the namespace. Quiesce
+the repair writer before making its output visible to the tree:
+
+.. code:: cpp
+
+   log.adopt_tile_prefix(target_full_tile_boundary);
+
+Adoption is monotonic. It verifies alignment, namespace presence, tree size,
+configured retention, and the overlapping boundary leaf, then updates both the
+flushed and immutable boundaries and resets the live writer at that prefix. All
+tile levels below the adopted boundary must already be complete and durable.
+Files beyond it remain untrusted and are replaced by later live flushes.
+Adoption does not compact; call ``compact()`` separately when desired.
+
+Persist the serialized frontier and its adopted boundary as one application
+checkpoint. On restart, pass that pair to ``resume()``; during a rebuild, pass
+the frontier alone to ``from_frontier()`` and adopt only after repair completes.
 
 ``flush()`` is incremental: each call writes only the full tiles that became
-complete since the previous call. Full tiles are immutable: written once after
-all 256 entries are final and never rewritten. The remaining frontier stays in
-memory until it crosses the next full-tile boundary.
+complete since the previous call. Tiles in the trusted prefix are immutable.
+Files in an untrusted repair suffix may be replaced before that suffix is
+adopted. The remaining frontier stays in memory until it crosses the next
+full-tile boundary.
 
 Tile files are written through unique temporary files, synced, then published
 with an atomic replace. On POSIX, file contents are synced, each newly created
