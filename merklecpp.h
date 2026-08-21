@@ -593,7 +593,14 @@ namespace merkle
       HashT<HASH_SIZE>& out)>
   class TreeT
   {
+    static_assert(HASH_SIZE > 0, "tree hash size must be greater than zero");
+
   protected:
+    static constexpr size_t maximum_num_leaves()
+    {
+      return size_t{1} << (std::numeric_limits<size_t>::digits - 1);
+    }
+
     /// @brief The structure of tree nodes
     struct Node
     {
@@ -829,6 +836,10 @@ namespace merkle
       MERKLECPP_TRACE(
         MERKLECPP_TOUT << "> insert " << hash.to_string(TRACE_HASH_SIZE)
                        << std::endl;);
+      if (num_leaves() >= maximum_num_leaves())
+      {
+        throw std::runtime_error("maximum tree size exceeded");
+      }
       uninserted_leaf_nodes.push_back(Node::make(hash));
       statistics.num_insert++;
     }
@@ -1521,35 +1532,76 @@ namespace merkle
     {
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> deserialise " << std::endl;);
 
-      clear();
-
-      size_t num_leaf_nodes = deserialise_uint64_t(bytes, position);
-      num_flushed = deserialise_uint64_t(bytes, position);
-
-      leaf_nodes.reserve(num_leaf_nodes);
-      for (size_t i = 0; i < num_leaf_nodes; i++)
+      size_t cursor = position;
+      const uint64_t serialised_num_leaf_nodes =
+        deserialise_uint64_t(bytes, cursor);
+      const uint64_t serialised_num_flushed =
+        deserialise_uint64_t(bytes, cursor);
+      if (
+        serialised_num_leaf_nodes > std::numeric_limits<size_t>::max() ||
+        serialised_num_flushed > std::numeric_limits<size_t>::max())
       {
-        Node* n = Node::make(bytes.data() + position);
-        position += HASH_SIZE;
-        leaf_nodes.push_back(n);
+        throw std::runtime_error("serialised tree size exceeds size_t");
       }
 
-      std::vector<Node*> level = leaf_nodes;
-      std::vector<Node*> next_level;
-      size_t it = num_flushed;
-      uint8_t level_no = 0;
+      const size_t restored_num_leaf_nodes =
+        static_cast<size_t>(serialised_num_leaf_nodes);
+      const size_t restored_num_flushed =
+        static_cast<size_t>(serialised_num_flushed);
+      if (restored_num_leaf_nodes == 0 && restored_num_flushed != 0)
+      {
+        throw std::runtime_error(
+          "serialised tree has flushed leaves but no resident leaf");
+      }
+
+      constexpr size_t size_digits = std::numeric_limits<size_t>::digits;
+      constexpr size_t max_tree_leaves = maximum_num_leaves();
+      if (
+        restored_num_leaf_nodes > max_tree_leaves ||
+        restored_num_flushed > max_tree_leaves - restored_num_leaf_nodes)
+      {
+        throw std::runtime_error("serialised tree is too large");
+      }
+      if (
+        cursor > bytes.size() ||
+        restored_num_leaf_nodes > (bytes.size() - cursor) / HASH_SIZE)
+      {
+        throw std::runtime_error("not enough bytes for serialised tree leaves");
+      }
+
+      std::vector<Node*> restored_leaf_nodes;
+      restored_leaf_nodes.reserve(restored_num_leaf_nodes);
+      std::vector<std::unique_ptr<Node>> level;
+      level.reserve(restored_num_leaf_nodes);
+      for (size_t i = 0; i < restored_num_leaf_nodes; i++)
+      {
+        Hash h(bytes, cursor);
+        auto n = std::unique_ptr<Node>(Node::make(h));
+        restored_leaf_nodes.push_back(n.get());
+        level.push_back(std::move(n));
+      }
+
+      std::vector<std::unique_ptr<Node>> next_level;
+      size_t it = restored_num_flushed;
+      size_t level_no = 0;
       while (it != 0 || level.size() > 1)
       {
         // Restore extra hashes on the left edge of the tree
         if ((it & 0x01) != 0U)
         {
-          Hash h(bytes, position);
+          Hash h(bytes, cursor);
           MERKLECPP_TRACE(MERKLECPP_TOUT << "+";);
-          auto n = Node::make(h);
-          n->height = level_no + 1;
-          n->size = (1 << n->height) - 1;
+          auto n = std::unique_ptr<Node>(Node::make(h));
+          if (level_no >= size_digits)
+          {
+            throw std::runtime_error("serialised tree height exceeds size_t");
+          }
+          n->height = static_cast<uint8_t>(level_no + 1);
+          n->size = n->height == size_digits ?
+            std::numeric_limits<size_t>::max() :
+            (size_t{1} << n->height) - 1;
           assert(n->invariant());
-          level.insert(level.begin(), n);
+          level.insert(level.begin(), std::move(n));
         }
 
         MERKLECPP_TRACE(
@@ -1558,15 +1610,20 @@ namespace merkle
           MERKLECPP_TOUT << std::endl;);
 
         // Rebuild the level
+        next_level.reserve((level.size() + 1) / 2);
         for (size_t i = 0; i < level.size(); i += 2)
         {
           if (i + 1 >= level.size())
           {
-            next_level.push_back(level.at(i));
+            next_level.push_back(std::move(level.at(i)));
           }
           else
           {
-            next_level.push_back(Node::make(level.at(i), level.at(i + 1)));
+            auto parent = std::unique_ptr<Node>(
+              Node::make(level.at(i).get(), level.at(i + 1).get()));
+            (void)level.at(i).release();
+            (void)level.at(i + 1).release();
+            next_level.push_back(std::move(parent));
           }
         }
 
@@ -1581,9 +1638,14 @@ namespace merkle
 
       if (level.size() == 1)
       {
-        _root = level.at(0);
-        assert(_root->invariant());
+        assert(level.at(0)->invariant());
       }
+
+      clear();
+      leaf_nodes = std::move(restored_leaf_nodes);
+      num_flushed = restored_num_flushed;
+      _root = level.empty() ? nullptr : level.at(0).release();
+      position = cursor;
     }
 
     /// @brief Operator to serialise the tree

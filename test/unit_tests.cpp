@@ -277,6 +277,61 @@ TEST_CASE("Empty tree")
   REQUIRE_NOTHROW(merkle::Tree dt(buffer)); // NOLINT(misc-const-correctness)
 }
 
+TEST_CASE("Tree deserialisation validates input")
+{
+  merkle::Tree::Hash hash;
+  hash.bytes[0] = 1;
+  merkle::Tree existing(hash);
+
+  std::vector<uint8_t> truncated;
+  merkle::serialise_uint64_t(1, truncated);
+  merkle::serialise_uint64_t(0, truncated);
+  REQUIRE_THROWS(existing.deserialise(truncated));
+  REQUIRE(existing.num_leaves() == 1);
+  REQUIRE(existing.root() == hash);
+
+  std::vector<uint8_t> oversized_leaf_count;
+  merkle::serialise_uint64_t(uint64_t{1} << 30, oversized_leaf_count);
+  merkle::serialise_uint64_t(0, oversized_leaf_count);
+  REQUIRE_THROWS(existing.deserialise(oversized_leaf_count));
+  REQUIRE(existing.num_leaves() == 1);
+  REQUIRE(existing.root() == hash);
+
+  std::vector<uint8_t> missing_resident_leaf;
+  merkle::serialise_uint64_t(0, missing_resident_leaf);
+  merkle::serialise_uint64_t(1, missing_resident_leaf);
+  REQUIRE_THROWS(merkle::Tree(missing_resident_leaf));
+
+  std::vector<uint8_t> tall_compacted_tree;
+  constexpr uint64_t flushed = uint64_t{1} << 30;
+  merkle::serialise_uint64_t(1, tall_compacted_tree);
+  merkle::serialise_uint64_t(flushed, tall_compacted_tree);
+  hash.serialise(tall_compacted_tree);
+  hash.serialise(tall_compacted_tree);
+
+  merkle::Tree restored(tall_compacted_tree);
+  REQUIRE(restored.invariant());
+  REQUIRE(restored.min_index() == flushed);
+  REQUIRE(restored.num_leaves() == flushed + 1);
+
+  std::vector<uint8_t> maximum_tree;
+  constexpr size_t size_digits = std::numeric_limits<size_t>::digits;
+  constexpr size_t maximum_leaves = size_t{1} << (size_digits - 1);
+  merkle::serialise_uint64_t(1, maximum_tree);
+  merkle::serialise_uint64_t(maximum_leaves - 1, maximum_tree);
+  hash.serialise(maximum_tree);
+  for (size_t i = 0; i < size_digits - 1; i++)
+  {
+    hash.serialise(maximum_tree);
+  }
+
+  merkle::Tree maximum(maximum_tree);
+  REQUIRE(maximum.invariant());
+  REQUIRE(maximum.num_leaves() == maximum_leaves);
+  REQUIRE_THROWS(maximum.insert(hash));
+  REQUIRE(maximum.num_leaves() == maximum_leaves);
+}
+
 TEST_CASE("One-node tree")
 {
   merkle::Tree::Hash h;

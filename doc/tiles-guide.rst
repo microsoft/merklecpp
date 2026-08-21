@@ -95,17 +95,44 @@ construction keeps its writer bound to the destination tree's tile store.
 A relative prefix therefore binds to the working directory at that moment;
 later working-directory changes do not move the tile store.
 
-``TiledTree`` always creates a new tiled tree. The configured prefix may already
-exist, but the algorithm-qualified tile namespace must not: the default alias
-atomically creates ``<prefix>/sha256-256w/tile`` and rejects it whenever it already
-exists, even if it is empty. Construction does not adopt existing tiles because
-those files do not identify the tree that produced them or contain enough state
-to restore its size and root. If your application persists and validates that
-state separately, use the lower-level ``TileStore`` and ``TileWriter`` APIs;
-``TileWriter`` intentionally resumes existing full tiles and therefore trusts the
-caller to supply the same tree and hash function. A fresh writer scans the
-requested range in order, stopping at the first missing or malformed file, so
-an interior hole is rewritten rather than hidden by later files.
+``TiledTree`` constructors always create a new tiled tree. The configured prefix
+may already exist, but the algorithm-qualified tile namespace must not: the
+default alias atomically creates ``<prefix>/sha256-256w/tile`` and rejects it
+whenever it already exists, even if it is empty.
+
+Resuming an externally checkpointed tree
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Tile files do not identify the tree that produced them or contain enough state
+to restore its size and root. An application that separately persists and
+validates that state can reopen an existing namespace with ``resume()``:
+
+.. code:: cpp
+
+   auto log = merkle::tiles::TiledTree::resume(
+     cfg,
+     "sha256",
+     serialised_tree,
+     full_tile_boundary);
+
+``serialised_tree`` is the existing ``merkle::Tree`` serialization.
+``full_tile_boundary`` is a leaf count, must be a multiple of ``TILE_WIDTH``, and
+must identify a complete, durable tile prefix at every required level. The
+factory deserializes the tree, rejects trailing bytes, and requires its resident
+range to satisfy ``Config::retention_margin``. It also compares the last leaf in
+the prefix with the matching resident tree leaf, catching an incorrect boundary
+or namespace at the hand-off point.
+
+The application remains responsible for establishing namespace ownership and
+validating that every tile below the supplied boundary belongs to the same
+Merkle history. The boundary cannot be inferred from the tree's ``min_index()``
+or from the files on disk. Existing files beyond it are excluded from proof
+reads and replaced from the restored tree when a later ``flush()`` reaches them.
+
+The lower-level ``TileWriter`` still intentionally resumes existing full tiles
+and trusts the caller to supply the same tree and hash function. A fresh writer
+scans the requested range in order, stopping at the first missing or malformed
+file, so an interior hole is rewritten rather than hidden by later files.
 
 ``flush()`` is incremental: each call writes only the full tiles that became
 complete since the previous call. Full tiles are immutable: written once after

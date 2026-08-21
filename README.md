@@ -61,12 +61,24 @@ tile-derived inclusion proof is byte-identical to one from
         log.consistency_proof(/*m=*/log.size() / 2, /*n=*/log.size());
     }
 
-`TiledTree` creates a new tiled tree. The configured prefix may exist, but the
-default alias requires `<prefix>/sha256-256w/tile` not to exist, even as an
-empty directory. Construction atomically claims that tile namespace and rejects
-an existing one because tile files alone do not identify or restore the tree
-that produced them. Applications with externally persisted tree state can use
-the lower-level `TileStore` and `TileWriter` APIs to resume a store.
+`TiledTree` constructors create a new tiled tree. The configured prefix may
+exist, but the default alias requires `<prefix>/sha256-256w/tile` not to exist,
+even as an empty directory. Construction atomically claims that tile namespace.
+
+Applications that persist the matching tree state and full-tile boundary can
+resume an existing namespace directly:
+
+    auto log = merkle::tiles::TiledTree::resume(
+      cfg,
+      "sha256",
+      serialised_tree,
+      full_tile_boundary);
+
+The boundary must cover a complete, durable tile prefix at every required level
+and overlap the resident portion of the serialized tree. Tile files beyond it
+are treated as untrusted and replaced when a later flush reaches them. The
+application remains responsible for establishing namespace ownership and
+matching the serialized tree to the trusted tiles.
 
 See the [tiled storage guide](doc/tiles-guide.rst) for a how-to covering
 flushing, compaction, rollback, proofs, and the lower-level building blocks,
