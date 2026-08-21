@@ -47,9 +47,9 @@ static size_t tile_file_count(const Store& store)
 // Roll up a full level-0 tile and compare with a level-1 tile entry.
 static Hash rollup(const std::vector<Hash>& leaves)
 {
-  return merkle::tiles::perfect_root<
-    merkle::Tree::Hash::size_bytes,
-    merkle::Tree::hash_function>(leaves);
+  return merkle::tiles::
+    perfect_root<merkle::Tree::Hash::size_bytes, merkle::Tree::hash_function>(
+      leaves);
 }
 
 class TileWriterProbe : public TileWriter
@@ -293,6 +293,48 @@ int main()
       std::cout << "F (interior recovery): OK" << '\n';
     }
 
+    // ---- F2. A repair writer preserves an explicit trusted prefix and
+    // overwrites correctly-sized files beyond it.
+    {
+      const auto hashes = make_hashes(768);
+      const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
+      const fs::path dir = base / "f_repair";
+      TileStore store(dir);
+      {
+        TileWriter writer(store);
+        expect(
+          writer.write_up_to(512, leaf_at).full_written == 2,
+          "F2 initial trusted prefix");
+      }
+
+      store.write_tile(TileRef{0, 2}, std::vector<Hash>(TileStore::TILE_WIDTH));
+      bool unaligned_threw = false;
+      try
+      {
+        (void)TileWriter::repair(store, 1);
+      }
+      catch (const std::runtime_error&)
+      {
+        unaligned_threw = true;
+      }
+      expect(unaligned_threw, "F2 rejects unaligned trusted prefix");
+
+      auto repair = TileWriter::repair(store, 512);
+      expect(
+        repair.write_up_to(768, leaf_at).full_written == 1,
+        "F2 replaces untrusted suffix");
+      expect(
+        repair.write_up_to(768, leaf_at).full_written == 0,
+        "F2 repair is incremental");
+      const std::vector<Hash> expected(hashes.begin() + 512, hashes.end());
+      expect(
+        store.read_tile(TileRef{0, 2}) == expected,
+        "F2 repaired suffix contents");
+      expect(tile_file_count(store) == 3, "F2 exact tile file count");
+
+      std::cout << "F2 (trusted-prefix repair): OK" << '\n';
+    }
+
     // ---- G. Recovery is bounded by the requested tree size, so sparse files
     // at geometrically increasing indices cannot overflow its search.
     {
@@ -315,8 +357,7 @@ int main()
       TileWriter writer(store);
       const auto leaf_at = [&](uint64_t i) -> const Hash& { return hashes[i]; };
       expect(
-        writer.write_up_to(TileStore::TILE_WIDTH, leaf_at).full_written ==
-          0,
+        writer.write_up_to(TileStore::TILE_WIDTH, leaf_at).full_written == 0,
         "G bounded sparse recovery");
       expect(store.has_full_tile(0, 0), "G requested tile remains valid");
 
@@ -343,8 +384,7 @@ int main()
 
       TileWriterProbe writer(store);
       writer.mark_level_complete(
-        0,
-        (uint64_t)TileStore::TILE_WIDTH * TileStore::TILE_WIDTH);
+        0, (uint64_t)TileStore::TILE_WIDTH * TileStore::TILE_WIDTH);
       writer.mark_level_complete(1, TileStore::TILE_WIDTH);
 
       bool leaf_requested = false;
@@ -372,12 +412,10 @@ int main()
     // when producing higher-level tiles.
     {
       using Hash384 = merkle::Tree384::Hash;
-      using TileStore384 = merkle::tiles::TileStoreT<
-        Hash384::size_bytes,
-        merkle::Tree384::hash_function>;
-      using TileWriter384 = merkle::tiles::TileWriterT<
-        Hash384::size_bytes,
-        merkle::Tree384::hash_function>;
+      using TileStore384 = merkle::tiles::
+        TileStoreT<Hash384::size_bytes, merkle::Tree384::hash_function>;
+      using TileWriter384 = merkle::tiles::
+        TileWriterT<Hash384::size_bytes, merkle::Tree384::hash_function>;
 
       constexpr uint64_t size =
         (uint64_t)TileStore384::TILE_WIDTH * TileStore384::TILE_WIDTH;
@@ -397,9 +435,9 @@ int main()
         hashes.begin(), hashes.begin() + TileStore384::TILE_WIDTH);
       expect(
         level1[0] ==
-          merkle::tiles::perfect_root<
-            Hash384::size_bytes,
-            merkle::Tree384::hash_function>(first_tile),
+          merkle::tiles::
+            perfect_root<Hash384::size_bytes, merkle::Tree384::hash_function>(
+              first_tile),
         "I first SHA-384 roll-up");
 
       merkle::Tree384 tree;
@@ -408,9 +446,9 @@ int main()
         tree.insert(hash);
       }
       expect(
-        merkle::tiles::perfect_root<
-          Hash384::size_bytes,
-          merkle::Tree384::hash_function>(level1) == tree.root(),
+        merkle::tiles::
+            perfect_root<Hash384::size_bytes, merkle::Tree384::hash_function>(
+              level1) == tree.root(),
         "I SHA-384 tiled root");
       expect(tile_file_count(store) == 257, "I exact tile file count");
 
