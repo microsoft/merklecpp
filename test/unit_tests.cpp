@@ -295,6 +295,53 @@ TEST_CASE("TreeT rejects invalid serialised leaf data")
     (void)merkle::Tree(truncated_hashes),
     "not enough bytes",
     std::runtime_error);
+
+  std::vector<uint8_t> overflowing_leaf_count;
+  merkle::serialise_uint64_t(1, overflowing_leaf_count);
+  merkle::serialise_uint64_t(
+    std::numeric_limits<size_t>::max(), overflowing_leaf_count);
+  overflowing_leaf_count.resize(
+    overflowing_leaf_count.size() + merkle::Hash::size_bytes);
+  REQUIRE_THROWS_WITH_AS(
+    (void)merkle::Tree(overflowing_leaf_count),
+    "serialised tree exceeds platform limits",
+    std::runtime_error);
+
+  std::vector<uint8_t> unrepresentable_tree_size;
+  merkle::serialise_uint64_t(1, unrepresentable_tree_size);
+  merkle::serialise_uint64_t(
+    std::numeric_limits<size_t>::max() / 2 + 1, unrepresentable_tree_size);
+  REQUIRE_THROWS_WITH_AS(
+    (void)merkle::Tree(unrepresentable_tree_size),
+    "serialised tree exceeds platform limits",
+    std::runtime_error);
+
+  std::vector<uint8_t> truncated_extra_hash;
+  merkle::serialise_uint64_t(1, truncated_extra_hash);
+  merkle::serialise_uint64_t(1, truncated_extra_hash);
+  truncated_extra_hash.resize(
+    truncated_extra_hash.size() + merkle::Hash::size_bytes);
+  REQUIRE_THROWS_WITH_AS(
+    (void)merkle::Tree(truncated_extra_hash),
+    "not enough bytes",
+    std::runtime_error);
+}
+
+TEST_CASE("TreeT deserialises flushed counts beyond signed shift width")
+{
+  constexpr auto flushed_bit = std::numeric_limits<int>::digits;
+  if constexpr (flushed_bit + 1 < std::numeric_limits<size_t>::digits)
+  {
+    const size_t num_flushed = size_t{1} << flushed_bit;
+    std::vector<uint8_t> bytes;
+    merkle::serialise_uint64_t(1, bytes);
+    merkle::serialise_uint64_t(num_flushed, bytes);
+    bytes.resize(bytes.size() + 2 * merkle::Hash::size_bytes);
+
+    merkle::Tree tree(bytes);
+    REQUIRE(tree.num_leaves() == num_flushed + 1);
+    REQUIRE(tree.size() == 2 * num_flushed + 1);
+  }
 }
 
 TEST_CASE("One-node tree")
