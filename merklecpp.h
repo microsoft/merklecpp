@@ -1523,14 +1523,32 @@ namespace merkle
 
       clear();
 
-      size_t num_leaf_nodes = deserialise_uint64_t(bytes, position);
-      num_flushed = deserialise_uint64_t(bytes, position);
+      const uint64_t serialised_num_leaf_nodes =
+        deserialise_uint64_t(bytes, position);
+      const uint64_t serialised_num_flushed =
+        deserialise_uint64_t(bytes, position);
+
+      if (
+        serialised_num_leaf_nodes > std::numeric_limits<size_t>::max() ||
+        serialised_num_flushed > std::numeric_limits<size_t>::max())
+      {
+        throw std::runtime_error("tree size exceeds platform limits");
+      }
+
+      const size_t num_leaf_nodes =
+        static_cast<size_t>(serialised_num_leaf_nodes);
+      num_flushed = static_cast<size_t>(serialised_num_flushed);
+      if (
+        position > bytes.size() ||
+        num_leaf_nodes > (bytes.size() - position) / HASH_SIZE)
+      {
+        throw std::runtime_error("not enough bytes");
+      }
 
       leaf_nodes.reserve(num_leaf_nodes);
       for (size_t i = 0; i < num_leaf_nodes; i++)
       {
-        Node* n = Node::make(bytes.data() + position);
-        position += HASH_SIZE;
+        Node* n = Node::make(Hash(bytes, position));
         leaf_nodes.push_back(n);
       }
 
