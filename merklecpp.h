@@ -1539,6 +1539,15 @@ namespace merkle
         static_cast<size_t>(serialised_num_leaf_nodes);
       const size_t deserialised_num_flushed =
         static_cast<size_t>(serialised_num_flushed);
+      constexpr size_t max_tree_leaves =
+        (std::numeric_limits<size_t>::max() >> 1) + 1;
+      if (
+        (num_leaf_nodes == 0 && deserialised_num_flushed != 0) ||
+        num_leaf_nodes > max_tree_leaves ||
+        deserialised_num_flushed > max_tree_leaves - num_leaf_nodes)
+      {
+        throw std::runtime_error("tree size exceeds platform limits");
+      }
       if (
         position > bytes.size() ||
         num_leaf_nodes > (bytes.size() - position) / HASH_SIZE)
@@ -1569,7 +1578,10 @@ namespace merkle
           MERKLECPP_TRACE(MERKLECPP_TOUT << "+";);
           auto n = std::unique_ptr<Node>(Node::make(h));
           n->height = level_no + 1;
-          n->size = (1 << n->height) - 1;
+          constexpr size_t size_digits = std::numeric_limits<size_t>::digits;
+          n->size = n->height == size_digits ?
+            std::numeric_limits<size_t>::max() :
+            (size_t{1} << n->height) - 1;
           assert(n->invariant());
           level.insert(level.begin(), std::move(n));
         }
