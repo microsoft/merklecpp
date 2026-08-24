@@ -68,3 +68,41 @@ if(OPENSSL)
 endif()
 
 add_merklecpp_test(unit_tests unit_tests.cpp)
+
+if(FUZZING)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "FUZZING requires Clang")
+  endif()
+
+  set(FUZZ_TREE_DESERIALISE_TARGET
+      ${MERKLECPP_TEST_PREFIX}fuzz_tree_deserialise)
+  add_executable(
+    ${FUZZ_TREE_DESERIALISE_TARGET}
+    fuzz_tree_deserialise.cpp
+  )
+  target_link_libraries(
+    ${FUZZ_TREE_DESERIALISE_TARGET} PRIVATE merklecpp
+  )
+  target_compile_options(
+    ${FUZZ_TREE_DESERIALISE_TARGET}
+    PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer
+  )
+  target_link_options(
+    ${FUZZ_TREE_DESERIALISE_TARGET}
+    PRIVATE -fsanitize=fuzzer,address,undefined
+  )
+  add_test(
+    NAME ${FUZZ_TREE_DESERIALISE_TARGET}
+    COMMAND
+      ${FUZZ_TREE_DESERIALISE_TARGET}
+      -runs=20000
+      -seed=1
+      -max_len=4096
+      -timeout=5
+      -dict=${CMAKE_CURRENT_SOURCE_DIR}/tree_deserialise_fuzzer.dict
+  )
+  set_tests_properties(
+    ${FUZZ_TREE_DESERIALISE_TARGET}
+    PROPERTIES LABELS "merklecpp;fuzz" TIMEOUT 60
+  )
+endif()
