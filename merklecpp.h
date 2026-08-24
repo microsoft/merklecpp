@@ -1557,6 +1557,11 @@ namespace merkle
       const size_t deserialised_num_flushed =
         deserialise_size_t(bytes, position);
 
+      if (num_leaf_nodes == 0 && deserialised_num_flushed != 0)
+      {
+        throw std::runtime_error("serialised tree has no retained leaves");
+      }
+
       // A binary tree has 2 * leaves - 1 nodes, which must fit in Node::size.
       constexpr size_t max_num_leaves =
         std::numeric_limits<size_t>::max() / 2 + 1;

@@ -296,6 +296,16 @@ TEST_CASE("TreeT rejects invalid serialised leaf data")
     "not enough bytes",
     std::runtime_error);
 
+  std::vector<uint8_t> no_retained_leaves;
+  merkle::serialise_uint64_t(0, no_retained_leaves);
+  merkle::serialise_uint64_t(1, no_retained_leaves);
+  no_retained_leaves.resize(
+    no_retained_leaves.size() + merkle::Hash::size_bytes);
+  REQUIRE_THROWS_WITH_AS(
+    (void)merkle::Tree(no_retained_leaves),
+    "serialised tree has no retained leaves",
+    std::runtime_error);
+
   std::vector<uint8_t> overflowing_leaf_count;
   merkle::serialise_uint64_t(1, overflowing_leaf_count);
   merkle::serialise_uint64_t(
