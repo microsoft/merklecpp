@@ -93,6 +93,17 @@ namespace merkle
     return r;
   }
 
+  static inline size_t deserialise_size_t(
+    const std::vector<uint8_t>& bytes, size_t& index)
+  {
+    const auto value = deserialise_uint64_t(bytes, index);
+    if (value > std::numeric_limits<size_t>::max())
+    {
+      throw std::runtime_error("serialised value exceeds platform limits");
+    }
+    return static_cast<size_t>(value);
+  }
+
   static inline bool decode_hex_digit(char c, uint8_t& value)
   {
     if ('0' <= c && c <= '9')
@@ -433,9 +444,9 @@ namespace merkle
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> PathT::deserialise " << std::endl);
       elements.clear();
       _leaf.deserialise(bytes, position);
-      _leaf_index = deserialise_uint64_t(bytes, position);
-      _max_index = deserialise_uint64_t(bytes, position);
-      size_t const num_elements = deserialise_uint64_t(bytes, position);
+      _leaf_index = deserialise_size_t(bytes, position);
+      _max_index = deserialise_size_t(bytes, position);
+      size_t const num_elements = deserialise_size_t(bytes, position);
       for (size_t i = 0; i < num_elements; i++)
       {
         HashT<HASH_SIZE> hash(bytes, position);
@@ -1523,21 +1534,8 @@ namespace merkle
 
       clear();
 
-      const uint64_t serialised_num_leaf_nodes =
-        deserialise_uint64_t(bytes, position);
-      const uint64_t serialised_num_flushed =
-        deserialise_uint64_t(bytes, position);
-
-      if (
-        serialised_num_leaf_nodes > std::numeric_limits<size_t>::max() ||
-        serialised_num_flushed > std::numeric_limits<size_t>::max())
-      {
-        throw std::runtime_error("tree size exceeds platform limits");
-      }
-
-      const auto num_leaf_nodes =
-        static_cast<size_t>(serialised_num_leaf_nodes);
-      num_flushed = static_cast<size_t>(serialised_num_flushed);
+      const size_t num_leaf_nodes = deserialise_size_t(bytes, position);
+      num_flushed = deserialise_size_t(bytes, position);
       if (
         position > bytes.size() ||
         num_leaf_nodes > (bytes.size() - position) / HASH_SIZE)
