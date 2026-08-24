@@ -93,6 +93,17 @@ namespace merkle
     return r;
   }
 
+  static inline size_t deserialise_size_t(
+    const std::vector<uint8_t>& bytes, size_t& index)
+  {
+    const auto value = deserialise_uint64_t(bytes, index);
+    if (value > std::numeric_limits<size_t>::max())
+    {
+      throw std::runtime_error("serialised value exceeds platform limits");
+    }
+    return static_cast<size_t>(value);
+  }
+
   static inline bool decode_hex_digit(char c, uint8_t& value)
   {
     if ('0' <= c && c <= '9')
@@ -433,9 +444,9 @@ namespace merkle
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> PathT::deserialise " << std::endl);
       elements.clear();
       _leaf.deserialise(bytes, position);
-      _leaf_index = deserialise_uint64_t(bytes, position);
-      _max_index = deserialise_uint64_t(bytes, position);
-      size_t const num_elements = deserialise_uint64_t(bytes, position);
+      _leaf_index = deserialise_size_t(bytes, position);
+      _max_index = deserialise_size_t(bytes, position);
+      size_t const num_elements = deserialise_size_t(bytes, position);
       for (size_t i = 0; i < num_elements; i++)
       {
         HashT<HASH_SIZE> hash(bytes, position);
@@ -604,6 +615,19 @@ namespace merkle
         auto r = new Node();
         r->left = r->right = nullptr;
         r->hash = hash;
+        r->dirty = false;
+        r->update_sizes();
+        assert(r->invariant());
+        return r;
+      }
+
+      /// @brief Constructs a new tree node
+      /// @param hash The hash to move into the node
+      static Node* make(HashT<HASH_SIZE>&& hash)
+      {
+        auto r = new Node();
+        r->left = r->right = nullptr;
+        r->hash = std::move(hash);
         r->dirty = false;
         r->update_sizes();
         assert(r->invariant());
@@ -1523,14 +1547,19 @@ namespace merkle
 
       clear();
 
-      size_t num_leaf_nodes = deserialise_uint64_t(bytes, position);
-      num_flushed = deserialise_uint64_t(bytes, position);
+      const size_t num_leaf_nodes = deserialise_size_t(bytes, position);
+      num_flushed = deserialise_size_t(bytes, position);
+      if (
+        position > bytes.size() ||
+        num_leaf_nodes > (bytes.size() - position) / HASH_SIZE)
+      {
+        throw std::runtime_error("not enough bytes");
+      }
 
       leaf_nodes.reserve(num_leaf_nodes);
       for (size_t i = 0; i < num_leaf_nodes; i++)
       {
-        Node* n = Node::make(bytes.data() + position);
-        position += HASH_SIZE;
+        Node* n = Node::make(Hash(bytes, position));
         leaf_nodes.push_back(n);
       }
 

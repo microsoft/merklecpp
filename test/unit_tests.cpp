@@ -277,6 +277,26 @@ TEST_CASE("Empty tree")
   REQUIRE_NOTHROW(merkle::Tree dt(buffer)); // NOLINT(misc-const-correctness)
 }
 
+TEST_CASE("TreeT rejects invalid serialised leaf data")
+{
+  std::vector<uint8_t> excessive_count;
+  merkle::serialise_uint64_t(
+    std::numeric_limits<uint64_t>::max(), excessive_count);
+  merkle::serialise_uint64_t(0, excessive_count);
+  REQUIRE_THROWS_AS(
+    (void)merkle::Tree(excessive_count), std::runtime_error);
+
+  std::vector<uint8_t> truncated_hashes;
+  merkle::serialise_uint64_t(2, truncated_hashes);
+  merkle::serialise_uint64_t(0, truncated_hashes);
+  truncated_hashes.resize(
+    truncated_hashes.size() + merkle::Hash::size_bytes);
+  REQUIRE_THROWS_WITH_AS(
+    (void)merkle::Tree(truncated_hashes),
+    "not enough bytes",
+    std::runtime_error);
+}
+
 TEST_CASE("One-node tree")
 {
   merkle::Tree::Hash h;
