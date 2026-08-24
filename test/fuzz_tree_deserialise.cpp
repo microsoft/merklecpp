@@ -22,8 +22,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
     merkle::Tree tree;
     tree.deserialise(bytes, position);
   }
+  // NOLINTNEXTLINE(bugprone-empty-catch) -- expected malformed input rejection
   catch (const std::runtime_error&)
   {}
+  // NOLINTNEXTLINE(bugprone-empty-catch) -- expected malformed input rejection
   catch (const std::out_of_range&)
   {}
 
