@@ -608,6 +608,19 @@ namespace merkle
     /// @brief The structure of tree nodes
     struct Node
     {
+      Node() = default;
+
+      explicit Node(HashT<HASH_SIZE>&& hash) :
+        hash(std::move(hash)),
+        left(nullptr),
+        right(nullptr),
+        size(1),
+        height(1),
+        dirty(false)
+      {
+        assert(invariant());
+      }
+
       /// @brief Constructs a new tree node
       /// @param hash The hash of the node
       static Node* make(const HashT<HASH_SIZE>& hash)
@@ -619,6 +632,13 @@ namespace merkle
         r->update_sizes();
         assert(r->invariant());
         return r;
+      }
+
+      /// @brief Constructs a new tree node
+      /// @param hash The hash to move into the node
+      static Node* make(HashT<HASH_SIZE>&& hash)
+      {
+        return new Node(std::move(hash));
       }
 
       /// @brief Constructs a new tree node
