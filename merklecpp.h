@@ -608,7 +608,16 @@ namespace merkle
     /// @brief The structure of tree nodes
     struct Node
     {
-      Node() = default;
+      explicit Node(const HashT<HASH_SIZE>& hash) :
+        hash(hash),
+        left(nullptr),
+        right(nullptr),
+        size(1),
+        height(1),
+        dirty(false)
+      {
+        assert(invariant());
+      }
 
       explicit Node(HashT<HASH_SIZE>&& hash) :
         hash(std::move(hash)),
@@ -621,17 +630,23 @@ namespace merkle
         assert(invariant());
       }
 
+      Node(Node* left, Node* right) :
+        left(left),
+        right(right),
+        size(0),
+        height(0),
+        dirty(true)
+      {
+        assert(left && right);
+        update_sizes();
+        assert(invariant());
+      }
+
       /// @brief Constructs a new tree node
       /// @param hash The hash of the node
       static Node* make(const HashT<HASH_SIZE>& hash)
       {
-        auto r = new Node();
-        r->left = r->right = nullptr;
-        r->hash = hash;
-        r->dirty = false;
-        r->update_sizes();
-        assert(r->invariant());
-        return r;
+        return new Node(hash);
       }
 
       /// @brief Constructs a new tree node
@@ -646,14 +661,7 @@ namespace merkle
       /// @param right The right child of the new node
       static Node* make(Node* left, Node* right)
       {
-        assert(left && right);
-        auto r = new Node();
-        r->left = left;
-        r->right = right;
-        r->dirty = true;
-        r->update_sizes();
-        assert(r->invariant());
-        return r;
+        return new Node(left, right);
       }
 
       /// @brief Copies a tree node
