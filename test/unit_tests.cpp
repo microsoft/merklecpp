@@ -325,6 +325,16 @@ TEST_CASE("TreeT rejects invalid serialised leaf data")
     (void)merkle::Tree(truncated_extra_hash),
     "not enough bytes",
     std::runtime_error);
+
+  std::vector<uint8_t> truncated_flushed_hashes;
+  merkle::serialise_uint64_t(1, truncated_flushed_hashes);
+  merkle::serialise_uint64_t(3, truncated_flushed_hashes);
+  truncated_flushed_hashes.resize(
+    truncated_flushed_hashes.size() + 2 * merkle::Hash::size_bytes);
+  REQUIRE_THROWS_WITH_AS(
+    (void)merkle::Tree(truncated_flushed_hashes),
+    "not enough bytes",
+    std::runtime_error);
 }
 
 TEST_CASE("TreeT deserialises flushed counts beyond signed shift width")
