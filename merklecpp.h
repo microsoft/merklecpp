@@ -1535,7 +1535,7 @@ namespace merkle
         throw std::runtime_error("tree size exceeds platform limits");
       }
 
-      const size_t num_leaf_nodes =
+      const auto num_leaf_nodes =
         static_cast<size_t>(serialised_num_leaf_nodes);
       num_flushed = static_cast<size_t>(serialised_num_flushed);
       if (
