@@ -98,7 +98,7 @@ if(FUZZING)
     NAME ${FUZZ_TREE_DESERIALISE_TARGET}
     COMMAND
       ${FUZZ_TREE_DESERIALISE_TARGET}
-      -runs=20000
+      -runs=200000
       -seed=1
       -max_len=4096
       -timeout=5
