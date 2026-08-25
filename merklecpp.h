@@ -97,9 +97,14 @@ namespace merkle
     const std::vector<uint8_t>& bytes, size_t& index)
   {
     const auto value = deserialise_uint64_t(bytes, index);
-    if (value > std::numeric_limits<size_t>::max())
+    if constexpr (
+      std::numeric_limits<size_t>::digits <
+      std::numeric_limits<uint64_t>::digits)
     {
-      throw std::runtime_error("serialised value exceeds platform limits");
+      if (value > std::numeric_limits<size_t>::max())
+      {
+        throw std::runtime_error("serialised value exceeds platform limits");
+      }
     }
     return static_cast<size_t>(value);
   }
@@ -1556,6 +1561,11 @@ namespace merkle
       const size_t num_leaf_nodes = deserialise_size_t(bytes, position);
       const size_t deserialised_num_flushed =
         deserialise_size_t(bytes, position);
+
+      if (num_leaf_nodes == 0 && deserialised_num_flushed != 0)
+      {
+        throw std::runtime_error("serialised tree has no retained leaves");
+      }
 
       // A binary tree has 2 * leaves - 1 nodes, which must fit in Node::size.
       constexpr size_t max_num_leaves =

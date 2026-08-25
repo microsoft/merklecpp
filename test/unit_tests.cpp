@@ -279,6 +279,14 @@ TEST_CASE("Empty tree")
 
 TEST_CASE("TreeT rejects invalid serialised leaf data")
 {
+  for (size_t size = 0; size < 2 * sizeof(uint64_t); size++)
+  {
+    CAPTURE(size);
+    const std::vector<uint8_t> truncated_header(size, 0);
+    REQUIRE_THROWS_AS(
+      (void)merkle::Tree(truncated_header), std::out_of_range);
+  }
+
   std::vector<uint8_t> excessive_count;
   merkle::serialise_uint64_t(
     std::numeric_limits<uint64_t>::max(), excessive_count);
@@ -294,6 +302,16 @@ TEST_CASE("TreeT rejects invalid serialised leaf data")
   REQUIRE_THROWS_WITH_AS(
     (void)merkle::Tree(truncated_hashes),
     "not enough bytes",
+    std::runtime_error);
+
+  std::vector<uint8_t> no_retained_leaves;
+  merkle::serialise_uint64_t(0, no_retained_leaves);
+  merkle::serialise_uint64_t(1, no_retained_leaves);
+  no_retained_leaves.resize(
+    no_retained_leaves.size() + merkle::Hash::size_bytes);
+  REQUIRE_THROWS_WITH_AS(
+    (void)merkle::Tree(no_retained_leaves),
+    "serialised tree has no retained leaves",
     std::runtime_error);
 
   std::vector<uint8_t> overflowing_leaf_count;
