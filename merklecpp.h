@@ -93,6 +93,22 @@ namespace merkle
     return r;
   }
 
+  static inline size_t deserialise_size_t(
+    const std::vector<uint8_t>& bytes, size_t& index)
+  {
+    const auto value = deserialise_uint64_t(bytes, index);
+    if constexpr (
+      std::numeric_limits<size_t>::digits < // NOLINT(misc-redundant-expression)
+      std::numeric_limits<uint64_t>::digits)
+    {
+      if (value > std::numeric_limits<size_t>::max())
+      {
+        throw std::runtime_error("serialised value exceeds platform limits");
+      }
+    }
+    return static_cast<size_t>(value);
+  }
+
   static inline bool decode_hex_digit(char c, uint8_t& value)
   {
     if ('0' <= c && c <= '9')
@@ -433,9 +449,9 @@ namespace merkle
       MERKLECPP_TRACE(MERKLECPP_TOUT << "> PathT::deserialise " << std::endl);
       elements.clear();
       _leaf.deserialise(bytes, position);
-      _leaf_index = deserialise_uint64_t(bytes, position);
-      _max_index = deserialise_uint64_t(bytes, position);
-      size_t const num_elements = deserialise_uint64_t(bytes, position);
+      _leaf_index = deserialise_size_t(bytes, position);
+      _max_index = deserialise_size_t(bytes, position);
+      size_t const num_elements = deserialise_size_t(bytes, position);
       for (size_t i = 0; i < num_elements; i++)
       {
         HashT<HASH_SIZE> hash(bytes, position);
@@ -611,6 +627,19 @@ namespace merkle
       }
 
       /// @brief Constructs a new tree node
+      /// @param hash The hash to move into the node
+      static Node* make(HashT<HASH_SIZE>&& hash)
+      {
+        auto r = new Node();
+        r->left = r->right = nullptr;
+        r->hash = std::move(hash);
+        r->dirty = false;
+        r->update_sizes();
+        assert(r->invariant());
+        return r;
+      }
+
+      /// @brief Constructs a new tree node
       /// @param left The left child of the new node
       /// @param right The right child of the new node
       static Node* make(Node* left, Node* right)
@@ -710,11 +739,17 @@ namespace merkle
         {
           return false;
         }
-        const size_t max_size = height == size_digits ?
-          std::numeric_limits<size_t>::max() :
-          (size_t{1} << height) - 1;
+        const size_t max_size = full_size(height);
         assert(size <= max_size);
         return size == max_size;
+      }
+
+      static size_t full_size(uint8_t height)
+      {
+        constexpr size_t size_digits = std::numeric_limits<size_t>::digits;
+        assert(height <= size_digits);
+        return height == size_digits ? std::numeric_limits<size_t>::max() :
+                                       (size_t{1} << height) - 1;
       }
 
       /// @brief Updates the tree size and height of the subtree under a node
@@ -1523,14 +1558,42 @@ namespace merkle
 
       clear();
 
-      size_t num_leaf_nodes = deserialise_uint64_t(bytes, position);
-      num_flushed = deserialise_uint64_t(bytes, position);
+      const size_t num_leaf_nodes = deserialise_size_t(bytes, position);
+      const size_t deserialised_num_flushed =
+        deserialise_size_t(bytes, position);
 
+      if (num_leaf_nodes == 0 && deserialised_num_flushed != 0)
+      {
+        throw std::runtime_error("serialised tree has no retained leaves");
+      }
+
+      // A binary tree has 2 * leaves - 1 nodes, which must fit in Node::size.
+      constexpr size_t max_num_leaves =
+        std::numeric_limits<size_t>::max() / 2 + 1;
+      if (
+        deserialised_num_flushed > max_num_leaves ||
+        num_leaf_nodes > max_num_leaves - deserialised_num_flushed)
+      {
+        throw std::runtime_error("serialised tree exceeds platform limits");
+      }
+
+      size_t num_hashes = num_leaf_nodes;
+      for (size_t it = deserialised_num_flushed; it != 0; it >>= 1)
+      {
+        num_hashes += it & 0x01;
+      }
+      if (
+        position > bytes.size() ||
+        num_hashes > (bytes.size() - position) / HASH_SIZE)
+      {
+        throw std::runtime_error("not enough bytes");
+      }
+
+      num_flushed = deserialised_num_flushed;
       leaf_nodes.reserve(num_leaf_nodes);
       for (size_t i = 0; i < num_leaf_nodes; i++)
       {
-        Node* n = Node::make(bytes.data() + position);
-        position += HASH_SIZE;
+        Node* n = Node::make(Hash(bytes, position));
         leaf_nodes.push_back(n);
       }
 
@@ -1547,7 +1610,7 @@ namespace merkle
           MERKLECPP_TRACE(MERKLECPP_TOUT << "+";);
           auto n = Node::make(h);
           n->height = level_no + 1;
-          n->size = (1 << n->height) - 1;
+          n->size = Node::full_size(n->height);
           assert(n->invariant());
           level.insert(level.begin(), n);
         }
