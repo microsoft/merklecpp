@@ -85,7 +85,10 @@ if(FUZZING)
   )
   target_compile_options(
     ${FUZZ_TREE_DESERIALISE_TARGET}
-    PRIVATE -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer
+    PRIVATE
+      -fsanitize=fuzzer,address,undefined
+      -fno-sanitize-recover=undefined
+      -fno-omit-frame-pointer
   )
   target_link_options(
     ${FUZZ_TREE_DESERIALISE_TARGET}
