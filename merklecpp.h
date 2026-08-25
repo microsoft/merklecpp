@@ -98,7 +98,7 @@ namespace merkle
   {
     const auto value = deserialise_uint64_t(bytes, index);
     if constexpr (
-      std::numeric_limits<size_t>::digits <
+      std::numeric_limits<size_t>::digits < // NOLINT(misc-redundant-expression)
       std::numeric_limits<uint64_t>::digits)
     {
       if (value > std::numeric_limits<size_t>::max())
