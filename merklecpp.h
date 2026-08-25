@@ -1589,17 +1589,19 @@ namespace merkle
         throw std::runtime_error("not enough bytes");
       }
 
-      num_flushed = deserialised_num_flushed;
-      leaf_nodes.reserve(num_leaf_nodes);
+      std::vector<Node*> deserialised_leaf_nodes;
+      deserialised_leaf_nodes.reserve(num_leaf_nodes);
+      std::vector<std::unique_ptr<Node>> level;
+      level.reserve(num_leaf_nodes);
       for (size_t i = 0; i < num_leaf_nodes; i++)
       {
-        Node* n = Node::make(Hash(bytes, position));
-        leaf_nodes.push_back(n);
+        auto n = std::unique_ptr<Node>(Node::make(Hash(bytes, position)));
+        deserialised_leaf_nodes.push_back(n.get());
+        level.push_back(std::move(n));
       }
 
-      std::vector<Node*> level = leaf_nodes;
-      std::vector<Node*> next_level;
-      size_t it = num_flushed;
+      std::vector<std::unique_ptr<Node>> next_level;
+      size_t it = deserialised_num_flushed;
       uint8_t level_no = 0;
       while (it != 0 || level.size() > 1)
       {
@@ -1608,11 +1610,11 @@ namespace merkle
         {
           Hash h(bytes, position);
           MERKLECPP_TRACE(MERKLECPP_TOUT << "+";);
-          auto n = Node::make(h);
+          auto n = std::unique_ptr<Node>(Node::make(std::move(h)));
           n->height = level_no + 1;
           n->size = Node::full_size(n->height);
           assert(n->invariant());
-          level.insert(level.begin(), n);
+          level.insert(level.begin(), std::move(n));
         }
 
         MERKLECPP_TRACE(
@@ -1625,11 +1627,15 @@ namespace merkle
         {
           if (i + 1 >= level.size())
           {
-            next_level.push_back(level.at(i));
+            next_level.push_back(std::move(level.at(i)));
           }
           else
           {
-            next_level.push_back(Node::make(level.at(i), level.at(i + 1)));
+            auto parent = std::unique_ptr<Node>(
+              Node::make(level.at(i).get(), level.at(i + 1).get()));
+            level.at(i).release();
+            level.at(i + 1).release();
+            next_level.push_back(std::move(parent));
           }
         }
 
@@ -1644,9 +1650,11 @@ namespace merkle
 
       if (level.size() == 1)
       {
-        _root = level.at(0);
+        _root = level.at(0).release();
         assert(_root->invariant());
       }
+      leaf_nodes = std::move(deserialised_leaf_nodes);
+      num_flushed = deserialised_num_flushed;
     }
 
     /// @brief Operator to serialise the tree
