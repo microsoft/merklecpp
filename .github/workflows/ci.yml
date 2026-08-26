@@ -62,6 +62,13 @@ jobs:
           long_tests=ON
         fi
 
+        fuzzing=OFF
+        if [ "${{ matrix.build_type }}" == "Debug" ] \
+          && [ "${{ matrix.compiler }}" == "clang++" ] \
+          && [ "${{ matrix.openssl }}" == "OFF" ]; then
+          fuzzing=ON
+        fi
+
         linux_options=()
         if [ "$RUNNER_OS" == "Linux" ]; then
           linux_options=(
@@ -75,6 +82,7 @@ jobs:
           "-DCMAKE_BUILD_TYPE=${{ matrix.build_type }}" \
           "-DLONG_TESTS=$long_tests" \
           "-DOPENSSL=${{ matrix.openssl }}" \
+          "-DFUZZING=$fuzzing" \
           "${linux_options[@]}"
 
     - name: Build
