@@ -1949,34 +1949,54 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// can be retried without rewriting finalized tiles.
       Stats flush()
       {
+        return flush_up_to(tree.num_leaves());
+      }
+
+      /// @brief Writes newly-complete full tiles within a committed prefix.
+      /// @param leaf_count Number of leaves in the prefix that may be made
+      /// immutable
+      /// @return Counts of the full tiles written by this flush
+      /// @note This never writes or seals a complete tile beyond
+      /// @p leaf_count, even when the logical tree contains more leaves.
+      /// Requests below flushed_size() are monotonic no-ops. Compaction, when
+      /// configured, only drops leaves covered by the resulting flushed_size().
+      Stats flush_up_to(size_t leaf_count)
+      {
         Stats stats;
         const size_t n = tree.num_leaves();
-        if (n == 0)
+        if (leaf_count > n)
+        {
+          throw std::runtime_error(
+            "TiledTree::flush_up_to: leaf count exceeds tree size");
+        }
+
+        const size_t covered = (leaf_count / TILE_WIDTH) * TILE_WIDTH;
+        if (covered < tiles_size)
         {
           return stats;
         }
-
-        const size_t covered = (n / TILE_WIDTH) * TILE_WIDTH;
         if (!has_complete_history())
         {
           throw std::runtime_error(
-            "TiledTree::flush: tile prefix does not overlap the resident tree");
+            "TiledTree::flush_up_to: tile prefix does not overlap the "
+            "resident tree");
         }
         if (covered > sealed_size)
         {
           sealed_size = covered;
         }
 
-        stats = writer.write_up_to(n, [this](uint64_t i) -> const Hash& {
-          if (i < tree.min_index())
-          {
-            throw std::runtime_error(std::format(
-              "TiledTree::flush: cannot regenerate a missing or malformed "
-              "tile from non-resident leaf {}",
-              i));
-          }
-          return tree.leaf((size_t)i);
-        });
+        stats =
+          writer.write_up_to(leaf_count, [this](uint64_t i) -> const Hash& {
+            if (i < tree.min_index())
+            {
+              throw std::runtime_error(std::format(
+                "TiledTree::flush_up_to: cannot regenerate a missing or "
+                "malformed tile from non-resident leaf {}",
+                i));
+            }
+            return tree.leaf((size_t)i);
+          });
         tiles_size = covered;
 
         if (config.compact_on_flush)

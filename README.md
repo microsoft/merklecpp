@@ -48,6 +48,8 @@ tile-derived inclusion proof is byte-identical to one from
     // Write newly-complete tiles. With compaction enabled
     // this also drops from memory the leaves already covered by a full tile;
     // otherwise the tree keeps every leaf and you can call log.compact() later.
+    // Use flush_up_to(committed_leaf_count) instead to preserve a speculative
+    // suffix.
     log.flush();
 
     // Proofs are served from tiles + the resident tree, even for flushed leaves.

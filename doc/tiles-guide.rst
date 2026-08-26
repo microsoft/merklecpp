@@ -86,7 +86,7 @@ from the ``tiles_docs`` test so the documented code is compiled and run.
    :dedent: 2
 
 This example assumes ``batch`` is non-empty. ``root()`` throws on an empty tree;
-``size()``, ``flush()``, and ``compact()`` are safe at size 0.
+``size()``, ``flush()``, ``flush_up_to()``, and ``compact()`` are safe at size 0.
 
 ``TiledTree`` can be move-constructed, but it cannot be copied or assigned. Move
 construction keeps its writer bound to the destination tree's tile store.
@@ -223,6 +223,21 @@ complete since the previous call. Tiles in the trusted prefix are immutable.
 Files in an untrusted repair suffix may be replaced before that suffix is
 adopted. The remaining frontier stays in memory until it crosses the next
 full-tile boundary.
+
+For a tree that contains a speculative or otherwise rollbackable suffix, flush
+only a committed prefix:
+
+.. code:: cpp
+
+   log.flush_up_to(committed_leaf_count);
+
+The argument is a **leaf count**, not the index of the final leaf. Only complete
+tiles wholly contained in that prefix are written and sealed; later leaves stay
+resident and rollbackable. ``flush()`` is equivalent to
+``flush_up_to(log.size())``. A count beyond ``size()`` throws, while a count
+whose full-tile boundary precedes ``flushed_size()`` is a monotonic no-op.
+With ``compact_on_flush``, compaction is likewise limited to the resulting
+flushed boundary.
 
 Tile files are written through unique temporary files, synced, then published
 with an atomic replace. On POSIX, file contents are synced, each newly created
