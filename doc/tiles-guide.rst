@@ -104,8 +104,8 @@ Resuming an externally checkpointed tree
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Tile files do not identify the tree that produced them or contain enough state
-to restore its size and root. An application that separately persists and
-validates that state can reopen an existing namespace with ``resume()``:
+to restore its size and root. An application that separately persists the tree
+state and boundaries can reopen an existing namespace with ``resume()``:
 
 .. code:: cpp
 
@@ -119,15 +119,38 @@ validates that state can reopen an existing namespace with ``resume()``:
 ``full_tile_boundary`` is a leaf count, must be a multiple of ``TILE_WIDTH``, and
 must identify a complete, durable tile prefix at every required level. The
 factory deserializes the tree, rejects trailing bytes, and requires its resident
-range to satisfy ``Config::retention_margin``. It also compares the last leaf in
-the prefix with the matching resident tree leaf, catching an incorrect boundary
-or namespace at the hand-off point.
+range to satisfy ``Config::retention_margin``. It reads every required tile,
+checks every stored higher-level entry against the roll-up of its child tile,
+and compares the resulting prefix root with the past root derived from the
+serialized frontier. Missing, malformed, divergent, or incorrectly rolled-up
+tiles reject recovery before the tree is exposed. This verification is linear
+in the stored prefix and may perform substantial I/O for a large tree.
 
-The application remains responsible for establishing namespace ownership and
-validating that every tile below the supplied boundary belongs to the same
-Merkle history. The boundary cannot be inferred from the tree's ``min_index()``
-or from the files on disk. Existing files beyond it are excluded from proof
-reads and replaced from the restored tree when a later ``flush()`` reaches them.
+The application remains responsible for establishing namespace ownership. The
+boundary cannot be inferred from the tree's ``min_index()`` or from the files on
+disk. Existing files beyond it are excluded from proof reads and replaced from
+the restored tree when a later ``flush()`` reaches them.
+
+An interrupted flush may publish files and advance ``immutable_size()`` without
+advancing ``flushed_size()``. Persist both values with the serialized frontier
+and restore them with the five-argument overload:
+
+.. code:: cpp
+
+   auto log = merkle::tiles::TiledTree::resume(
+     cfg,
+     "sha256",
+     serialised_tree,
+     flushed_tile_boundary,
+     immutable_boundary);
+
+The complete prefix through ``flushed_tile_boundary`` is verified and available
+to proofs. ``immutable_boundary`` separately restores the rollback seal. Tiles
+between the two boundaries remain untrusted and are replaced from the resident
+frontier when ``flush()`` is retried. Both boundaries are tile-aligned,
+``flushed_tile_boundary <= immutable_boundary``, and neither may exceed the
+serialized tree's last complete tile boundary. When they are equal, the
+four-argument overload above is equivalent.
 
 An ordinary lower-level ``TileWriter`` intentionally resumes existing full
 tiles and trusts the caller to supply the same tree and hash function. A fresh
@@ -184,16 +207,16 @@ the repair writer before making its output visible to the tree:
 
    log.adopt_tile_prefix(target_full_tile_boundary);
 
-Adoption is monotonic. It verifies alignment, namespace presence, tree size,
-configured retention, and the overlapping boundary leaf, then updates both the
-flushed and immutable boundaries and resets the live writer at that prefix. All
-tile levels below the adopted boundary must already be complete and durable.
-Files beyond it remain untrusted and are replaced by later live flushes.
-Adoption does not compact; call ``compact()`` separately when desired.
+Adoption is monotonic. It performs the same exhaustive tile, roll-up, and prefix
+root verification as ``resume()``, then updates both the flushed and immutable
+boundaries and resets the live writer at that prefix. Files beyond it remain
+untrusted and are replaced by later live flushes. Adoption does not compact;
+call ``compact()`` separately when desired.
 
-Persist the serialized frontier and its adopted boundary as one application
-checkpoint. On restart, pass that pair to ``resume()``; during a rebuild, pass
-the frontier alone to ``from_frontier()`` and adopt only after repair completes.
+Persist the serialized frontier, flushed boundary, and immutable boundary
+atomically as one application checkpoint. On restart, pass them to ``resume()``;
+during a rebuild, pass the frontier alone to ``from_frontier()`` and adopt only
+after repair completes.
 
 ``flush()`` is incremental: each call writes only the full tiles that became
 complete since the previous call. Tiles in the trusted prefix are immutable.

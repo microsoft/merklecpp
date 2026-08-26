@@ -444,7 +444,7 @@ int main()
         "level-0 suffix replaced");
     }
 
-    // The overlapping boundary leaf catches a mismatched tile namespace.
+    // Prefix-root verification catches a mismatched boundary tile.
     {
       CcfTiledTree::Config config;
       config.prefix = base / "mismatch";
@@ -467,6 +467,176 @@ int main()
             config, hash_namespace, serialised_tree, 512);
         },
         "mismatched boundary tile");
+    }
+
+    // Resume verifies every required tile and roll-up, not only the boundary
+    // leaf where the namespace overlaps the resident frontier.
+    {
+      SmallCcfTiledTree::Config config;
+      config.prefix = base / "integrity";
+      std::vector<uint8_t> serialised_tree;
+      {
+        SmallCcfTiledTree source(config, hash_namespace);
+        for (size_t i = 0; i < 24; i++)
+        {
+          source.append(hashes[i]);
+        }
+        source.flush();
+        serialised_tree = serialise(source.tree_ref());
+      }
+
+      SmallCcfTiledTree::Store store(config.prefix, hash_namespace);
+      const auto level0_tile0 = store.read_tile(TileRef{0, 0});
+      store.write_tile(
+        TileRef{0, 0}, std::vector<Hash>(SmallCcfTiledTree::TILE_WIDTH));
+      expect_throws(
+        [&]() {
+          (void)SmallCcfTiledTree::resume(
+            config, hash_namespace, serialised_tree, 24);
+        },
+        "divergent earlier level-0 tile");
+      store.write_tile(TileRef{0, 0}, level0_tile0);
+
+      const auto level0_tile1 = store.read_tile(TileRef{0, 1});
+      fs::resize_file(store.tile_path(TileRef{0, 1}), 1);
+      expect_throws(
+        [&]() {
+          (void)SmallCcfTiledTree::resume(
+            config, hash_namespace, serialised_tree, 24);
+        },
+        "malformed earlier level-0 tile");
+      store.write_tile(TileRef{0, 1}, level0_tile1);
+
+      const auto level1_tile0 = store.read_tile(TileRef{1, 0});
+      store.write_tile(
+        TileRef{1, 0}, std::vector<Hash>(SmallCcfTiledTree::TILE_WIDTH));
+      expect_throws(
+        [&]() {
+          (void)SmallCcfTiledTree::resume(
+            config, hash_namespace, serialised_tree, 24);
+        },
+        "divergent higher-level roll-up");
+      store.write_tile(TileRef{1, 0}, level1_tile0);
+
+      fs::remove(store.tile_path(TileRef{1, 0}));
+      expect_throws(
+        [&]() {
+          (void)SmallCcfTiledTree::resume(
+            config, hash_namespace, serialised_tree, 24);
+        },
+        "missing higher-level roll-up");
+    }
+
+    // Recovery preserves the rollback seal from an interrupted flush while
+    // trusting proof reads only through the last fully successful boundary.
+    {
+      CcfTiledTree::Config config;
+      config.prefix = base / "interrupted";
+      std::vector<uint8_t> serialised_tree;
+      fs::path blocker;
+      Hash expected_root;
+      {
+        CcfTiledTree source(config, hash_namespace);
+        for (size_t i = 0; i < 512; i++)
+        {
+          source.append(hashes[i]);
+        }
+        expected_root = source.root();
+        blocker = source.store_ref().tile_path(TileRef{0, 1});
+        fs::create_directories(blocker);
+        expect_throws([&]() { (void)source.flush(); }, "interrupted flush");
+        expect(source.flushed_size() == 0, "interrupted flushed boundary");
+        expect(source.immutable_size() == 512, "interrupted rollback seal");
+        expect(
+          source.store_ref().has_full_tile(0, 0),
+          "interrupted flush published first tile");
+        serialised_tree = serialise(source.tree_ref());
+      }
+
+      auto resumed = CcfTiledTree::resume(
+        config, hash_namespace, serialised_tree, 0, 512);
+      expect(resumed.flushed_size() == 0, "restored flushed boundary");
+      expect(resumed.immutable_size() == 512, "restored rollback seal");
+      expect_throws(
+        [&]() { resumed.retract_to(0); }, "restored rollback protection");
+
+      fs::remove(blocker);
+      expect(
+        resumed.flush().full_written == 2,
+        "interrupted suffix is replaced from trusted boundary");
+      expect(resumed.flushed_size() == 512, "retry advances flushed boundary");
+      expect(resumed.immutable_size() == 512, "retry retains rollback seal");
+      expect(resumed.root() == expected_root, "retry preserves root");
+      expect(
+        resumed.inclusion_proof(0, 512)->verify(expected_root),
+        "retry produces valid tiled proof");
+
+      expect_throws(
+        [&]() {
+          (void)CcfTiledTree::resume(
+            config, hash_namespace, serialised_tree, 0, 513);
+        },
+        "unaligned immutable boundary");
+      expect_throws(
+        [&]() {
+          (void)CcfTiledTree::resume(
+            config, hash_namespace, serialised_tree, 512, 256);
+        },
+        "immutable boundary before flushed boundary");
+    }
+
+    // A non-empty trusted prefix remains untouched when recovery replaces the
+    // suffix covered by a larger interrupted-flush rollback seal.
+    {
+      CcfTiledTree::Config config;
+      config.prefix = base / "interrupted_after_prefix";
+      std::vector<uint8_t> serialised_tree;
+      std::vector<Hash> trusted_tile;
+      fs::path blocker;
+      Hash expected_root;
+      {
+        CcfTiledTree source(config, hash_namespace);
+        for (size_t i = 0; i < 256; i++)
+        {
+          source.append(hashes[i]);
+        }
+        expect(
+          source.flush().full_written == 1, "initial trusted tile published");
+        trusted_tile = source.store_ref().read_tile(TileRef{0, 0});
+
+        for (size_t i = 256; i < 512; i++)
+        {
+          source.append(hashes[i]);
+        }
+        expected_root = source.root();
+        blocker = source.store_ref().tile_path(TileRef{0, 1});
+        fs::create_directories(blocker);
+        expect_throws(
+          [&]() { (void)source.flush(); }, "interrupted suffix flush");
+        expect(source.flushed_size() == 256, "trusted prefix retained");
+        expect(source.immutable_size() == 512, "larger rollback seal retained");
+        serialised_tree = serialise(source.tree_ref());
+      }
+
+      auto resumed = CcfTiledTree::resume(
+        config, hash_namespace, serialised_tree, 256, 512);
+      expect(resumed.flushed_size() == 256, "restored trusted prefix");
+      expect(resumed.immutable_size() == 512, "restored larger rollback seal");
+      expect(
+        resumed.store_ref().read_tile(TileRef{0, 0}) == trusted_tile,
+        "trusted tile validates before retry");
+
+      fs::remove(blocker);
+      expect(
+        resumed.flush().full_written == 1,
+        "retry writes only the untrusted suffix");
+      expect(
+        resumed.store_ref().read_tile(TileRef{0, 0}) == trusted_tile,
+        "retry preserves trusted tile");
+      expect(resumed.root() == expected_root, "suffix retry preserves root");
+      expect(
+        resumed.inclusion_proof(0, 512)->verify(expected_root),
+        "suffix retry produces valid proof");
     }
 
     std::cout << "tiles_resume: OK" << '\n';

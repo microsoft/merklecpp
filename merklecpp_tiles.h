@@ -201,6 +201,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         HASH_SIZE,
         HASH_FUNCTION,
         TILE_HEIGHT_VALUE>;
+      friend class TiledTreeT<
+        HASH_SIZE,
+        HASH_FUNCTION,
+        TILE_HEIGHT_VALUE>;
 
     public:
       /// @brief The type of hashes stored in tiles.
@@ -1773,8 +1777,8 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @param config Runtime configuration, including the tile prefix
       /// @param hash_algorithm_short_name Lowercase hash algorithm namespace
       /// @param serialised_tree Serialized merkle::TreeT state
-      /// @param full_tile_boundary Caller-validated number of leaves covered by
-      /// a complete, durable tile prefix
+      /// @param full_tile_boundary Number of leaves covered by a complete,
+      /// durable tile prefix
       /// @return A tiled tree whose tile reads are capped at
       /// @p full_tile_boundary
       /// @note The serialized tree is deserialized by this call. At every tile
@@ -1788,12 +1792,42 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         const std::vector<uint8_t>& serialised_tree,
         size_t full_tile_boundary)
       {
+        return resume(
+          std::move(config),
+          hash_algorithm_short_name,
+          serialised_tree,
+          full_tile_boundary,
+          full_tile_boundary);
+      }
+
+      /// @brief Resumes a tiled tree after an interrupted flush.
+      /// @param config Runtime configuration, including the tile prefix
+      /// @param hash_algorithm_short_name Lowercase hash algorithm namespace
+      /// @param serialised_tree Serialized merkle::TreeT state
+      /// @param flushed_tile_boundary Number of leaves covered by the last
+      /// complete, durable tile prefix
+      /// @param immutable_boundary Rollback seal for tiles that may have been
+      /// published by an interrupted flush
+      /// @return A tiled tree whose proof reads are capped at
+      /// @p flushed_tile_boundary and whose rollback seal is
+      /// @p immutable_boundary
+      /// @note The complete prefix is verified against the serialized frontier.
+      /// Tiles between the two boundaries remain untrusted and are replaced by
+      /// the next flush.
+      [[nodiscard]] static TiledTreeT resume(
+        Config config,
+        const std::string& hash_algorithm_short_name,
+        const std::vector<uint8_t>& serialised_tree,
+        size_t flushed_tile_boundary,
+        size_t immutable_boundary)
+      {
         return TiledTreeT(
           ResumeTag{},
           std::move(config),
           hash_algorithm_short_name,
           serialised_tree,
-          full_tile_boundary);
+          flushed_tile_boundary,
+          immutable_boundary);
       }
 
       explicit TiledTreeT(Config config) :
@@ -1887,10 +1921,10 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
       /// @brief Adopts a complete, durable tile prefix produced independently.
       /// @param full_tile_boundary Tile-aligned number of covered leaves
       /// @note The caller must quiesce every writer for this namespace before
-      /// calling. Every required full tile below the boundary must be durable,
-      /// correct for this tree, and use the same geometry and hash function.
-      /// Adoption is monotonic, does not compact, and keeps files beyond the new
-      /// boundary untrusted so later flushes replace them.
+      /// calling. Every required full tile below the boundary is verified
+      /// against the serialized frontier. Adoption is monotonic, does not
+      /// compact, and keeps files beyond the new boundary untrusted so later
+      /// flushes replace them.
       void adopt_tile_prefix(size_t full_tile_boundary)
       {
         if (full_tile_boundary < sealed_size)
@@ -2071,14 +2105,15 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         Config config,
         const std::string& hash_algorithm_short_name,
         const std::vector<uint8_t>& serialised_tree,
-        size_t full_tile_boundary) :
+        size_t flushed_tile_boundary,
+        size_t immutable_boundary) :
         TiledTreeT(
           FrontierTag{},
           std::move(config),
           hash_algorithm_short_name,
           serialised_tree)
       {
-        adopt_tile_prefix(full_tile_boundary);
+        restore_tile_boundaries(flushed_tile_boundary, immutable_boundary);
       }
 
       static Tree deserialise_tree(const std::vector<uint8_t>& serialised_tree)
@@ -2110,25 +2145,25 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         if (!std::filesystem::is_directory(tile_root, ec) || ec)
         {
           throw std::runtime_error(std::format(
-            "TiledTree::adopt_tile_prefix: tile namespace does not exist: {}",
+            "TiledTree: tile namespace does not exist: {}",
             tile_root.string()));
         }
         if (full_tile_boundary % TILE_WIDTH != 0)
         {
           throw std::runtime_error(
-            "TiledTree::adopt_tile_prefix: boundary is not tile-aligned");
+            "TiledTree: tile boundary is not aligned");
         }
         if (full_tile_boundary > tree.num_leaves())
         {
           throw std::runtime_error(
-            "TiledTree::adopt_tile_prefix: boundary exceeds tree size");
+            "TiledTree: tile boundary exceeds tree size");
         }
         if (full_tile_boundary == 0)
         {
           if (tree.min_index() != 0)
           {
             throw std::runtime_error(
-              "TiledTree::adopt_tile_prefix: compacted tree has no tile "
+              "TiledTree: compacted tree has no tile "
               "coverage");
           }
           return;
@@ -2141,18 +2176,104 @@ namespace merkle // NOLINT(modernize-concat-nested-namespaces)
         if (tree.min_index() > latest_resident_start)
         {
           throw std::runtime_error(
-            "TiledTree::adopt_tile_prefix: tree does not satisfy the configured "
+            "TiledTree: tree does not satisfy the configured "
             "retention margin");
         }
 
-        const auto last_tile =
-          static_cast<uint64_t>(full_tile_boundary / TILE_WIDTH - 1);
-        const auto hashes = store.read_tile(TileRef{0, last_tile});
-        if (hashes.back() != tree.leaf(full_tile_boundary - 1))
+        store.begin_write_attempt();
+        for (uint8_t level = 0; level <= MAX_TILE_LEVEL; level++)
+        {
+          const uint64_t entries = Writer::entries_at_level(
+            static_cast<uint64_t>(full_tile_boundary), level);
+          if (entries == 0)
+          {
+            break;
+          }
+
+          const uint64_t full_tiles = entries / TILE_WIDTH;
+          for (uint64_t tile_index = 0; tile_index < full_tiles; tile_index++)
+          {
+            const auto hashes = read_required_tile(level, tile_index);
+            if (level == 0)
+            {
+              continue;
+            }
+
+            const uint64_t first_child = tile_index * TILE_WIDTH;
+            for (uint64_t offset = 0; offset < TILE_WIDTH; offset++)
+            {
+              const auto child =
+                read_required_tile((uint8_t)(level - 1), first_child + offset);
+              const auto expected =
+                perfect_root<HASH_SIZE, HASH_FUNCTION>(child);
+              if (hashes[(size_t)offset] != expected)
+              {
+                throw std::runtime_error(std::format(
+                  "TiledTree: tile roll-up mismatch at "
+                  "level {}, index {}, entry {}",
+                  static_cast<unsigned>(level),
+                  tile_index,
+                  offset));
+              }
+            }
+          }
+        }
+
+        TileHashSourceT<HASH_SIZE, HASH_FUNCTION, TILE_HEIGHT_VALUE> tile_source(
+          store, static_cast<uint64_t>(full_tile_boundary));
+        ProofEngineT<HASH_SIZE, HASH_FUNCTION> engine(tile_source);
+        const Hash tile_root_hash =
+          engine.root(static_cast<uint64_t>(full_tile_boundary));
+        const Hash frontier_root_hash =
+          *tree.past_root(full_tile_boundary - 1);
+        if (tile_root_hash != frontier_root_hash)
         {
           throw std::runtime_error(
-            "TiledTree::adopt_tile_prefix: prefix does not match the tree");
+            "TiledTree: tile prefix root does not match "
+            "the serialized frontier");
         }
+      }
+
+      [[nodiscard]] std::vector<Hash> read_required_tile(
+        uint8_t level, uint64_t index)
+      {
+        if (!store.confirm_full_tile(level, index))
+        {
+          throw std::runtime_error(std::format(
+            "TiledTree: missing or malformed tile at "
+            "level {}, index {}",
+            static_cast<unsigned>(level),
+            index));
+        }
+        return store.read_tile(TileRef{level, index});
+      }
+
+      void restore_tile_boundaries(
+        size_t flushed_tile_boundary, size_t immutable_boundary)
+      {
+        if (immutable_boundary % TILE_WIDTH != 0)
+        {
+          throw std::runtime_error(
+            "TiledTree::resume: immutable boundary is not tile-aligned");
+        }
+        if (immutable_boundary < flushed_tile_boundary)
+        {
+          throw std::runtime_error(
+            "TiledTree::resume: immutable boundary precedes flushed tiles");
+        }
+        const size_t covered =
+          (tree.num_leaves() / TILE_WIDTH) * TILE_WIDTH;
+        if (immutable_boundary > covered)
+        {
+          throw std::runtime_error(
+            "TiledTree::resume: immutable boundary exceeds tree size");
+        }
+
+        validate_tile_prefix(flushed_tile_boundary);
+        writer.reset_trusted_size(
+          static_cast<uint64_t>(flushed_tile_boundary));
+        tiles_size = flushed_tile_boundary;
+        sealed_size = immutable_boundary;
       }
 
       [[nodiscard]] bool has_complete_history() const

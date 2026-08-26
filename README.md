@@ -74,11 +74,22 @@ resume an existing namespace directly:
       serialised_tree,
       full_tile_boundary);
 
-The boundary must cover a complete, durable tile prefix at every required level
-and overlap the resident portion of the serialized tree. Tile files beyond it
-are treated as untrusted and replaced when a later flush reaches them. The
-application remains responsible for establishing namespace ownership and
-matching the serialized tree to the trusted tiles.
+The boundary must cover a complete, durable tile prefix at every required
+level and overlap the resident portion of the serialized tree. Recovery reads
+every required tile, validates each stored roll-up, and compares the prefix
+root with the serialized frontier. Tile files beyond the boundary are treated
+as untrusted and replaced when a later flush reaches them. The application
+remains responsible for establishing namespace ownership.
+
+After an interrupted flush, restore the last successful prefix and the
+possibly larger rollback seal separately:
+
+    auto log = merkle::tiles::TiledTree::resume(
+      cfg,
+      "sha256",
+      serialised_tree,
+      flushed_tile_boundary,
+      immutable_boundary);
 
 If tiles are not ready yet, restore the logical tree first and populate the
 namespace independently. This does not claim or inspect the namespace; the
