@@ -86,7 +86,7 @@ from the ``tiles_docs`` test so the documented code is compiled and run.
    :dedent: 2
 
 This example assumes ``batch`` is non-empty. ``root()`` throws on an empty tree;
-``size()``, ``flush()``, and ``compact()`` are safe at size 0.
+``size()``, ``flush()``, ``flush_up_to()``, and ``compact()`` are safe at size 0.
 
 ``TiledTree`` can be move-constructed, but it cannot be copied or assigned. Move
 construction keeps its writer bound to the destination tree's tile store.
@@ -95,22 +95,149 @@ construction keeps its writer bound to the destination tree's tile store.
 A relative prefix therefore binds to the working directory at that moment;
 later working-directory changes do not move the tile store.
 
-``TiledTree`` always creates a new tiled tree. The configured prefix may already
-exist, but the algorithm-qualified tile namespace must not: the default alias
-atomically creates ``<prefix>/sha256-256w/tile`` and rejects it whenever it already
-exists, even if it is empty. Construction does not adopt existing tiles because
-those files do not identify the tree that produced them or contain enough state
-to restore its size and root. If your application persists and validates that
-state separately, use the lower-level ``TileStore`` and ``TileWriter`` APIs;
-``TileWriter`` intentionally resumes existing full tiles and therefore trusts the
-caller to supply the same tree and hash function. A fresh writer scans the
-requested range in order, stopping at the first missing or malformed file, so
-an interior hole is rewritten rather than hidden by later files.
+``TiledTree`` constructors always create a new tiled tree. The configured prefix
+may already exist, but the algorithm-qualified tile namespace must not: the
+default alias atomically creates ``<prefix>/sha256-256w/tile`` and rejects it
+whenever it already exists, even if it is empty.
+
+Resuming an externally checkpointed tree
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Tile files do not identify the tree that produced them or contain enough state
+to restore its size and root. An application that separately persists the tree
+state and boundaries can reopen an existing namespace with ``resume()``:
+
+.. code:: cpp
+
+   auto log = merkle::tiles::TiledTree::resume(
+     cfg,
+     "sha256",
+     serialised_tree,
+     full_tile_boundary);
+
+``serialised_tree`` is the existing ``merkle::Tree`` serialization.
+``full_tile_boundary`` is a leaf count, must be a multiple of ``TILE_WIDTH``, and
+must identify a complete, durable tile prefix at every required level. The
+factory deserializes the tree, rejects trailing bytes, and requires its resident
+range to satisfy ``Config::retention_margin``. It reads every required tile,
+checks every stored higher-level entry against the roll-up of its child tile,
+and compares the resulting prefix root with the past root derived from the
+serialized frontier. Missing, malformed, divergent, or incorrectly rolled-up
+tiles reject recovery before the tree is exposed. This verification is linear
+in the stored prefix and may perform substantial I/O for a large tree.
+
+The application remains responsible for establishing namespace ownership. The
+boundary cannot be inferred from the tree's ``min_index()`` or from the files on
+disk. Existing files beyond it are excluded from proof reads and replaced from
+the restored tree when a later ``flush()`` reaches them.
+
+An interrupted flush may publish files and advance ``immutable_size()`` without
+advancing ``flushed_size()``. Persist both values with the serialized frontier
+and restore them with the five-argument overload:
+
+.. code:: cpp
+
+   auto log = merkle::tiles::TiledTree::resume(
+     cfg,
+     "sha256",
+     serialised_tree,
+     flushed_tile_boundary,
+     immutable_boundary);
+
+The complete prefix through ``flushed_tile_boundary`` is verified and available
+to proofs. ``immutable_boundary`` separately restores the rollback seal. Tiles
+between the two boundaries remain untrusted and are replaced from the resident
+frontier when ``flush()`` is retried. Both boundaries are tile-aligned,
+``flushed_tile_boundary <= immutable_boundary``, and neither may exceed the
+serialized tree's last complete tile boundary. When they are equal, the
+four-argument overload above is equivalent.
+
+An ordinary lower-level ``TileWriter`` intentionally resumes existing full
+tiles and trusts the caller to supply the same tree and hash function. A fresh
+writer scans the requested range in order, stopping at the first missing or
+malformed file, so an interior hole is rewritten rather than hidden by later
+files.
+
+Restoring while tiles are populated or repaired
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An application need not block logical tree recovery on tile reconstruction.
+``from_frontier()`` restores only the serialized tree and binds the configured
+namespace without inspecting, creating, or trusting it:
+
+.. code:: cpp
+
+   auto log = merkle::tiles::TiledTree::from_frontier(
+     cfg,
+     "sha256",
+     serialised_tree);
+
+``root()``, ``size()``, and ``append()`` are immediately available.
+``flushed_size()`` and ``immutable_size()`` start at zero. If the serialized
+tree has already discarded old leaves, proofs requiring that history and
+``flush()`` fail clearly until a complete tile prefix overlaps the resident
+frontier. The application must establish exclusive ownership of the namespace;
+unlike fresh construction, this factory does not claim it.
+
+Populate or repair the namespace with an independent store and a repair writer:
+
+.. code:: cpp
+
+   merkle::tiles::TileStore repair_store(cfg.prefix, "sha256");
+   auto repair = merkle::tiles::TileWriter::repair(
+     repair_store,
+     trusted_full_tile_boundary);
+
+   repair.write_up_to(
+     target_size,
+     [&](uint64_t i) -> const merkle::Hash& { return authoritative_leaf(i); });
+
+The trusted boundary must be tile-aligned. Tiles below it are preserved; every
+tile at or beyond it is replaced from the supplied authoritative leaves as the
+writer reaches that tile. This makes the same API suitable for an absent
+namespace, a stale suffix, or a namespace whose untrusted portion needs repair.
+The application remains responsible for validating the trusted prefix.
+
+The independent writer may run on a background thread because it owns a
+separate ``TileStore`` and does not access the ``TiledTree``. Do not run it
+concurrently with ``log.flush()`` or another writer for the namespace. Quiesce
+the repair writer before making its output visible to the tree:
+
+.. code:: cpp
+
+   log.adopt_tile_prefix(target_full_tile_boundary);
+
+Adoption is monotonic. It performs the same exhaustive tile, roll-up, and prefix
+root verification as ``resume()``, then updates both the flushed and immutable
+boundaries and resets the live writer at that prefix. Files beyond it remain
+untrusted and are replaced by later live flushes. Adoption does not compact;
+call ``compact()`` separately when desired.
+
+Persist the serialized frontier, flushed boundary, and immutable boundary
+atomically as one application checkpoint. On restart, pass them to ``resume()``;
+during a rebuild, pass the frontier alone to ``from_frontier()`` and adopt only
+after repair completes.
 
 ``flush()`` is incremental: each call writes only the full tiles that became
-complete since the previous call. Full tiles are immutable: written once after
-all 256 entries are final and never rewritten. The remaining frontier stays in
-memory until it crosses the next full-tile boundary.
+complete since the previous call. Tiles in the trusted prefix are immutable.
+Files in an untrusted repair suffix may be replaced before that suffix is
+adopted. The remaining frontier stays in memory until it crosses the next
+full-tile boundary.
+
+For a tree that contains a speculative or otherwise rollbackable suffix, flush
+only a committed prefix:
+
+.. code:: cpp
+
+   log.flush_up_to(committed_leaf_count);
+
+The argument is a **leaf count**, not the index of the final leaf. Only complete
+tiles wholly contained in that prefix are written and sealed; later leaves stay
+resident and rollbackable. ``flush()`` is equivalent to
+``flush_up_to(log.size())``. A count beyond ``size()`` throws, while a count
+whose full-tile boundary precedes ``flushed_size()`` is a monotonic no-op.
+With ``compact_on_flush``, compaction is likewise limited to the resulting
+flushed boundary.
 
 Tile files are written through unique temporary files, synced, then published
 with an atomic replace. On POSIX, file contents are synced, each newly created

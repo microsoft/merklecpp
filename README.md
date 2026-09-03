@@ -48,6 +48,8 @@ tile-derived inclusion proof is byte-identical to one from
     // Write newly-complete tiles. With compaction enabled
     // this also drops from memory the leaves already covered by a full tile;
     // otherwise the tree keeps every leaf and you can call log.compact() later.
+    // Use flush_up_to(committed_leaf_count) instead to preserve a speculative
+    // suffix.
     log.flush();
 
     // Proofs are served from tiles + the resident tree, even for flushed leaves.
@@ -61,12 +63,58 @@ tile-derived inclusion proof is byte-identical to one from
         log.consistency_proof(/*m=*/log.size() / 2, /*n=*/log.size());
     }
 
-`TiledTree` creates a new tiled tree. The configured prefix may exist, but the
-default alias requires `<prefix>/sha256-256w/tile` not to exist, even as an
-empty directory. Construction atomically claims that tile namespace and rejects
-an existing one because tile files alone do not identify or restore the tree
-that produced them. Applications with externally persisted tree state can use
-the lower-level `TileStore` and `TileWriter` APIs to resume a store.
+`TiledTree` constructors create a new tiled tree. The configured prefix may
+exist, but the default alias requires `<prefix>/sha256-256w/tile` not to exist,
+even as an empty directory. Construction atomically claims that tile namespace.
+
+Applications that persist the matching tree state and full-tile boundary can
+resume an existing namespace directly:
+
+    auto log = merkle::tiles::TiledTree::resume(
+      cfg,
+      "sha256",
+      serialised_tree,
+      full_tile_boundary);
+
+The boundary must cover a complete, durable tile prefix at every required
+level and overlap the resident portion of the serialized tree. Recovery reads
+every required tile, validates each stored roll-up, and compares the prefix
+root with the serialized frontier. Tile files beyond the boundary are treated
+as untrusted and replaced when a later flush reaches them. The application
+remains responsible for establishing namespace ownership.
+
+After an interrupted flush, restore the last successful prefix and the
+possibly larger rollback seal separately:
+
+    auto log = merkle::tiles::TiledTree::resume(
+      cfg,
+      "sha256",
+      serialised_tree,
+      flushed_tile_boundary,
+      immutable_boundary);
+
+If tiles are not ready yet, restore the logical tree first and populate the
+namespace independently. This does not claim or inspect the namespace; the
+caller must establish exclusive ownership:
+
+    auto log = merkle::tiles::TiledTree::from_frontier(
+      cfg,
+      "sha256",
+      serialised_tree);
+
+    merkle::tiles::TileStore repair_store(cfg.prefix, "sha256");
+    auto repair = merkle::tiles::TileWriter::repair(
+      repair_store,
+      trusted_full_tile_boundary);
+    repair.write_up_to(target_size, leaf_at);
+
+    // After the repair writer is quiesced:
+    log.adopt_tile_prefix(target_full_tile_boundary);
+
+The independent writer can run in the background. The caller must serialize
+writers for the namespace and quiesce them before adoption. Until the repaired
+prefix overlaps the resident frontier, root computation and appends remain
+available but tile-dependent proofs and flushes of non-resident history fail.
 
 See the [tiled storage guide](doc/tiles-guide.rst) for a how-to covering
 flushing, compaction, rollback, proofs, and the lower-level building blocks,

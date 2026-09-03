@@ -245,6 +245,52 @@ TEST_CASE("Alternate geometry drives tiled tree lifecycle boundaries")
   CHECK(tree.size() == 12);
 }
 
+TEST_CASE("Committed-prefix flush leaves the logical suffix rollbackable")
+{
+  const TemporaryDirectory temporary_directory;
+  const auto hashes = make_hashes(40);
+  SmallTiledTree::Config config;
+  config.prefix = temporary_directory.path() / "committed_prefix";
+  config.compact_on_flush = true;
+  SmallTiledTree tree(config);
+  merkle::Tree reference;
+  for (const auto& hash : hashes)
+  {
+    tree.append(hash);
+    reference.insert(hash);
+  }
+
+  CHECK(tree.flush_up_to(26).full_written == 7);
+  CHECK(tree.flushed_size() == 24);
+  CHECK(tree.immutable_size() == 24);
+  CHECK(tree.tree_ref().min_index() == 23);
+  CHECK(tree.store_ref().has_full_tile(0, 5));
+  CHECK_FALSE(tree.store_ref().has_full_tile(0, 6));
+  CHECK(tree.store_ref().has_full_tile(1, 0));
+  CHECK_FALSE(tree.store_ref().has_full_tile(1, 1));
+  CHECK(tree.root() == reference.root());
+  CHECK_THROWS_AS(tree.retract_to(22), std::runtime_error);
+
+  CHECK_NOTHROW(tree.retract_to(27));
+  CHECK(tree.size() == 28);
+  for (size_t i = 28; i < hashes.size(); i++)
+  {
+    tree.append(hashes[i]);
+  }
+
+  CHECK(tree.flush_up_to(8).full_written == 0);
+  CHECK(tree.flushed_size() == 24);
+  CHECK(tree.immutable_size() == 24);
+  CHECK(tree.flush_up_to(40).full_written == 5);
+  CHECK(tree.flushed_size() == 40);
+  CHECK(tree.immutable_size() == 40);
+  CHECK(tree.store_ref().has_full_tile(0, 9));
+  CHECK(tree.store_ref().has_full_tile(1, 1));
+  CHECK(tree.root() == reference.root());
+  CHECK(*tree.inclusion_proof(0, tree.size()) == *reference.path(0));
+  CHECK_THROWS_AS(tree.flush_up_to(41), std::runtime_error);
+}
+
 TEST_CASE("Alternate geometry preserves interrupted flush seals")
 {
   const TemporaryDirectory temporary_directory;
